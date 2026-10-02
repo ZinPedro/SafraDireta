@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { BrowserRouter, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { RegistrationPage } from "./features/registration/RegistrationPage";
+import { LoginDialog } from "./features/login/LoginDialog";
 import { Header } from "./components/Header";
 import { Footer } from "./components/Footer";
 import { DevelopmentDialog } from "./components/DevelopmentDialog";
@@ -105,8 +106,19 @@ function Site() {
         </Routes>
       </main>
       {!isRegistrationPage && <Footer onOpenDialog={openFeature} />}
+      {dialogFeature === "login" && <LoginDialog
+        onClose={() => setDialogFeature(null)}
+        onPreview={() => {
+          setDialogFeature(null);
+          navigate(routes.market);
+        }}
+        onRegister={() => {
+          setDialogFeature(null);
+          if (!isRegistrationPage) openFeature("registration");
+        }}
+      />}
       <DevelopmentDialog
-        feature={dialogFeature}
+        feature={dialogFeature === "login" ? null : dialogFeature}
         onClose={() => setDialogFeature(null)}
       />
     </>

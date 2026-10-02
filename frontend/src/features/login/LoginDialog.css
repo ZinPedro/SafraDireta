@@ -1,0 +1,48 @@
+.login-dialog {
+  width: min(56rem, calc(100% - 2rem));
+  max-width: none;
+  max-height: calc(100svh - 2rem);
+  margin: auto;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: var(--color-background);
+  color: var(--color-text-primary);
+  box-shadow: var(--shadow-dialog);
+  overscroll-behavior: contain;
+}
+.login-dialog::backdrop { background: rgb(33 20 11 / 65%); }
+.login-dialog__layout { display: grid; grid-template-columns: 32% minmax(0, 1fr); }
+.login-dialog__visual { position: relative; overflow: hidden; }
+.login-dialog__visual > img { position: absolute; width: 100%; height: 100%; object-fit: cover; }
+.login-dialog__visual::after { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, rgb(44 26 14 / 15%), rgb(44 26 14 / 72%)); }
+.login-dialog__brand { position: absolute; z-index: 1; bottom: var(--space-8); inset-inline: var(--space-8); color: var(--color-cream-200); }
+.login-dialog__brand p { font: 400 2rem var(--font-family-heading); margin-bottom: var(--space-2); }
+.login-dialog__brand span { font-size: var(--font-size-sm); }
+.login-dialog__content { padding: var(--space-4) var(--space-10) var(--space-8); }
+.login-dialog__navigation { display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-4); }
+.login-dialog__back { display: inline-flex; align-items: center; gap: var(--space-2); min-height: 2.75rem; padding: 0; border: 0; background: none; color: var(--color-text-secondary); font-size: var(--font-size-sm); }
+.login-dialog__content .eyebrow { margin-bottom: var(--space-2); }
+.login-dialog__content h2 { font-size: 2rem; margin-bottom: var(--space-8); }
+.login-dialog__content h2:focus { outline: none; }
+.login-form { display: flex; flex-direction: column; gap: var(--space-4); }
+.login-form__field label { display: block; margin-bottom: var(--space-2); font: 500 var(--font-size-xs) var(--font-family-mono); text-transform: uppercase; letter-spacing: 0.035em; }
+.login-form__field label span { color: var(--color-accent); }
+.login-form__field input { width: 100%; min-width: 0; min-height: 2.875rem; padding: var(--space-3); border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: transparent; color: var(--color-text-primary); }
+.login-form__password { position: relative; }
+.login-form__password input { padding-right: var(--space-12); }
+.login-form__password .icon-button { position: absolute; right: 1px; top: 50%; transform: translateY(-50%); }
+.login-form__link { padding: 0; border: 0; background: none; color: var(--color-terracotta-600); text-decoration: underline; text-underline-offset: 2px; }
+.login-form__recovery { align-self: flex-end; min-height: 2.75rem; }
+.login-form__notice { color: var(--color-text-secondary); font-size: var(--font-size-sm); }
+.login-form__registration { text-align: center; font-size: var(--font-size-sm); }
+.login-form__error { color: #a42d20; font-size: var(--font-size-sm); }
+.login-form__error:not(:empty) { margin-top: var(--space-2); }
+.login-form__field input[aria-invalid="true"] { border-color: #a42d20; }
+.login-dialog__recovery { display: grid; gap: var(--space-6); }
+@media (max-width: 40rem) {
+  .login-dialog__layout { grid-template-columns: minmax(0, 1fr); }
+  .login-dialog__visual { display: none; }
+  .login-dialog__content { padding: var(--space-3) var(--space-5) var(--space-6); }
+  .login-dialog__content h2 { font-size: 1.75rem; }
+}

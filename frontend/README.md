@@ -38,6 +38,7 @@ Use componentes em PascalCase, funções/variáveis em camelCase, tokens CSS em 
 | Rota | Entrega |
 | --- | --- |
 | `/` | Landing page completa |
+| `/cadastro` | Cadastro com validação local e intenção opcional de produtor |
 | `/mercado` | Em desenvolvimento |
 | `/produtores` | Em desenvolvimento |
 | `/guia` | Em desenvolvimento |
@@ -45,7 +46,9 @@ Use componentes em PascalCase, funções/variáveis em camelCase, tokens CSS em 
 
 As quatro categorias do menu levam a `/mercado`, sem aplicar filtro. Os destaques da home continuam sem categorias definidas. Cards são modelos estáticos identificados; não representam dados carregando nem registros reais.
 
-Login, cadastro comum, cadastro de vendedor, contato, termos e privacidade abrem uma janela informativa. Nenhuma conta ou mensagem é enviada. O fluxo de vendedor tem um identificador próprio (`sellerRegistration`) para evolução futura; não cria uma identidade separada.
+Login abre uma janela com e-mail e senha. O envio válido abre `/mercado` como prévia, sem autenticar ou criar sessão. Recuperação de senha permanece em desenvolvimento. Não há opção de lembrar de mim. Formulário e janela ficam separados em `src/features/login/`.
+
+Cadastro comum e intenção de produtor abrem `/cadastro`; o envio valida e informa que nenhuma conta foi criada. Contato, termos e privacidade permanecem em janelas informativas. O fluxo de vendedor não cria uma identidade separada.
 
 ## Integração futura
 
@@ -59,3 +62,4 @@ Login, cadastro comum, cadastro de vendedor, contato, termos e privacidade abrem
 Nenhuma API, autenticação, compra ou publicação de lotes está implementada nesta entrega.
 
 Veja o [relatório da landing page](docs/relatorio-landing-page.md) para decisões e validações.
+Veja também o [relatório do login](docs/relatorio-login.md).

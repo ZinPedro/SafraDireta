@@ -41,6 +41,28 @@ def _resposta(status, codigo, mensagem, campos=None):
         content={"erro": {"codigo": codigo, "mensagem": mensagem, "campos": campos or {}}},
     )
 
+def _mensagem_pt(erro: dict) -> str:
+    """Traduz o erro do Pydantic para uma mensagem em portugues."""
+    tipo = erro["type"]
+    ctx = erro.get("ctx") or {}
+    if tipo == "value_error":
+        # nossas validacoes personalizadas: tira o prefixo "Value error, "
+        return erro["msg"].removeprefix("Value error, ")
+    if tipo == "missing":
+        return "Campo obrigatório."
+    if tipo == "string_too_short":
+        return f"Use pelo menos {ctx.get('min_length')} caracteres."
+    if tipo == "string_too_long":
+        return f"Use no máximo {ctx.get('max_length')} caracteres."
+    if tipo == "literal_error":
+        return "Valor não permitido."
+    if tipo in ("bool_parsing", "bool_type"):
+        return "Informe verdadeiro ou falso."
+    if tipo == "string_type":
+        return "Informe um texto."
+    if tipo == "json_invalid":
+        return "O corpo da requisição não é um JSON válido."
+    return "Valor inválido."
 
 def registrar_handlers(app: FastAPI) -> None:
     @app.exception_handler(ErroApp)
@@ -52,5 +74,5 @@ def registrar_handlers(app: FastAPI) -> None:
         campos = {}
         for erro in exc.errors():
             caminho = [str(p) for p in erro["loc"] if p not in ("body", "query", "path")]
-            campos[".".join(caminho) or "corpo"] = erro["msg"]
+            campos[".".join(caminho) or "corpo"] = _mensagem_pt(erro)
         return _resposta(422, "DADOS_INVALIDOS", "Dados inválidos.", campos)

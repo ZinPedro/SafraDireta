@@ -8,6 +8,7 @@ from psycopg_pool import ConnectionPool, PoolTimeout
 from app.config import get_settings  # novo
 from app.database import create_pool, get_pool
 from app.errors import registrar_handlers  # novo
+from app.routers import auth  # novo
 
 
 @asynccontextmanager
@@ -38,6 +39,7 @@ app.add_middleware(
     allow_headers=["Authorization", "Content-Type"],
 )
 registrar_handlers(app)
+app.include_router(auth.router)  # novo
 
 
 @app.get("/health", tags=["Saude"])

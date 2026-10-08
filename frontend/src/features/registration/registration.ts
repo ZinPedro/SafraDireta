@@ -25,12 +25,43 @@ export type RegistrationResult =
 
 export type RegisterAccount = (request: RegistrationRequest) => Promise<RegistrationResult>;
 
-export const registerAccount: RegisterAccount = async () => {
+export const registerAccount: RegisterAccount = async (request: RegistrationRequest): Promise<RegistrationResult> => {
   if (MOCK_API) {
     await mockDelay();
     return { status: "registered" };
   }
-  return { status: "unavailable" };
+
+  try {
+    const response = await fetch("/api/auth/register", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(request),
+    });
+
+    if (response.status === 201) {
+      const data = await response.json();
+      if (data.token) {
+        localStorage.setItem("safradireta_token", data.token);
+        localStorage.setItem("safradireta_conta", JSON.stringify(data.conta));
+      }
+      return { status: "registered" };
+    }
+
+    if (response.status === 409 || response.status === 422) {
+      const data = await response.json();
+      return {
+        status: "error",
+        message: data.erro?.mensagem ?? "Verifique os dados informados.",
+        fieldErrors: data.erro?.campos ?? {},
+      };
+    }
+
+    return { status: "unavailable" };
+  } catch {
+    return { status: "unavailable" };
+  }
 };
 
 export function formatPhone(value: string): string {

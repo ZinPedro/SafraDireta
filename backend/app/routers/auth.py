@@ -3,7 +3,10 @@ from psycopg import Connection
 
 from app.database import get_connection
 from app.deps import conta_autenticada
-from app.schemas.auth import LoginEntrada, MeResposta, RegistroPF, SessaoResposta
+from app.schemas.auth import (
+    LoginEntrada, MeResposta, RegistroPF, RegistroPJ,
+    RegistroPJResposta, SessaoResposta,
+)
 from app.services import auth_service
 
 router = APIRouter(prefix="/api/auth", tags=["Autenticação"])
@@ -18,6 +21,17 @@ router = APIRouter(prefix="/api/auth", tags=["Autenticação"])
 )
 def registrar(dados: RegistroPF, conn: Connection = Depends(get_connection)):
     return auth_service.registrar_pf(conn, dados)
+
+
+@router.post(
+    "/register-corporate",
+    status_code=201,
+    response_model=RegistroPJResposta,
+    summary="Cadastrar conta de pessoa jurídica",
+    description="Cria a conta PJ, empresa, representante, endereço, protocolo de verificação documental e devolve a sessão.",
+)
+def registrar_corporativo(dados: RegistroPJ, conn: Connection = Depends(get_connection)):
+    return auth_service.registrar_pj(conn, dados)
 
 
 @router.post(

@@ -8,7 +8,7 @@ from psycopg.types.json import Jsonb
 from app import ratelimit
 from app.config import get_settings
 from app.errors import ErroApp, conflito, nao_autenticado, proibido
-from app.schemas.auth import LoginEntrada, RegistroPF
+from app.schemas.auth import LoginEntrada, RegistroPF, RegistroPJ
 from app.security import (
     gastar_tempo_de_verificacao,
     gerar_hash_senha,
@@ -188,4 +188,94 @@ def dados_da_conta(conn: Connection, atual: dict) -> dict:
         },
         "vendedor": {"estado": _estado_vendedor(conn, atual["conta_id"])},
         "expira_em": atual["expira_em"].isoformat(),
+    }
+
+
+def registrar_pj(conn: Connection, dados: RegistroPJ) -> dict:
+    termo = _termo_vigente(conn)
+    if termo is None:
+        raise ErroApp(503, "TERMO_INDISPONIVEL", "Cadastro indisponível no momento.")
+
+    senha_hash = gerar_hash_senha(dados.access.senha)
+    token = gerar_token()
+    expira_em = datetime.now(timezone.utc) + timedelta(hours=get_settings().sessao_horas)
+
+    try:
+        with conn.transaction():
+            conta = conn.execute(
+                """INSERT INTO safradireta.conta
+                   (tipo, email_acesso, senha_hash, telefone_recuperacao, nome_publico)
+                   VALUES ('PJ', %s, %s, %s, %s) RETURNING id""",
+                (dados.access.email, senha_hash, dados.access.telefone, dados.company.razao_social),
+            ).fetchone()
+            conta_id = conta["id"]
+
+            conn.execute(
+                """INSERT INTO safradireta.empresa
+                   (conta_id, cnpj, razao_social, nome_fantasia, natureza_juridica)
+                   VALUES (%s, %s, %s, %s, %s)""",
+                (conta_id, dados.company.cnpj, dados.company.razao_social,
+                 dados.company.nome_fantasia, dados.company.natureza_juridica),
+            )
+
+            rep = conn.execute(
+                """INSERT INTO safradireta.representante_empresa
+                   (empresa_id, nome, cpf, vinculo)
+                   VALUES (%s, %s, %s, %s) RETURNING id""",
+                (conta_id, dados.representative.nome, dados.representative.cpf, dados.representative.vinculo),
+            ).fetchone()
+            rep_id = rep["id"]
+
+            conn.execute(
+                """INSERT INTO safradireta.endereco
+                   (conta_id, cep, logradouro, numero, complemento, bairro, municipio, uf, principal, ativo)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, true, true)""",
+                (conta_id, dados.address.cep, dados.address.logradouro, dados.address.numero,
+                 dados.address.complemento, dados.address.bairro, dados.address.cidade, dados.address.uf),
+            )
+
+            verif = conn.execute(
+                """INSERT INTO safradireta.verificacao
+                   (conta_id, tipo, representante_id, estado, dados_submetidos, enviada_em)
+                   VALUES (%s, 'EMPRESARIAL', %s, 'EM_ANALISE', %s, now()) RETURNING id""",
+                (conta_id, rep_id, Jsonb({
+                    "documentos": dados.documents.file_names,
+                    "hasCompanyDoc": dados.documents.has_company_doc,
+                    "hasRepresentativeDoc": dados.documents.has_representative_doc,
+                })),
+            ).fetchone()
+            protocolo = f"VER-{str(verif['id'])[:8].upper()}"
+
+            sessao = conn.execute(
+                """INSERT INTO safradireta.sessao (conta_id, token_hash, expira_em)
+                   VALUES (%s, %s, %s) RETURNING id""",
+                (conta_id, hash_token(token), expira_em),
+            ).fetchone()
+
+            conn.execute(
+                """INSERT INTO safradireta.aceite_termos (conta_id, termo_id, sessao_id)
+                   VALUES (%s, %s, %s)""",
+                (conta_id, termo["id"], sessao["id"]),
+            )
+
+            conn.execute(
+                """INSERT INTO safradireta.evento_auditoria
+                   (conta_ator_id, sessao_id, origem, acao, entidade, entidade_id, resumo)
+                   VALUES (%s, %s, 'API', 'CONTA_PJ_CRIADA', 'conta', %s, %s)""",
+                (conta_id, sessao["id"], conta_id,
+                 Jsonb({"tipo": "PJ", "cnpj": dados.company.cnpj, "protocolo": protocolo})),
+            )
+    except UniqueViolation as e:
+        err_msg = str(e).lower()
+        if "cnpj" in err_msg:
+            raise conflito("Já existe uma empresa cadastrada com este CNPJ.", {"cnpj": "Este CNPJ já está cadastrado."})
+        raise conflito("Já existe uma conta com este e-mail.", {"email": "Este e-mail já está cadastrado."})
+
+    return {
+        "status": "registered_pending_validation",
+        "protocol": protocolo,
+        "message": "Cadastro recebido. Seus documentos serão analisados pela equipe.",
+        "token": token,
+        "expira_em": expira_em.isoformat(),
+        "conta": {"id": str(conta_id), "tipo": "PJ", "nome": dados.company.razao_social, "email": dados.access.email},
     }

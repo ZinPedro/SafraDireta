@@ -46,9 +46,7 @@ export type CorporateRegisterResult =
 
 export type RegisterCorporateAccount = (data: CorporateRegistrationData) => Promise<CorporateRegisterResult>;
 
-// Fronteira de integração. Enquanto o backend (POST /api/auth/register-corporate)
-// não existir, nada é enviado nem salvo e nenhuma conta é fingida.
-export const registerCorporateAccount: RegisterCorporateAccount = async () => {
+export const registerCorporateAccount: RegisterCorporateAccount = async (data: CorporateRegistrationData): Promise<CorporateRegisterResult> => {
   if (MOCK_API) {
     await mockDelay();
     return {
@@ -58,11 +56,52 @@ export const registerCorporateAccount: RegisterCorporateAccount = async () => {
       message: "Simulação local: nenhuma conta foi realmente criada.",
     };
   }
-  return {
-    ok: false,
-    reason: "unavailable",
-    message: "Integração em desenvolvimento — nenhuma conta foi criada. Seus dados não foram enviados nem salvos.",
-  };
+
+  try {
+    const response = await fetch("/api/auth/register-corporate", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(data),
+    });
+
+    if (response.status === 201) {
+      const res = await response.json();
+      if (res.token) {
+        localStorage.setItem("safradireta_token", res.token);
+        localStorage.setItem("safradireta_conta", JSON.stringify(res.conta));
+      }
+      return {
+        ok: true,
+        status: "registered_pending_validation",
+        protocol: res.protocol,
+        message: res.message,
+      };
+    }
+
+    if (response.status === 409 || response.status === 422) {
+      const res = await response.json();
+      return {
+        ok: false,
+        reason: response.status === 409 ? "duplicate" : "validation_error",
+        message: res.erro?.mensagem ?? "Verifique os dados informados.",
+        fieldErrors: res.erro?.campos ?? {},
+      };
+    }
+
+    return {
+      ok: false,
+      reason: "unavailable",
+      message: "Serviço temporariamente indisponível. Tente novamente mais tarde.",
+    };
+  } catch {
+    return {
+      ok: false,
+      reason: "unavailable",
+      message: "Não foi possível conectar ao servidor. Verifique sua conexão.",
+    };
+  }
 };
 
 export type StepId = "company" | "address" | "representative" | "documents" | "access";
@@ -105,7 +144,7 @@ export const steps: { id: StepId; label: string }[] = [
   { id: "access", label: "Acesso" },
 ];
 
-export const naturezasJuridicas = ["LTDA", "EIRELI", "S/A", "MEI", "Cooperativa"] as const;
+export const naturezasJuridicas = ["LTDA", "SLU", "S/A", "MEI", "Cooperativa"] as const;
 export const vinculos = ["Sócio-administrador", "Diretor", "Procurador com poderes"] as const;
 export const ufs = [
   "AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA", "MT", "MS", "MG", "PA", "PB", "PR", "PE",

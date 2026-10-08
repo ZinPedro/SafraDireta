@@ -9,6 +9,7 @@ import { formatPhone, registerAccount, toRegistrationRequest, validateRegistrati
 import type { RegisterAccount, RegistrationErrors, RegistrationValues } from "./registration";
 import { PostRegistrationDialog } from "./PostRegistrationDialog";
 import "./RegistrationPage.css";
+import "../corporate-registration/CorporateRegistrationPage.css";
 
 const initialValues: RegistrationValues = {
   name: "", email: "", phone: "", password: "", acceptedTerms: false,
@@ -89,6 +90,41 @@ export function RegistrationPage({ onOpenDialog, onRegister = registerAccount }:
     } finally {
       pendingRef.current = false;
     }
+  }
+
+  if (status === "registered") {
+    return (
+      <section className="registration" aria-labelledby="registration-title">
+        <aside className="registration__visual" aria-label="SafraDireta">
+          <img src={registrationImage} alt="" width="1792" height="2400" fetchPriority="high" />
+          <div className="registration__brand">
+            <Link to={routes.home}>SafraDireta</Link>
+            <p>Conectando quem produz a quem compra.</p>
+          </div>
+        </aside>
+        <div className="registration__content">
+          <div className="registration__body corporate__done">
+            <header className="registration__heading">
+              <p className="eyebrow">Cadastro concluído</p>
+              <h1 id="registration-title" tabIndex={-1}>Conta criada com sucesso!</h1>
+              <p>
+                {isSeller
+                  ? "Sua conta de produtor foi iniciada. Você já pode comprar e navegar pelos lotes do mercado. A etapa de habilitação de vendedor será solicitada no seu perfil."
+                  : "Sua conta no SafraDireta está ativa e pronta para uso. Conecte-se ao campo e encontre as melhores ofertas."}
+              </p>
+            </header>
+            <div className="corporate__actions">
+              <Link className="button registration__submit" to={returnTo !== routes.home ? returnTo : routes.market}>
+                {returnTo !== routes.home ? "Continuar navegando" : "Explorar o Mercado"}
+              </Link>
+              <Link className="corporate__secondary" to={routes.home}>
+                Ir para a Página Inicial
+              </Link>
+            </div>
+          </div>
+        </div>
+      </section>
+    );
   }
 
   return (

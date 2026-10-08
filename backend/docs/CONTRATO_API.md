@@ -1,7 +1,8 @@
 # Contrato da API SafraDireta, Sprint 1
 
-Versao: rascunho 0.1. Status: PROPOSTA para alinhar com Pedro (front) e Felipe (banco).
+Versao: rascunho 0.2 (atualizada em 08/10/2026). Status: PROPOSTA para alinhar com Pedro (front) e Felipe (banco).
 Itens marcados com [DECIDIR] dependem de resposta de alguem e podem mudar.
+Itens marcados com [IMPLEMENTADO] ja existem na branch `back` e tem testes automaticos.
 
 ## 1. Convencoes gerais
 
@@ -10,7 +11,7 @@ Itens marcados com [DECIDIR] dependem de resposta de alguem e podem mudar.
 * Autenticacao: header `Authorization: Bearer <token>`. O token e opaco (aleatorio), guardado no servidor como hash e pode ser revogado no logout. Sem cookies, entao CORS com `allow_credentials=false`.
 * Normalizacao feita pelo back (o front ja manda assim, mas o back nao confia): email em minusculo e sem espacos, CNPJ em maiusculo sem pontuacao, CPF e CEP so digitos, telefone no formato `+55DDDNUMERO`.
 * Datas em ISO 8601 UTC, por exemplo `2026-10-08T15:30:00Z`.
-* Ids de conta e de verificacao seguem o tipo do banco (conferir com Felipe) e sempre trafegam como string.
+* Ids sao UUID (ex: `5a139884-502b-43b7-ab05-bbcb481e4875`) e sempre trafegam como string.
 
 ### Formato unico de erro
 
@@ -32,33 +33,35 @@ Regras:
 
 Codigos usados:
 * 401 `NAO_AUTENTICADO`: token ausente, invalido, expirado ou revogado, ou login errado.
-* 403 `PROIBIDO`: logado, mas sem permissao (ex: nao e vendedor habilitado).
+* 403 `PROIBIDO`: logado, mas sem permissao (ex: nao e vendedor habilitado) ou conta suspensa/encerrada.
 * 404 `NAO_ENCONTRADO`: recurso ou rota inexistente.
+* 405 `METODO_NAO_PERMITIDO`: a rota existe, mas nao aceita aquele metodo HTTP (a resposta traz o cabecalho `Allow`).
 * 409 `CONFLITO`: duplicado (email, CNPJ, CPF) ou transicao de estado invalida.
 * 422 `DADOS_INVALIDOS`: validacao falhou.
 * 429 `MUITAS_TENTATIVAS`: limite de login excedido.
 * 503: banco indisponivel (rotas `/health`, formato do FastAPI: `{"detail": "..."}`).
+* 503 `TERMO_INDISPONIVEL`: cadastro sem termo de uso vigente no banco.
 
 ## 2. Rotas publicas
 
 ### GET /health e GET /health/db
 Ja existem (Felipe). `/health/db` responde 503 se o banco cair.
 
-### GET /api/termos/vigente   (apoia US003)
-Devolve o termo de uso vigente, para o front exibir antes do aceite.
+### GET /api/termos/vigente   (US002, apoia o aceite do cadastro)   [IMPLEMENTADO]
+Publica (sem token). Devolve a versao vigente do termo de uso. O banco guarda a referencia do conteudo e o hash, nao o texto; o front mostra o termo a partir da `referenciaConteudo`.
 
 200:
 ```json
-{ "id": "1", "versao": "1.0", "texto": "...", "publicadoEm": "2026-10-01T00:00:00Z" }
+{ "versao": "1.0", "referenciaConteudo": "termos/v1.0", "vigenteDesde": "2026-10-01T00:00:00Z" }
 ```
-404 se nao houver termo cadastrado. [DECIDIR] Felipe precisa fazer o seed de `termo_uso`.
+404 `NAO_ENCONTRADO` se nao houver termo vigente. O seed de desenvolvimento (`sql/03_seed_dev.sql`) cria o termo 1.0.
 
-### Qualquer rota inexistente   (US002)
-404 com o formato de erro acima, nunca uma pagina HTML nem stack trace.
+### Qualquer rota inexistente   (US002)   [IMPLEMENTADO]
+404 `NAO_ENCONTRADO` com o formato de erro acima, nunca uma pagina HTML nem stack trace. Metodo errado numa rota que existe responde 405 `METODO_NAO_PERMITIDO`.
 
 ## 3. Cadastro e autenticacao
 
-### POST /api/auth/register   (US003, conta pessoa fisica)
+### POST /api/auth/register   (US003, conta pessoa fisica)   [IMPLEMENTADO]
 
 Publica. Cria a conta PF e o aceite do termo vigente numa unica transacao. CPF nao e pedido aqui.
 
@@ -87,14 +90,14 @@ Resposta 201:
 {
   "token": "<token opaco>",
   "expiraEm": "2026-10-09T03:30:00Z",
-  "conta": { "id": "10", "tipo": "PF", "nome": "Maria da Silva", "email": "maria@exemplo.com" },
+  "conta": { "id": "5a139884-502b-43b7-ab05-bbcb481e4875", "tipo": "PF", "nome": "Maria da Silva", "email": "maria@exemplo.com" },
   "vendedor": { "estado": null },
   "proximoPasso": null
 }
 ```
-Se `intent` for `seller`, a conta e criada normalmente (compra liberada) e `proximoPasso` vem `"SOLICITAR_HABILITACAO_VENDEDOR"`, porque o CPF so e exigido na solicitacao de habilitacao. [DECIDIR] se o cadastro ja devolve sessao (recomendado) ou se o front redireciona para o login.
+Se `intent` for `seller`, a conta e criada normalmente (compra liberada) e `proximoPasso` vem `"SOLICITAR_HABILITACAO_VENDEDOR"`, porque o CPF so e exigido na solicitacao de habilitacao. Decidido: o cadastro ja devolve a sessao, o front nao precisa chamar o login em seguida.
 
-Erros: 422 (campos), 409 com `campos.email`.
+Erros: 422 (campos), 409 com `campos.email`, 503 `TERMO_INDISPONIVEL` se nao houver termo vigente.
 
 ### POST /api/auth/register-corporate   (US003 e US004, conta pessoa juridica)
 
@@ -143,7 +146,7 @@ Resposta 201:
   "message": "Cadastro recebido. Seus documentos serao analisados pela equipe.",
   "token": "<token opaco>",
   "expiraEm": "2026-10-09T03:30:00Z",
-  "conta": { "id": "11", "tipo": "PJ", "nome": "Cooperativa Exemplo LTDA", "email": "contato@empresa.com.br" }
+  "conta": { "id": "9c2f4b1e-7d3a-4e58-8a0b-1f6d2c9e3a47", "tipo": "PJ", "nome": "Cooperativa Exemplo LTDA", "email": "contato@empresa.com.br" }
 }
 ```
 `protocol` e derivado do id da verificacao. A conta nasce ATIVA, mas a empresa so compra e vende depois da verificacao APROVADA. Ate la ela navega.
@@ -158,32 +161,33 @@ Pendencias [DECIDIR]:
 3. EIRELI foi extinta em 2021, sugerir ao Pedro remover da lista.
 4. Confirmar com o cliente a regra PJ: um unico cadastro, compra e venda so apos validacao.
 
-### POST /api/auth/login   (US005)
+### POST /api/auth/login   (US005)   [IMPLEMENTADO]
 
 Publica. Entrada:
 ```json
 { "email": "maria@exemplo.com", "password": "senhaForte123" }
 ```
-Resposta 200: mesmo corpo do registro PF (`token`, `expiraEm`, `conta`, `vendedor`).
+O email e normalizado (espacos e maiusculas). Resposta 200: mesmo corpo do registro PF (`token`, `expiraEm`, `conta`, `vendedor`, `proximoPasso` sempre `null`).
 
 Regras:
-* Mesmo erro 401 `NAO_AUTENTICADO` para email inexistente e senha errada, sem revelar qual foi, e com tempo de resposta parecido nos dois casos.
-* Conta SUSPENSA ou ENCERRADA: 403 `PROIBIDO`.
-* Limite de tentativas por email e por IP (em memoria): excedeu, 429.
+* Mesmo erro 401 `NAO_AUTENTICADO` ("Email ou senha incorretos.") para email inexistente e senha errada, sem revelar qual foi, e com tempo de resposta parecido nos dois casos.
+* Conta SUSPENSA ou ENCERRADA: 403 `PROIBIDO`, mas so depois de a senha estar correta.
+* Limite de tentativas FALHAS, em memoria: 5 por email e 20 por IP em 15 minutos. Excedeu: 429 `MUITAS_TENTATIVAS`, mesmo com a senha certa, ate a janela passar. Login correto zera a contagem do email.
+* Campos ausentes: 422 com `campos.email` e/ou `campos.password`.
 
-### POST /api/auth/logout   (US005)
-Exige login. Revoga a sessao atual. Resposta 204 sem corpo.
+### POST /api/auth/logout   (US005)   [IMPLEMENTADO]
+Exige login (`Authorization: Bearer <token>`). Revoga so a sessao do token usado; outras sessoes da mesma conta continuam validas. Resposta 204 sem corpo. Depois disso, o mesmo token passa a responder 401.
 
-### GET /api/auth/me   (US005)
+### GET /api/auth/me   (US005)   [IMPLEMENTADO]
 Exige login. 200:
 ```json
 {
-  "conta": { "id": "10", "tipo": "PF", "nome": "Maria da Silva", "email": "maria@exemplo.com", "telefone": "+5519999998888" },
-  "vendedor": { "estado": "PENDENTE" },
-  "verificacao": null
+  "conta": { "id": "5a139884-502b-43b7-ab05-bbcb481e4875", "tipo": "PF", "nome": "Maria da Silva", "email": "maria@exemplo.com" },
+  "vendedor": { "estado": null },
+  "expiraEm": "2026-10-09T03:30:00Z"
 }
 ```
-`vendedor.estado` pode ser `null`, `PENDENTE`, `HABILITADO`, `REJEITADO` ou `SUSPENSO`. Para PJ, `verificacao` traz `{ "protocol": "VER-000123", "estado": "ENVIADA" }`.
+`vendedor.estado` pode ser `null`, `PENDENTE`, `HABILITADO`, `REJEITADO` ou `SUSPENSO`. Ainda NAO devolve `telefone` nem `verificacao`: para PJ, o campo `verificacao` (`{ "protocol": "VER-000123", "estado": "ENVIADA" }`) entra junto com o cadastro PJ.
 
 ## 4. Perfil   (US008)
 
@@ -215,7 +219,7 @@ Resposta 201: `{ "estado": "PENDENTE", "protocol": "VER-000124" }`.
 Exige login. 200: `{ "estado": "PENDENTE", "protocol": "VER-000124", "motivo": null }`. 404 se nunca solicitou.
 
 ### POST /api/arquivos   (upload de documento) [DECIDIR]
-Exige login. `multipart/form-data` com os campos `verificacaoId`, `tipoDocumento` e `arquivo`. Aceita PDF, JPG e PNG ate 10 MB, valida tipo pelo conteudo e nao pelo nome. Resposta 201: `{ "id": "55", "nome": "contrato.pdf", "tamanho": 120394 }`. Define onde guardar (disco local ou storage) antes de implementar.
+Exige login. `multipart/form-data` com os campos `verificacaoId`, `tipoDocumento` e `arquivo`. Aceita PDF, JPG e PNG ate 10 MB, valida tipo pelo conteudo e nao pelo nome. Resposta 201: `{ "id": "3b7e1d52-6a0c-4f9e-9d14-72c8a5e0b6f1", "nome": "contrato.pdf", "tamanho": 120394 }`. Define onde guardar (disco local ou storage) antes de implementar.
 
 ### Guarda para funcoes de vendedor
 Qualquer rota futura de venda usa a dependencia `exige_vendedor_habilitado`: responde 403 `PROIBIDO` se a conta nao tiver `habilitacao_vendedor.estado = HABILITADO` com decisao APROVADA do tipo habilitacao.
@@ -231,9 +235,9 @@ Qualquer rota futura de venda usa a dependencia `exige_vendedor_habilitado`: res
 
 ## 7. Decisoes em aberto
 
-1. Registro devolve sessao ou manda para o login? (recomendado: devolve)
+1. Registro devolve sessao ou manda para o login? (decidido: devolve)
 2. Upload de documentos PJ: dois passos, como proposto? Onde guardar os arquivos?
-3. Seed de `termo_uso`, operador de teste e role administrativa (Felipe).
+3. Role administrativa para as decisoes de verificacao, ex: `safra_admin` (Felipe). O seed de termo e operador de teste ja existe em `sql/03_seed_dev.sql`.
 4. Valores oficiais dos enums de estado e colunas para `vinculo` e `naturezaJuridica` (Felipe).
 5. Regra PJ de compra e venda (cliente).
 6. Alteracao de CPF e CNPJ: direta ou via `alteracao_cadastral`?

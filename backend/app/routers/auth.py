@@ -3,8 +3,9 @@ from psycopg import Connection
 
 from app.database import get_connection
 from app.deps import conta_autenticada
-from app.schemas.auth import LoginEntrada, MeResposta, RegistroPF, SessaoResposta
+from app.schemas.auth import AlterarEmail, EditarPerfil, LoginEntrada, MeResposta, RegistroPF, SessaoResposta
 from app.services import auth_service
+from app.schemas.pj import RegistroPJ
 
 router = APIRouter(prefix="/api/auth", tags=["Autenticação"])
 
@@ -50,3 +51,62 @@ def logout(atual: dict = Depends(conta_autenticada), conn: Connection = Depends(
 )
 def me(atual: dict = Depends(conta_autenticada), conn: Connection = Depends(get_connection)):
     return auth_service.dados_da_conta(conn, atual)
+
+@router.post(
+    "/register-corporate",
+    status_code=201,
+    summary="Cadastrar pessoa juridica",
+)
+def registrar_empresa(
+    dados: RegistroPJ,
+    conn: Connection = Depends(get_connection),
+):
+    return auth_service.registrar_pj(conn, dados)
+
+
+@router.patch("/profile", summary="Editar perfil da conta autenticada")
+def editar_perfil(
+    dados: EditarPerfil,
+    atual: dict = Depends(conta_autenticada),
+    conn: Connection = Depends(get_connection),
+):
+    return auth_service.editar_perfil(conn, atual, dados)
+
+
+perfil_router = APIRouter(prefix="/api/perfil", tags=["Perfil"])
+
+
+@perfil_router.get(
+    "",
+    summary="Consultar perfil da conta autenticada",
+)
+def consultar_perfil(
+    atual: dict = Depends(conta_autenticada),
+    conn: Connection = Depends(get_connection),
+):
+    return auth_service.consultar_perfil(conn, atual)
+
+
+
+@perfil_router.patch(
+    "",
+    summary="Editar perfil da conta autenticada",
+)
+def atualizar_perfil(
+    dados: EditarPerfil,
+    atual: dict = Depends(conta_autenticada),
+    conn: Connection = Depends(get_connection),
+):
+    return auth_service.editar_perfil(conn, atual, dados)
+
+
+@perfil_router.patch(
+    "/email",
+    summary="Alterar email da conta autenticada",
+)
+def atualizar_email(
+    dados: AlterarEmail,
+    atual: dict = Depends(conta_autenticada),
+    conn: Connection = Depends(get_connection),
+):
+    return auth_service.alterar_email(conn, atual, dados)

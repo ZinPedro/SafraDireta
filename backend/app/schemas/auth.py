@@ -83,9 +83,49 @@ class LoginEntrada(_Base):
     @classmethod
     def _email(cls, v: str) -> str:
         return v.strip().lower()
+class EditarPerfil(_Base):
+    name: str | None = Field(default=None, min_length=2, max_length=150)
+    phone: str | None = None
 
+    @field_validator("name")
+    @classmethod
+    def validar_nome(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+
+        v = " ".join(v.split())
+
+        if len(v) < 2:
+            raise ValueError("Informe um nome valido.")
+
+        return v
+
+    @field_validator("phone")
+    @classmethod
+    def validar_telefone(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+
+        if not _TELEFONE.fullmatch(v):
+            raise ValueError(
+                "Informe um telefone brasileiro com DDD."
+            )
+
+        return v
+
+class VerificacaoResumo(_Base):
+    protocolo: str | None = None
+    estado: str | None = None
+    tipo: str | None = None
 
 class MeResposta(_Base):
     conta: ContaResumo
     vendedor: VendedorResumo
     expira_em: str
+    verificacao: VerificacaoResumo | None = None
+
+from pydantic import EmailStr
+
+class AlterarEmail(_Base):
+    novo_email: EmailStr
+    senha_atual: str

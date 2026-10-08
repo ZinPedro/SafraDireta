@@ -1,0 +1,266 @@
+export interface CorporateRegistrationData {
+  company: {
+    cnpj: string;
+    razaoSocial: string;
+    nomeFantasia?: string;
+    naturezaJuridica?: string;
+  };
+  address: {
+    cep: string;
+    logradouro: string;
+    numero: string;
+    complemento?: string;
+    bairro: string;
+    cidade: string;
+    uf: string;
+  };
+  representative: {
+    nome: string;
+    cpf: string;
+    vinculo: string;
+  };
+  documents: {
+    hasCompanyDoc: boolean;
+    hasRepresentativeDoc: boolean;
+    fileNames: string[];
+  };
+  access: {
+    email: string;
+    telefone: string;
+    senha: string;
+    acceptedTerms: boolean;
+  };
+}
+
+export type CorporateRegisterResult =
+  | { ok: true; status: "registered_pending_validation"; protocol: string; message: string }
+  | {
+      ok: false;
+      reason: "unavailable" | "validation_error" | "duplicate";
+      message: string;
+      fieldErrors?: Record<string, string>;
+    };
+
+export type RegisterCorporateAccount = (data: CorporateRegistrationData) => Promise<CorporateRegisterResult>;
+
+// Fronteira de integração. Enquanto o backend (POST /api/auth/register-corporate)
+// não existir, nada é enviado nem salvo e nenhuma conta é fingida.
+export const registerCorporateAccount: RegisterCorporateAccount = async () => ({
+  ok: false,
+  reason: "unavailable",
+  message: "Integração em desenvolvimento — nenhuma conta foi criada. Seus dados não foram enviados nem salvos.",
+});
+
+export type StepId = "company" | "address" | "representative" | "documents" | "access";
+export type FieldErrors = Record<string, string>;
+
+export interface CorporateFormValues {
+  cnpj: string;
+  razaoSocial: string;
+  nomeFantasia: string;
+  naturezaJuridica: string;
+  cep: string;
+  logradouro: string;
+  numero: string;
+  complemento: string;
+  bairro: string;
+  cidade: string;
+  uf: string;
+  repNome: string;
+  repCpf: string;
+  repVinculo: string;
+  email: string;
+  telefone: string;
+  senha: string;
+  confirmarSenha: string;
+  acceptedTerms: boolean;
+}
+
+export const initialCorporateValues: CorporateFormValues = {
+  cnpj: "", razaoSocial: "", nomeFantasia: "", naturezaJuridica: "",
+  cep: "", logradouro: "", numero: "", complemento: "", bairro: "", cidade: "", uf: "",
+  repNome: "", repCpf: "", repVinculo: "",
+  email: "", telefone: "", senha: "", confirmarSenha: "", acceptedTerms: false,
+};
+
+export const steps: { id: StepId; label: string }[] = [
+  { id: "company", label: "Empresa" },
+  { id: "address", label: "Endereço" },
+  { id: "representative", label: "Representante" },
+  { id: "documents", label: "Documentos" },
+  { id: "access", label: "Acesso" },
+];
+
+export const naturezasJuridicas = ["LTDA", "EIRELI", "S/A", "MEI", "Cooperativa"] as const;
+export const vinculos = ["Sócio-administrador", "Diretor", "Procurador com poderes"] as const;
+export const ufs = [
+  "AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA", "MT", "MS", "MG", "PA", "PB", "PR", "PE",
+  "PI", "RJ", "RN", "RS", "RO", "RR", "SC", "SP", "SE", "TO",
+] as const;
+
+export const ACCEPTED_FILE_TYPES = [".pdf", ".jpg", ".jpeg", ".png"];
+export const MAX_FILE_BYTES = 10 * 1024 * 1024;
+
+// ---------- Máscaras ----------
+
+export function formatCnpj(value: string): string {
+  const raw = value.toUpperCase().replace(/[^0-9A-Z]/g, "").slice(0, 14);
+  // Os dois últimos caracteres (dígitos verificadores) são sempre numéricos.
+  const clean = raw.slice(0, 12) + raw.slice(12).replace(/\D/g, "");
+  const parts = [clean.slice(0, 2), clean.slice(2, 5), clean.slice(5, 8), clean.slice(8, 12), clean.slice(12, 14)];
+  let out = parts[0];
+  if (parts[1]) out += `.${parts[1]}`;
+  if (parts[2]) out += `.${parts[2]}`;
+  if (parts[3]) out += `/${parts[3]}`;
+  if (parts[4]) out += `-${parts[4]}`;
+  return out;
+}
+
+export function formatCpf(value: string): string {
+  const d = value.replace(/\D/g, "").slice(0, 11);
+  let out = d.slice(0, 3);
+  if (d.length > 3) out += `.${d.slice(3, 6)}`;
+  if (d.length > 6) out += `.${d.slice(6, 9)}`;
+  if (d.length > 9) out += `-${d.slice(9, 11)}`;
+  return out;
+}
+
+export function formatCep(value: string): string {
+  const d = value.replace(/\D/g, "").slice(0, 8);
+  return d.length > 5 ? `${d.slice(0, 5)}-${d.slice(5)}` : d;
+}
+
+export function formatPhone(value: string): string {
+  const digits = value.replace(/\D/g, "").slice(0, 11);
+  if (digits.length < 3) return digits;
+  const area = digits.slice(0, 2);
+  const number = digits.slice(2);
+  const split = number.length > 8 ? 5 : 4;
+  return `(${area}) ${number.slice(0, split)}${number.length > split ? `-${number.slice(split)}` : ""}`;
+}
+
+export function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+// ---------- Validadores ----------
+
+export function normalizeCnpj(value: string): string {
+  return value.toUpperCase().replace(/[^0-9A-Z]/g, "");
+}
+
+function cnpjCheckDigit(base: string): number {
+  // Algoritmo oficial: valor = código ASCII - 48 (compatível com o CNPJ numérico).
+  const weights = base.length === 12
+    ? [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]
+    : [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2];
+  const sum = [...base].reduce((acc, ch, i) => acc + (ch.charCodeAt(0) - 48) * weights[i], 0);
+  const rest = sum % 11;
+  return rest < 2 ? 0 : 11 - rest;
+}
+
+export function isValidCnpj(value: string): boolean {
+  const cnpj = normalizeCnpj(value);
+  if (!/^[0-9A-Z]{12}[0-9]{2}$/.test(cnpj)) return false;
+  if (/^(.)\1{13}$/.test(cnpj)) return false;
+  const d1 = cnpjCheckDigit(cnpj.slice(0, 12));
+  const d2 = cnpjCheckDigit(cnpj.slice(0, 12) + d1);
+  return cnpj.slice(12) === `${d1}${d2}`;
+}
+
+export function isValidCpf(value: string): boolean {
+  const cpf = value.replace(/\D/g, "");
+  if (!/^\d{11}$/.test(cpf) || /^(\d)\1{10}$/.test(cpf)) return false;
+  const digit = (len: number) => {
+    const sum = [...cpf.slice(0, len)].reduce((acc, ch, i) => acc + Number(ch) * (len + 1 - i), 0);
+    const rest = (sum * 10) % 11;
+    return rest === 10 ? 0 : rest;
+  };
+  return digit(9) === Number(cpf[9]) && digit(10) === Number(cpf[10]);
+}
+
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+export function validateStep(step: StepId, v: CorporateFormValues, fileCount?: { company: number; representative: number }): FieldErrors {
+  const e: FieldErrors = {};
+  if (step === "company") {
+    if (!isValidCnpj(v.cnpj)) e.cnpj = "Informe um CNPJ válido, com 14 caracteres.";
+    if (v.razaoSocial.trim().length < 2) e.razaoSocial = "Informe a razão social da empresa.";
+  }
+  if (step === "address") {
+    if (v.cep.replace(/\D/g, "").length !== 8) e.cep = "Informe um CEP com 8 números.";
+    if (!v.logradouro.trim()) e.logradouro = "Informe o logradouro.";
+    if (!v.numero.trim()) e.numero = "Informe o número (ou S/N).";
+    if (!v.bairro.trim()) e.bairro = "Informe o bairro.";
+    if (!v.cidade.trim()) e.cidade = "Informe a cidade.";
+    if (!(ufs as readonly string[]).includes(v.uf)) e.uf = "Selecione o estado.";
+  }
+  if (step === "representative") {
+    if (v.repNome.trim().split(/\s+/).filter(Boolean).length < 2) e.repNome = "Informe nome e sobrenome do representante.";
+    if (!isValidCpf(v.repCpf)) e.repCpf = "Informe um CPF válido.";
+    if (!(vinculos as readonly string[]).includes(v.repVinculo)) e.repVinculo = "Selecione o vínculo com a empresa.";
+  }
+  if (step === "documents") {
+    if (!fileCount?.company) e.companyDoc = "Anexe o documento de constituição da empresa.";
+    if (!fileCount?.representative) e.representativeDoc = "Anexe o documento de identificação do representante.";
+  }
+  if (step === "access") {
+    if (!EMAIL_PATTERN.test(v.email.trim())) e.email = "Informe um e-mail válido, como contato@empresa.com.br.";
+    if (!/^[1-9][0-9][0-9]{8,9}$/.test(v.telefone.replace(/\D/g, ""))) {
+      e.telefone = "Informe um telefone brasileiro com DDD (10 ou 11 números).";
+    }
+    if (v.senha.length < 8) e.senha = "Use pelo menos 8 caracteres.";
+    if (v.confirmarSenha !== v.senha) e.confirmarSenha = "As senhas não coincidem.";
+    if (!v.acceptedTerms) e.acceptedTerms = "Marque a opção de aceite para continuar.";
+  }
+  return e;
+}
+
+export function validateFile(file: { name: string; size: number }): string | null {
+  const ext = file.name.slice(file.name.lastIndexOf(".")).toLowerCase();
+  if (!ACCEPTED_FILE_TYPES.includes(ext)) return `"${file.name}": use arquivos PDF, JPG ou PNG.`;
+  if (file.size > MAX_FILE_BYTES) return `"${file.name}": o arquivo excede 10 MB.`;
+  return null;
+}
+
+export function toCorporateRegistrationData(
+  v: CorporateFormValues,
+  files: { company: string[]; representative: string[] },
+): CorporateRegistrationData {
+  const optional = (s: string) => s.trim() || undefined;
+  return {
+    company: {
+      cnpj: normalizeCnpj(v.cnpj),
+      razaoSocial: v.razaoSocial.trim().replace(/\s+/g, " "),
+      nomeFantasia: optional(v.nomeFantasia),
+      naturezaJuridica: optional(v.naturezaJuridica),
+    },
+    address: {
+      cep: v.cep.replace(/\D/g, ""),
+      logradouro: v.logradouro.trim(),
+      numero: v.numero.trim(),
+      complemento: optional(v.complemento),
+      bairro: v.bairro.trim(),
+      cidade: v.cidade.trim(),
+      uf: v.uf,
+    },
+    representative: {
+      nome: v.repNome.trim().replace(/\s+/g, " "),
+      cpf: v.repCpf.replace(/\D/g, ""),
+      vinculo: v.repVinculo,
+    },
+    documents: {
+      hasCompanyDoc: files.company.length > 0,
+      hasRepresentativeDoc: files.representative.length > 0,
+      fileNames: [...files.company, ...files.representative],
+    },
+    access: {
+      email: v.email.trim().toLowerCase(),
+      telefone: `+55${v.telefone.replace(/\D/g, "")}`,
+      senha: v.senha,
+      acceptedTerms: v.acceptedTerms,
+    },
+  };
+}

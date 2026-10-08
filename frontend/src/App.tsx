@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { BrowserRouter, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { RegistrationPage } from "./features/registration/RegistrationPage";
+import { CorporateRegistrationPage } from "./features/corporate-registration/CorporateRegistrationPage";
 import { LoginDialog } from "./features/login/LoginDialog";
 import { Header } from "./components/Header";
 import { Footer } from "./components/Footer";
@@ -13,6 +14,7 @@ import "./App.css";
 
 const pageTitles: Record<string, string> = {
   [routes.registration]: "Crie sua conta | SafraDireta",
+  [routes.corporateRegistration]: "Cadastro Corporativo | SafraDireta",
   [routes.home]: "SafraDireta — Do campo à negociação",
   [routes.market]: "Mercado | SafraDireta",
   [routes.producers]: "Produtores | SafraDireta",
@@ -25,7 +27,8 @@ function Site() {
   );
   const location = useLocation();
   const navigate = useNavigate();
-  const isRegistrationPage = location.pathname === routes.registration;
+  const isRegistrationPage =
+    location.pathname === routes.registration || location.pathname === routes.corporateRegistration;
 
   function openFeature(feature: DevelopmentFeature) {
     if (feature === "registration" || feature === "sellerRegistration") {
@@ -58,6 +61,7 @@ function Site() {
       <main id="main-content" ref={mainRef} tabIndex={-1}>
         <Routes>
           <Route path={routes.registration} element={<RegistrationPage onOpenDialog={openFeature} />} />
+          <Route path={routes.corporateRegistration} element={<CorporateRegistrationPage onOpenDialog={openFeature} />} />
           <Route
             path={routes.home}
             element={<HomePage onOpenDialog={openFeature} />}

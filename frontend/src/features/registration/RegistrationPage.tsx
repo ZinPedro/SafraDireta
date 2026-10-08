@@ -36,7 +36,7 @@ export function RegistrationPage({ onOpenDialog, onRegister = registerAccount }:
   const isSeller = searchParams.get("intencao") === "produtor";
   const isSubmitting = status === "submitting";
   const from = (location.state as { from?: string } | null)?.from;
-  const returnTo = from && Object.values(routes).some((route) => route === from) && from !== routes.registration ? from : routes.home;
+  const returnTo = from && Object.values(routes).some((route) => route === from) && from !== routes.registration && from !== routes.corporateRegistration ? from : routes.home;
 
   function updateField<K extends keyof RegistrationValues>(name: K, value: RegistrationValues[K]) {
     setValues((current) => ({ ...current, [name]: value }));
@@ -164,6 +164,7 @@ export function RegistrationPage({ onOpenDialog, onRegister = registerAccount }:
                   <p>O cadastro de produtor está em desenvolvimento. Os dados e documentos serão solicitados em uma próxima etapa.</p>
                 </div>
               </div>
+              <p className="registration__login">É uma empresa? <Link to={routes.corporateRegistration} className="registration__text-button">Crie uma conta corporativa</Link></p>
               <p className="registration__login">Já tem conta? <button type="button" className="registration__text-button" onClick={() => onOpenDialog("login")}>Entrar</button></p>
             </fieldset>
             <div aria-live="polite" aria-atomic="true">

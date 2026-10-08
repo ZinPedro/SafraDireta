@@ -6,7 +6,8 @@ from psycopg import Connection
 
 from app.database import get_connection
 from app.deps import conta_autenticada
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
+from pydantic.alias_generators import to_camel
 from app.errors import conflito, proibido
 from pydantic import field_validator
 from app.validators import normalizar_cpf, validar_cpf
@@ -29,7 +30,7 @@ def minha_habilitacao(
     linha = conn.execute(
         """
         SELECT estado, possui_transportadora,
-               observacao_transportadora
+               observacao_transporte AS observacao_transportadora
         FROM safradireta.habilitacao_vendedor
         WHERE conta_id = %s
         """,
@@ -40,15 +41,17 @@ def minha_habilitacao(
         raise nao_encontrado("Nenhuma solicitacao de habilitacao encontrada.")
 
     return {
-        "possui_habilitacao": True,
+        "possuiHabilitacao": True,
         "estado": linha["estado"],
-        "possui_transportadora": linha["possui_transportadora"],
-        "observacao_transportadora": linha["observacao_transportadora"],
+        "possuiTransportadora": linha["possui_transportadora"],
+        "observacaoTransportadora": linha["observacao_transportadora"],
     }
 
 
 
 class SolicitacaoHabilitacao(BaseModel):
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+
     cpf: str
     possui_transportadora: bool
     observacao_transportadora: str | None = Field(
@@ -125,7 +128,7 @@ def solicitar_habilitacao(
                     conta_id,
                     estado,
                     possui_transportadora,
-                    observacao_transportadora
+                    observacao_transporte
                 )
             VALUES (%s, 'PENDENTE', %s, %s)
             ON CONFLICT (conta_id) DO NOTHING
@@ -204,6 +207,6 @@ def solicitar_habilitacao(
     return {
         "message": "Solicitacao de habilitacao criada com sucesso.",
         "estado": habilitacao["estado"],
-        "protocolo": str(verificacao["id"]),
+        "protocol": str(verificacao["id"]),
     }
 

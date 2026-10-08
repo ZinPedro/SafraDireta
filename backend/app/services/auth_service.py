@@ -7,7 +7,7 @@ from psycopg.types.json import Jsonb
 
 from app import ratelimit
 from app.config import get_settings
-from app.errors import ErroApp, conflito, nao_autenticado, proibido, nao_encontrado
+from app.errors import ErroApp, conflito, invalido, nao_autenticado, proibido, nao_encontrado
 from app.schemas.auth import AlterarEmail, EditarPerfil, LoginEntrada, RegistroPF
 from app.schemas.pj import RegistroPJ
 from app.security import (
@@ -200,7 +200,7 @@ def dados_da_conta(conn: Connection, atual: dict) -> dict:
 
         if linha is not None:
             verificacao = {
-                "protocolo": str(linha["id"]),
+                "protocol": str(linha["id"]),
                 "tipo": linha["tipo"],
                 "estado": linha["estado"],
             }
@@ -382,7 +382,7 @@ def registrar_pj(conn: Connection, dados: RegistroPJ) -> dict:
             "dos documentos para analise."
         ),
         "token": token,
-        "expira_em": expira_em.isoformat(),
+        "expiraEm": expira_em.isoformat(),
         "conta": {
             "id": str(conta_id),
             "tipo": "PJ",
@@ -557,9 +557,7 @@ def consultar_perfil(conn: Connection, atual: dict) -> dict:
             SELECT r.id, r.nome, r.cpf, r.vinculo,
                    r.inicio_vigencia, r.fim_vigencia
             FROM safradireta.representante_empresa r
-            JOIN safradireta.empresa e
-              ON e.id = r.empresa_id
-            WHERE e.conta_id = %s
+            WHERE r.empresa_id = %s
             ORDER BY r.inicio_vigencia DESC
             """,
             (atual["conta_id"],),
@@ -605,7 +603,7 @@ def alterar_email(conn: Connection, atual: dict, dados: AlterarEmail) -> dict:
             raise nao_autenticado()
 
         if not verificar_senha(dados.senha_atual, conta["senha_hash"]):
-            raise nao_autenticado("Senha atual incorreta.")
+            raise invalido("Senha atual incorreta.", {"senhaAtual": "Senha atual incorreta."})
 
         if novo_email == conta["email_acesso"]:
             return {

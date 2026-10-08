@@ -64,15 +64,6 @@ def registrar_empresa(
     return auth_service.registrar_pj(conn, dados)
 
 
-@router.patch("/profile", summary="Editar perfil da conta autenticada")
-def editar_perfil(
-    dados: EditarPerfil,
-    atual: dict = Depends(conta_autenticada),
-    conn: Connection = Depends(get_connection),
-):
-    return auth_service.editar_perfil(conn, atual, dados)
-
-
 perfil_router = APIRouter(prefix="/api/perfil", tags=["Perfil"])
 
 

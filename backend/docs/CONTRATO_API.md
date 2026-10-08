@@ -1,8 +1,8 @@
 # Contrato da API SafraDireta, Sprint 1
 
-Versao: rascunho 0.2 (atualizada em 08/10/2026). Status: PROPOSTA para alinhar com Pedro (front) e Felipe (banco).
+Versao: rascunho 0.3 (atualizada em 08/10/2026). Status: PROPOSTA para alinhar com Pedro (front) e Felipe (banco).
 Itens marcados com [DECIDIR] dependem de resposta de alguem e podem mudar.
-Itens marcados com [IMPLEMENTADO] ja existem na branch `back` e tem testes automaticos.
+Itens marcados com [IMPLEMENTADO] ja existem na branch `back`. Os itens de perfil, vendedor e cadastro PJ foram validados na mao (`/docs`); ainda faltam testes automaticos de integracao para eles.
 
 ## 1. Convencoes gerais
 
@@ -99,7 +99,7 @@ Se `intent` for `seller`, a conta e criada normalmente (compra liberada) e `prox
 
 Erros: 422 (campos), 409 com `campos.email`, 503 `TERMO_INDISPONIVEL` se nao houver termo vigente.
 
-### POST /api/auth/register-corporate   (US003 e US004, conta pessoa juridica)
+### POST /api/auth/register-corporate   (US003 e US004, conta pessoa juridica)   [IMPLEMENTADO]
 
 Publica. Numa unica transacao cria: conta, empresa, representante, endereco principal e aceite do termo, mais uma verificacao inicial. Corresponde ao `CorporateRegistrationData` da dev (commit 1fcf041).
 
@@ -142,18 +142,18 @@ Resposta 201:
 ```json
 {
   "status": "registered_pending_validation",
-  "protocol": "VER-000123",
-  "message": "Cadastro recebido. Seus documentos serao analisados pela equipe.",
+  "protocol": "7d1c0b52-3e4a-4c2f-9a6b-0e5f8a1d2c34",
+  "message": "Cadastro criado. Aguardando envio dos documentos para analise.",
   "token": "<token opaco>",
   "expiraEm": "2026-10-09T03:30:00Z",
   "conta": { "id": "9c2f4b1e-7d3a-4e58-8a0b-1f6d2c9e3a47", "tipo": "PJ", "nome": "Cooperativa Exemplo LTDA", "email": "contato@empresa.com.br" }
 }
 ```
-`protocol` e derivado do id da verificacao. A conta nasce ATIVA, mas a empresa so compra e vende depois da verificacao APROVADA. Ate la ela navega.
+`protocol` e o id (UUID) da verificacao do tipo CADASTRO_PJ, criada em RASCUNHO. Os nomes dos arquivos enviados ficam guardados na verificacao; o arquivo em si ainda nao e enviado. A conta nasce ATIVA, mas a empresa so compra e vende depois da verificacao APROVADA. Ate la ela navega.
 
 Erros:
 * 409 com `campos.cnpj` ou `campos.email` (o front trata como `duplicate`).
-* 422 com `campos` (o front trata como `validation_error`).
+* 422 com `campos` em chaves planas, iguais aos campos do formulario: `cnpj`, `razaoSocial`, `nomeFantasia`, `naturezaJuridica`, `cep`, `logradouro`, `numero`, `complemento`, `bairro`, `cidade`, `uf`, `repNome`, `repCpf`, `repVinculo`, `companyDoc`, `representativeDoc`, `email`, `telefone`, `senha`, `acceptedTerms` (o front trata como `validation_error`). `confirmarSenha` e validado so no front.
 
 Pendencias [DECIDIR]:
 1. Upload real: hoje o front so envia nomes de arquivo. Proposta do back, em dois passos: este cadastro devolve `token`; depois o front envia os arquivos em `POST /api/arquivos` (secao 5) ligados a verificacao. Ate la a verificacao fica em RASCUNHO e so vira ENVIADA com os documentos.
@@ -187,36 +187,43 @@ Exige login. 200:
   "expiraEm": "2026-10-09T03:30:00Z"
 }
 ```
-`vendedor.estado` pode ser `null`, `PENDENTE`, `HABILITADO`, `REJEITADO` ou `SUSPENSO`. Ainda NAO devolve `telefone` nem `verificacao`: para PJ, o campo `verificacao` (`{ "protocol": "VER-000123", "estado": "ENVIADA" }`) entra junto com o cadastro PJ.
+`vendedor.estado` pode ser `null`, `PENDENTE`, `HABILITADO`, `REJEITADO` ou `SUSPENSO`. Nao devolve `telefone`. Para conta PJ devolve tambem `verificacao`: `{ "protocol": "<uuid>", "tipo": "CADASTRO_PJ", "estado": "RASCUNHO" }` (ausente ou `null` em conta PF).
 
-## 4. Perfil   (US008)
+## 4. Perfil   (US008)   [IMPLEMENTADO]
 
 ### GET /api/perfil
-Exige login. Devolve os dados editaveis da conta (PF: nome, telefone, endereco; PJ: dados da empresa e do representante).
+Exige login. 200: `id`, `tipo`, `nome`, `email`, `telefone`, `estado` e a lista `enderecos` (`rotulo`, `logradouro`, `numero`, `complemento`, `bairro`, `municipio`, `uf`, `cep`, `pais`, `referenciaAcesso`, `principal`).
+* PF: acrescenta `cpf`.
+* PJ: acrescenta `razaoSocial`, `nomeFantasia`, `cnpj` e a lista `representantes` (`id`, `nome`, `cpf`, `vinculo`, `inicioVigencia`, `fimVigencia`).
 
 ### PATCH /api/perfil
-Exige login. Atualiza so os campos enviados, com as mesmas validacoes do cadastro. Regras:
-* O `contaId` vem sempre do token, nunca do corpo.
-* Trocar email exige a senha atual no campo `senhaAtual`. Reutiliza a regra de email unico (409).
-* Campos sensiveis (CPF, CNPJ) nao mudam por aqui: geram um registro em `alteracao_cadastral` para analise. [DECIDIR] com Felipe e cliente.
-* Toda alteracao gera um evento de auditoria.
+Exige login. Corpo com `name` e/ou `phone` (so o que for enviado muda; nenhum pode ser `null`; corpo vazio da 422). Telefone no formato `+55DDDNUMERO`. O `contaId` vem sempre do token. Gera evento de auditoria.
+Resposta 200: `{ "message": "...", "conta": { "id", "tipo", "nome", "email" } }`.
 
-Resposta 200: perfil atualizado.
+### PATCH /api/perfil/email
+Exige login. Corpo: `{ "novoEmail": "novo@exemplo.com", "senhaAtual": "..." }`.
+* 422 com `campos.senhaAtual` se a senha atual estiver errada (nao e 401, para o front nao deslogar o usuario); 409 se o email ja pertence a outra conta; 422 se o email for invalido.
+* Se o email enviado ja for o da conta, responde 200 sem alterar nada.
+Resposta 200: `{ "message": "Email atualizado com sucesso.", "email": "novo@exemplo.com" }`.
+Observacao: o contrato antigo previa a troca de email dentro do `PATCH /api/perfil`; ficou em rota separada. [DECIDIR] com Pedro.
 
-## 5. Vendedor   (US004)
+Campos sensiveis (CPF, CNPJ) nao mudam por aqui. [DECIDIR] com Felipe e cliente: alteracao direta ou via `alteracao_cadastral`?
+
+## 5. Vendedor   (US004)   [IMPLEMENTADO]
 
 ### POST /api/vendedor/habilitacao
-Exige login (PF). Solicita virar vendedor.
+Exige login. So conta PF (conta PJ recebe 403 `PROIBIDO`). Solicita virar vendedor.
 
 Entrada:
 ```json
-{ "cpf": "12345678909" }
+{ "cpf": "52998224725", "possuiTransportadora": false, "observacaoTransportadora": null }
 ```
-Regras: valida CPF, grava no perfil, cria `habilitacao_vendedor` em PENDENTE e uma verificacao do tipo habilitacao. 409 se ja existe habilitacao ativa ou CPF ja usado por outra conta.
-Resposta 201: `{ "estado": "PENDENTE", "protocol": "VER-000124" }`.
+`observacaoTransportadora` e opcional (maximo 500 caracteres). Tambem aceita os mesmos nomes em snake_case.
+Regras: valida CPF; 409 se o CPF cadastrado na conta for diferente, se o CPF pertencer a outra conta (`campos.cpf`) ou se ja existe habilitacao ativa; cria `habilitacao_vendedor` em PENDENTE e uma verificacao do tipo HABILITACAO_VENDEDOR em RASCUNHO.
+Resposta 201: `{ "message": "...", "estado": "PENDENTE", "protocol": "<uuid>" }`.
 
 ### GET /api/vendedor/habilitacao
-Exige login. 200: `{ "estado": "PENDENTE", "protocol": "VER-000124", "motivo": null }`. 404 se nunca solicitou.
+Exige login. 200: `{ "possuiHabilitacao": true, "estado": "PENDENTE", "possuiTransportadora": false, "observacaoTransportadora": null }`. 404 `NAO_ENCONTRADO` se nunca solicitou.
 
 ### POST /api/arquivos   (upload de documento) [DECIDIR]
 Exige login. `multipart/form-data` com os campos `verificacaoId`, `tipoDocumento` e `arquivo`. Aceita PDF, JPG e PNG ate 10 MB, valida tipo pelo conteudo e nao pelo nome. Resposta 201: `{ "id": "3b7e1d52-6a0c-4f9e-9d14-72c8a5e0b6f1", "nome": "contrato.pdf", "tamanho": 120394 }`. Define onde guardar (disco local ou storage) antes de implementar.
@@ -231,7 +238,7 @@ Qualquer rota futura de venda usa a dependencia `exige_vendedor_habilitado`: res
 * US003 (cadastrar conta): `POST /api/auth/register` e `POST /api/auth/register-corporate`.
 * US004 (cadastrar-se como vendedor): `POST` e `GET /api/vendedor/habilitacao`, `POST /api/arquivos`, estados da verificacao e da habilitacao.
 * US005 (autenticar e proteger): `login`, `logout`, `me`, dependencia `conta_autenticada`, limite de tentativas.
-* US008 (editar perfil): `GET` e `PATCH /api/perfil`.
+* US008 (editar perfil): `GET` e `PATCH /api/perfil`, `PATCH /api/perfil/email`.
 
 ## 7. Decisoes em aberto
 
@@ -241,3 +248,4 @@ Qualquer rota futura de venda usa a dependencia `exige_vendedor_habilitado`: res
 4. Valores oficiais dos enums de estado e colunas para `vinculo` e `naturezaJuridica` (Felipe).
 5. Regra PJ de compra e venda (cliente).
 6. Alteracao de CPF e CNPJ: direta ou via `alteracao_cadastral`?
+7. Todo cadastro PJ ja nasce com habilitacao de vendedor PENDENTE. Confirmar com o cliente.

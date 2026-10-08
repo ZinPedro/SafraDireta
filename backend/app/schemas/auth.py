@@ -114,7 +114,7 @@ class EditarPerfil(_Base):
         return v
 
 class VerificacaoResumo(_Base):
-    protocolo: str | None = None
+    protocol: str | None = None
     estado: str | None = None
     tipo: str | None = None
 
@@ -124,8 +124,14 @@ class MeResposta(_Base):
     expira_em: str
     verificacao: VerificacaoResumo | None = None
 
-from pydantic import EmailStr
-
 class AlterarEmail(_Base):
-    novo_email: EmailStr
+    novo_email: str = Field(max_length=254)
     senha_atual: str
+
+    @field_validator("novo_email")
+    @classmethod
+    def _novo_email(cls, v: str) -> str:
+        v = v.strip().lower()
+        if not _EMAIL.match(v):
+            raise ValueError("Informe um email valido.")
+        return v

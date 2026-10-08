@@ -1,3 +1,4 @@
+import { MOCK_API, mockDelay } from "../../dev/mockApi";
 export interface CorporateRegistrationData {
   company: {
     cnpj: string;
@@ -22,6 +23,8 @@ export interface CorporateRegistrationData {
   documents: {
     hasCompanyDoc: boolean;
     hasRepresentativeDoc: boolean;
+    representativeFrontFileName: string;
+    representativeBackFileName: string;
     fileNames: string[];
   };
   access: {
@@ -45,11 +48,22 @@ export type RegisterCorporateAccount = (data: CorporateRegistrationData) => Prom
 
 // Fronteira de integração. Enquanto o backend (POST /api/auth/register-corporate)
 // não existir, nada é enviado nem salvo e nenhuma conta é fingida.
-export const registerCorporateAccount: RegisterCorporateAccount = async () => ({
-  ok: false,
-  reason: "unavailable",
-  message: "Integração em desenvolvimento — nenhuma conta foi criada. Seus dados não foram enviados nem salvos.",
-});
+export const registerCorporateAccount: RegisterCorporateAccount = async () => {
+  if (MOCK_API) {
+    await mockDelay();
+    return {
+      ok: true,
+      status: "registered_pending_validation",
+      protocol: `SIM-${Date.now().toString(36).toUpperCase()}`,
+      message: "Simulação local: nenhuma conta foi realmente criada.",
+    };
+  }
+  return {
+    ok: false,
+    reason: "unavailable",
+    message: "Integração em desenvolvimento — nenhuma conta foi criada. Seus dados não foram enviados nem salvos.",
+  };
+};
 
 export type StepId = "company" | "address" | "representative" | "documents" | "access";
 export type FieldErrors = Record<string, string>;
@@ -183,7 +197,7 @@ export function isValidCpf(value: string): boolean {
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-export function validateStep(step: StepId, v: CorporateFormValues, fileCount?: { company: number; representative: number }): FieldErrors {
+export function validateStep(step: StepId, v: CorporateFormValues, fileCount?: { company: number; repFront: number; repBack: number }): FieldErrors {
   const e: FieldErrors = {};
   if (step === "company") {
     if (!isValidCnpj(v.cnpj)) e.cnpj = "Informe um CNPJ válido, com 14 caracteres.";
@@ -204,7 +218,8 @@ export function validateStep(step: StepId, v: CorporateFormValues, fileCount?: {
   }
   if (step === "documents") {
     if (!fileCount?.company) e.companyDoc = "Anexe o documento de constituição da empresa.";
-    if (!fileCount?.representative) e.representativeDoc = "Anexe o documento de identificação do representante.";
+    if (!fileCount?.repFront) e.repFrontDoc = "Anexe a foto da frente do documento do representante.";
+    if (!fileCount?.repBack) e.repBackDoc = "Anexe a foto do verso do documento do representante.";
   }
   if (step === "access") {
     if (!EMAIL_PATTERN.test(v.email.trim())) e.email = "Informe um e-mail válido, como contato@empresa.com.br.";
@@ -227,7 +242,7 @@ export function validateFile(file: { name: string; size: number }): string | nul
 
 export function toCorporateRegistrationData(
   v: CorporateFormValues,
-  files: { company: string[]; representative: string[] },
+  files: { company: string[]; repFront: string; repBack: string },
 ): CorporateRegistrationData {
   const optional = (s: string) => s.trim() || undefined;
   return {
@@ -253,8 +268,10 @@ export function toCorporateRegistrationData(
     },
     documents: {
       hasCompanyDoc: files.company.length > 0,
-      hasRepresentativeDoc: files.representative.length > 0,
-      fileNames: [...files.company, ...files.representative],
+      hasRepresentativeDoc: Boolean(files.repFront && files.repBack),
+      representativeFrontFileName: files.repFront,
+      representativeBackFileName: files.repBack,
+      fileNames: [...files.company, files.repFront, files.repBack].filter(Boolean),
     },
     access: {
       email: v.email.trim().toLowerCase(),

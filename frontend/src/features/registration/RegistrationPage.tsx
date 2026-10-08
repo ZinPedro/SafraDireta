@@ -1,12 +1,13 @@
 import { useRef, useState } from "react";
 import type { FormEvent } from "react";
-import { Link, useLocation, useSearchParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import registrationImage from "../../assets/images/registration-landscape.jpeg";
 import { Icon } from "../../components/Icon";
 import { routes } from "../../data/site";
 import type { OpenDevelopmentDialog } from "../../data/site";
 import { formatPhone, registerAccount, toRegistrationRequest, validateRegistration } from "./registration";
 import type { RegisterAccount, RegistrationErrors, RegistrationValues } from "./registration";
+import { PostRegistrationDialog } from "./PostRegistrationDialog";
 import "./RegistrationPage.css";
 
 const initialValues: RegistrationValues = {
@@ -31,12 +32,14 @@ export function RegistrationPage({ onOpenDialog, onRegister = registerAccount }:
   const [message, setMessage] = useState("");
   const [searchParams, setSearchParams] = useSearchParams();
   const location = useLocation();
+  const navigate = useNavigate();
+  const [welcomeOpen, setWelcomeOpen] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
   const pendingRef = useRef(false);
   const isSeller = searchParams.get("intencao") === "produtor";
   const isSubmitting = status === "submitting";
   const from = (location.state as { from?: string } | null)?.from;
-  const returnTo = from && Object.values(routes).some((route) => route === from) && from !== routes.registration && from !== routes.corporateRegistration ? from : routes.home;
+  const returnTo = from && Object.values(routes).some((route) => route === from) && from !== routes.registration && from !== routes.corporateRegistration && from !== routes.sellerUpgrade ? from : routes.home;
 
   function updateField<K extends keyof RegistrationValues>(name: K, value: RegistrationValues[K]) {
     setValues((current) => ({ ...current, [name]: value }));
@@ -76,6 +79,8 @@ export function RegistrationPage({ onOpenDialog, onRegister = registerAccount }:
         if (result.fieldErrors) requestAnimationFrame(() => focusFirstError(result.fieldErrors ?? {}));
       } else {
         setValues(initialValues);
+        // Intenção prévia de vender conduz direto à habilitação; senão, modal com duas opções.
+        if (isSeller) navigate(routes.sellerUpgrade); else setWelcomeOpen(true);
         setMessage(isSeller ? "Conta criada. A habilitação como produtor será uma etapa adicional da sua conta." : "Sua conta foi criada com sucesso.");
       }
     } catch {
@@ -173,6 +178,7 @@ export function RegistrationPage({ onOpenDialog, onRegister = registerAccount }:
           </form>
         </div>
       </div>
+      <PostRegistrationDialog open={welcomeOpen} onClose={() => setWelcomeOpen(false)} />
     </section>
   );
 }

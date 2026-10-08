@@ -1,3 +1,5 @@
+import { MOCK_API, mockDelay } from "../../dev/mockApi";
+
 export type RegistrationIntent = "buyer" | "seller";
 
 export interface RegistrationValues {
@@ -23,7 +25,13 @@ export type RegistrationResult =
 
 export type RegisterAccount = (request: RegistrationRequest) => Promise<RegistrationResult>;
 
-export const registerAccount: RegisterAccount = async () => ({ status: "unavailable" });
+export const registerAccount: RegisterAccount = async () => {
+  if (MOCK_API) {
+    await mockDelay();
+    return { status: "registered" };
+  }
+  return { status: "unavailable" };
+};
 
 export function formatPhone(value: string): string {
   const digits = value.replace(/\D/g, "").slice(0, 11);

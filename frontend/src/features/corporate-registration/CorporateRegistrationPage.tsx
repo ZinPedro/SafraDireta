@@ -17,12 +17,13 @@ import "../registration/RegistrationPage.css";
 import "./CorporateRegistrationPage.css";
 
 type FileMeta = { name: string; size: number };
-type DocKind = "company" | "representative";
+type DocKind = "company" | "repFront" | "repBack";
 type TextField = keyof CorporateFormValues;
 
-const docKinds: { kind: DocKind; errorKey: string; label: string; hint: string }[] = [
+const docKinds: { kind: DocKind; errorKey: string; label: string; hint: string; single?: boolean }[] = [
   { kind: "company", errorKey: "companyDoc", label: "Documento de constituição da empresa", hint: "Contrato Social consolidado, CCMEI ou Estatuto Social." },
-  { kind: "representative", errorKey: "representativeDoc", label: "Documento de identificação do representante", hint: "RG, CNH ou documento profissional com foto." },
+  { kind: "repFront", errorKey: "repFrontDoc", label: "Documento do representante — frente", hint: "Foto da frente do RG, CNH ou documento profissional com foto.", single: true },
+  { kind: "repBack", errorKey: "repBackDoc", label: "Documento do representante — verso", hint: "Foto do verso do mesmo documento.", single: true },
 ];
 
 function Field({ id, label, required, error, hint, children }: {
@@ -45,8 +46,8 @@ export function CorporateRegistrationPage({ onOpenDialog, onRegister = registerC
   const [values, setValues] = useState<CorporateFormValues>(initialCorporateValues);
   const [errors, setErrors] = useState<FieldErrors>({});
   const [stepIndex, setStepIndex] = useState(0);
-  const [files, setFiles] = useState<Record<DocKind, FileMeta[]>>({ company: [], representative: [] });
-  const [fileMessages, setFileMessages] = useState<Record<DocKind, string>>({ company: "", representative: "" });
+  const [files, setFiles] = useState<Record<DocKind, FileMeta[]>>({ company: [], repFront: [], repBack: [] });
+  const [fileMessages, setFileMessages] = useState<Record<DocKind, string>>({ company: "", repFront: "", repBack: "" });
   const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [feedback, setFeedback] = useState("");
@@ -58,7 +59,7 @@ export function CorporateRegistrationPage({ onOpenDialog, onRegister = registerC
   const step = steps[stepIndex];
   const isLast = stepIndex === steps.length - 1;
 
-  const fileCount = { company: files.company.length, representative: files.representative.length };
+  const fileCount = { company: files.company.length, repFront: files.repFront.length, repBack: files.repBack.length };
 
   function update<K extends TextField>(name: K, value: CorporateFormValues[K]) {
     setValues((c) => ({ ...c, [name]: value }));
@@ -101,9 +102,13 @@ export function CorporateRegistrationPage({ onOpenDialog, onRegister = registerC
       else accepted.push({ name: file.name, size: file.size });
     }
     // Apenas metadados são guardados: o MVP não persiste o conteúdo binário.
-    setFiles((c) => ({ ...c, [kind]: [...c[kind], ...accepted].slice(0, 3) }));
+    const single = docKinds.find((d) => d.kind === kind)?.single;
+    setFiles((c) => ({
+      ...c,
+      [kind]: single ? (accepted.length ? accepted.slice(0, 1) : c[kind]) : [...c[kind], ...accepted].slice(0, 3),
+    }));
     setFileMessages((c) => ({ ...c, [kind]: rejected.join(" ") }));
-    if (accepted.length) setErrors((c) => ({ ...c, [kind === "company" ? "companyDoc" : "representativeDoc"]: "" }));
+    if (accepted.length) setErrors((c) => ({ ...c, [docKinds.find((d) => d.kind === kind)?.errorKey ?? ""]: "" }));
   }
 
   function removeFile(kind: DocKind, index: number) {
@@ -131,7 +136,8 @@ export function CorporateRegistrationPage({ onOpenDialog, onRegister = registerC
       const response = await onRegister(
         toCorporateRegistrationData(values, {
           company: files.company.map((f) => f.name),
-          representative: files.representative.map((f) => f.name),
+          repFront: files.repFront[0]?.name ?? "",
+          repBack: files.repBack[0]?.name ?? "",
         }),
       );
       if (response.ok) {
@@ -285,12 +291,12 @@ export function CorporateRegistrationPage({ onOpenDialog, onRegister = registerC
 
               {step.id === "documents" && (<>
                 <p className="corporate__hint">Os arquivos serão submetidos para validação manual pela equipe do cliente antes da liberação de compras e vendas. Formatos aceitos: PDF, JPG e PNG, até 10 MB.</p>
-                {docKinds.map(({ kind, errorKey, label, hint }) => (
+                {docKinds.map(({ kind, errorKey, label, hint, single }) => (
                   <div className="registration-field corporate__dropzone" key={kind}>
                     <label htmlFor={`corporate-${errorKey}`}>{label} <span aria-hidden="true">*</span></label>
                     <p className="corporate__hint" id={`corporate-${errorKey}-hint`}>{hint}</p>
                     <input
-                      id={`corporate-${errorKey}`} name={errorKey} type="file" accept={ACCEPTED_FILE_TYPES.join(",")} multiple
+                      id={`corporate-${errorKey}`} name={errorKey} type="file" accept={ACCEPTED_FILE_TYPES.join(",")} multiple={!single}
                       aria-invalid={Boolean(errors[errorKey])}
                       aria-describedby={errors[errorKey] ? `corporate-${errorKey}-error` : `corporate-${errorKey}-hint`}
                       onChange={(e) => handleFiles(kind, e)}

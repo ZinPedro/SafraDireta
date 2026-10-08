@@ -21,6 +21,7 @@ export interface Session {
 const TOKEN_KEY = "safradireta_token";
 const CONTA_KEY = "safradireta_conta";
 const VENDEDOR_KEY = "safradireta_vendedor";
+const AVATAR_KEY = "safradireta_avatar";
 
 function read(): Session | null {
   try {
@@ -28,7 +29,8 @@ function read(): Session | null {
     const conta = localStorage.getItem(CONTA_KEY);
     if (!token || !conta) return null;
     const estado = localStorage.getItem(VENDEDOR_KEY) as VendedorEstado;
-    return { token, conta: JSON.parse(conta) as SessionConta, vendedorEstado: estado || null };
+    const avatar = localStorage.getItem(AVATAR_KEY) ?? undefined;
+    return { token, conta: JSON.parse(conta) as SessionConta, vendedorEstado: estado || null, avatarUrl: avatar };
   } catch {
     return null;
   }
@@ -45,7 +47,7 @@ function emit(next: Session | null) {
 export function subscribeSession(listener: () => void): () => void {
   listeners.add(listener);
   const onStorage = (event: StorageEvent) => {
-    if (event.key === null || [TOKEN_KEY, CONTA_KEY, VENDEDOR_KEY].includes(event.key)) emit(read());
+    if (event.key === null || [TOKEN_KEY, CONTA_KEY, VENDEDOR_KEY, AVATAR_KEY].includes(event.key)) emit(read());
   };
   window.addEventListener("storage", onStorage);
   return () => {
@@ -56,12 +58,13 @@ export function subscribeSession(listener: () => void): () => void {
 
 export const getSession = (): Session | null => current;
 
-export function saveSession(token: string, conta: SessionConta, vendedorEstado: VendedorEstado = null) {
+export function saveSession(token: string, conta: SessionConta, vendedorEstado: VendedorEstado = null, avatarUrl?: string) {
   localStorage.setItem(TOKEN_KEY, token);
   localStorage.setItem(CONTA_KEY, JSON.stringify(conta));
   if (vendedorEstado) localStorage.setItem(VENDEDOR_KEY, vendedorEstado);
   else localStorage.removeItem(VENDEDOR_KEY);
-  emit({ token, conta, vendedorEstado, avatarUrl: current?.avatarUrl });
+  if (avatarUrl) localStorage.setItem(AVATAR_KEY, avatarUrl);
+  emit({ token, conta, vendedorEstado, avatarUrl: avatarUrl ?? current?.avatarUrl });
 }
 
 export function updateSession(patch: Partial<Pick<Session, "vendedorEstado" | "avatarUrl">> & { conta?: Partial<SessionConta> }) {
@@ -75,6 +78,10 @@ export function updateSession(patch: Partial<Pick<Session, "vendedorEstado" | "a
   localStorage.setItem(CONTA_KEY, JSON.stringify(next.conta));
   if (next.vendedorEstado) localStorage.setItem(VENDEDOR_KEY, next.vendedorEstado);
   else localStorage.removeItem(VENDEDOR_KEY);
+  if (patch.avatarUrl !== undefined) {
+    if (patch.avatarUrl) localStorage.setItem(AVATAR_KEY, patch.avatarUrl);
+    else localStorage.removeItem(AVATAR_KEY);
+  }
   emit(next);
 }
 
@@ -82,6 +89,6 @@ export function clearSession() {
   localStorage.removeItem(TOKEN_KEY);
   localStorage.removeItem(CONTA_KEY);
   localStorage.removeItem(VENDEDOR_KEY);
-  if (current?.avatarUrl) URL.revokeObjectURL(current.avatarUrl);
+  localStorage.removeItem(AVATAR_KEY);
   emit(null);
 }

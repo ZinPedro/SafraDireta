@@ -71,3 +71,21 @@ class SessaoResposta(_Base):
     conta: ContaResumo
     vendedor: VendedorResumo
     proximo_passo: str | None = None
+
+
+class LoginEntrada(_Base):
+    email: str = Field(min_length=1, max_length=254)
+    # No login nao exigimos tamanho minimo: so o cadastro define a regra da senha.
+    # O maximo evita enviar textos gigantes para o Argon2.
+    password: str = Field(min_length=1, max_length=128)
+
+    @field_validator("email")
+    @classmethod
+    def _email(cls, v: str) -> str:
+        return v.strip().lower()
+
+
+class MeResposta(_Base):
+    conta: ContaResumo
+    vendedor: VendedorResumo
+    expira_em: str

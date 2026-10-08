@@ -3,6 +3,8 @@ import { BrowserRouter, Route, Routes, useLocation, useNavigate } from "react-ro
 import { RegistrationPage } from "./features/registration/RegistrationPage";
 import { CorporateRegistrationPage } from "./features/corporate-registration/CorporateRegistrationPage";
 import { SellerUpgradePage } from "./features/seller-upgrade/SellerUpgradePage";
+import { AuthProvider } from "./context/AuthContext";
+import { ProfilePage } from "./features/profile/ProfilePage";
 import { LoginDialog } from "./features/login/LoginDialog";
 import { Header } from "./components/Header";
 import { Footer } from "./components/Footer";
@@ -17,6 +19,7 @@ const pageTitles: Record<string, string> = {
   [routes.registration]: "Crie sua conta | SafraDireta",
   [routes.corporateRegistration]: "Cadastro Corporativo | SafraDireta",
   [routes.sellerUpgrade]: "Habilitar vendedor | SafraDireta",
+  [routes.profile]: "Meu perfil | SafraDireta",
   [routes.home]: "SafraDireta — Do campo à negociação",
   [routes.market]: "Mercado | SafraDireta",
   [routes.producers]: "Produtores | SafraDireta",
@@ -66,6 +69,7 @@ function Site() {
         <Routes>
           <Route path={routes.registration} element={<RegistrationPage onOpenDialog={openFeature} />} />
           <Route path={routes.sellerUpgrade} element={<SellerUpgradePage />} />
+          <Route path={routes.profile} element={<ProfilePage onOpenDialog={openFeature} />} />
           <Route path={routes.corporateRegistration} element={<CorporateRegistrationPage onOpenDialog={openFeature} />} />
           <Route
             path={routes.home}
@@ -137,7 +141,9 @@ function Site() {
 export default function App() {
   return (
     <BrowserRouter>
-      <Site />
+      <AuthProvider>
+        <Site />
+      </AuthProvider>
     </BrowserRouter>
   );
 }

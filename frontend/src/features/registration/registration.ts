@@ -1,3 +1,4 @@
+import { saveSession } from "../../context/session";
 import { MOCK_API, mockDelay } from "../../dev/mockApi";
 
 export type RegistrationIntent = "buyer" | "seller";
@@ -28,6 +29,7 @@ export type RegisterAccount = (request: RegistrationRequest) => Promise<Registra
 export const registerAccount: RegisterAccount = async (request: RegistrationRequest): Promise<RegistrationResult> => {
   if (MOCK_API) {
     await mockDelay();
+    saveSession("mock-token", { id: `mock-${request.email}`, tipo: "PF", nome: request.name, email: request.email }, null);
     return { status: "registered" };
   }
 
@@ -43,8 +45,7 @@ export const registerAccount: RegisterAccount = async (request: RegistrationRequ
     if (response.status === 201) {
       const data = await response.json();
       if (data.token) {
-        localStorage.setItem("safradireta_token", data.token);
-        localStorage.setItem("safradireta_conta", JSON.stringify(data.conta));
+        saveSession(data.token, data.conta, data.vendedor?.estado ?? null);
       }
       return { status: "registered" };
     }

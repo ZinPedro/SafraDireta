@@ -1,3 +1,4 @@
+import { saveSession } from "../../context/session";
 import { MOCK_API, mockDelay } from "../../dev/mockApi";
 export interface CorporateRegistrationData {
   company: {
@@ -49,6 +50,33 @@ export type RegisterCorporateAccount = (data: CorporateRegistrationData) => Prom
 export const registerCorporateAccount: RegisterCorporateAccount = async (data: CorporateRegistrationData): Promise<CorporateRegisterResult> => {
   if (MOCK_API) {
     await mockDelay();
+    const contaId = `mock-${data.access.email}`;
+    saveSession("mock-token", { id: contaId, tipo: "PJ", nome: data.company.razaoSocial, email: data.access.email }, null);
+    try {
+      const key = `safradireta_mock_profile:${contaId}`;
+      const stored = {
+        account: {
+          id: contaId,
+          tipo: "PJ",
+          nome: data.company.razaoSocial,
+          email: data.access.email,
+          cpfCnpj: data.company.cnpj,
+          telefone: data.access.telefone,
+        },
+        address: {
+          cep: data.address.cep,
+          logradouro: data.address.logradouro,
+          numero: data.address.numero,
+          complemento: data.address.complemento ?? "",
+          bairro: data.address.bairro,
+          cidade: data.address.cidade,
+          uf: data.address.uf,
+        },
+      };
+      localStorage.setItem(key, JSON.stringify(stored));
+    } catch {
+      /* no-op */
+    }
     return {
       ok: true,
       status: "registered_pending_validation",
@@ -69,8 +97,7 @@ export const registerCorporateAccount: RegisterCorporateAccount = async (data: C
     if (response.status === 201) {
       const res = await response.json();
       if (res.token) {
-        localStorage.setItem("safradireta_token", res.token);
-        localStorage.setItem("safradireta_conta", JSON.stringify(res.conta));
+        saveSession(res.token, res.conta, res.vendedor?.estado ?? null);
       }
       return {
         ok: true,

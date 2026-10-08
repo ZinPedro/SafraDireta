@@ -1,6 +1,8 @@
 import { useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { Icon } from "../../components/Icon";
+import { saveSession } from "../../context/session";
+import { MOCK_API, mockDelay } from "../../dev/mockApi";
 
 type LoginFormProps = {
   onPreview: () => void;
@@ -53,6 +55,17 @@ export function LoginForm({ onPreview, onRecovery, onRegister, authenticationErr
 
     setSubmitting(true);
     setAuthError(undefined);
+    if (MOCK_API) {
+      // Simulação de dev: e-mails com "vendedor" entram como vendedor habilitado.
+      await mockDelay(400);
+      const address = email.value.trim().toLowerCase();
+      const local = address.split("@")[0].replace(/[._-]+/g, " ").trim() || "Usuário";
+      const nome = local.replace(/\b\p{L}/gu, (c) => c.toUpperCase());
+      saveSession("mock-token", { id: `mock-${address}`, tipo: "PF", nome, email: address }, address.includes("vendedor") ? "HABILITADO" : null);
+      setSubmitting(false);
+      onPreview();
+      return;
+    }
     try {
       const response = await fetch("/api/auth/login", {
         method: "POST",
@@ -63,8 +76,7 @@ export function LoginForm({ onPreview, onRecovery, onRegister, authenticationErr
       if (response.ok) {
         const data = await response.json();
         if (data.token) {
-          localStorage.setItem("safradireta_token", data.token);
-          localStorage.setItem("safradireta_conta", JSON.stringify(data.conta));
+          saveSession(data.token, data.conta, data.vendedor?.estado ?? null);
         }
         onPreview();
         return;

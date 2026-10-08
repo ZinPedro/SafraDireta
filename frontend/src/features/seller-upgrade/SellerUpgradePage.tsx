@@ -1,9 +1,12 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ChangeEvent, FormEvent } from "react";
 import { Link } from "react-router-dom";
 import registrationImage from "../../assets/images/registration-landscape.jpeg";
 import { Icon } from "../../components/Icon";
 import { routes } from "../../data/site";
+import { useAuth } from "../../context/authContext";
+import { getSession } from "../../context/session";
+import { loadUserProfile } from "../profile/profile";
 import {
   ACCEPTED_FILE_TYPES, defaultUpgradeToSeller, formatCpf, formatFileSize, initialSellerValues,
   sellerCategories, toSellerUpgradeData, ufs, validateFile, validateSellerUpgrade,
@@ -44,7 +47,50 @@ function FileSlot({ id, label, hint, required, file, error, message, onPick, onR
 }
 
 export function SellerUpgradePage({ onUpgrade = defaultUpgradeToSeller }: { onUpgrade?: UpgradeToSeller }) {
-  const [values, setValues] = useState<SellerUpgradeValues>(initialSellerValues);
+  const { session, setVendedorEstado } = useAuth();
+  const isAlreadyHabilitado = session?.vendedorEstado === "HABILITADO";
+
+  const [lockedCpf, setLockedCpf] = useState<string>(() => {
+    const s = getSession();
+    if (s) {
+      try {
+        const raw = localStorage.getItem(`safradireta_mock_profile:${s.conta.id}`);
+        if (raw) {
+          const stored = JSON.parse(raw);
+          const rawCpf = stored.account?.cpfCnpj || "";
+          return rawCpf ? formatCpf(rawCpf) : "";
+        }
+      } catch {
+        /* ignore */
+      }
+    }
+    return "";
+  });
+
+  const [values, setValues] = useState<SellerUpgradeValues>(() => {
+    const s = getSession();
+    if (s) {
+      try {
+        const raw = localStorage.getItem(`safradireta_mock_profile:${s.conta.id}`);
+        if (raw) {
+          const stored = JSON.parse(raw);
+          const rawCpf = stored.account?.cpfCnpj || "";
+          const cpf = rawCpf ? formatCpf(rawCpf) : "";
+          const city = stored.address?.cidade ?? "";
+          const state = stored.address?.uf ?? "";
+          return {
+            ...initialSellerValues,
+            cpf,
+            city,
+            state,
+          };
+        }
+      } catch {
+        /* ignore */
+      }
+    }
+    return initialSellerValues;
+  });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [files, setFiles] = useState<Record<DocKey, FileMeta | null>>({ cpfFrontDoc: null, cpfBackDoc: null, carDoc: null });
   const [fileMessages, setFileMessages] = useState<Record<DocKey, string>>({ cpfFrontDoc: "", cpfBackDoc: "", carDoc: "" });
@@ -54,6 +100,28 @@ export function SellerUpgradePage({ onUpgrade = defaultUpgradeToSeller }: { onUp
   const formRef = useRef<HTMLFormElement>(null);
   const pendingRef = useRef(false);
   const headingRef = useRef<HTMLHeadingElement>(null);
+
+  useEffect(() => {
+    if (!session) return;
+    let active = true;
+    loadUserProfile().then((res) => {
+      if (!active || !res.ok) return;
+      const { account, address } = res.profile;
+      const accountCpf = account.cpfCnpj ? formatCpf(account.cpfCnpj) : "";
+      if (accountCpf) {
+        setLockedCpf(accountCpf);
+      }
+      setValues((current) => ({
+        ...current,
+        cpf: accountCpf || current.cpf,
+        city: current.city || address.cidade || "",
+        state: current.state || address.uf || "",
+      }));
+    });
+    return () => {
+      active = false;
+    };
+  }, [session]);
 
   function clearError(key: string) {
     setErrors((c) => {
@@ -102,7 +170,8 @@ export function SellerUpgradePage({ onUpgrade = defaultUpgradeToSeller }: { onUp
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (pendingRef.current) return;
-    const next = validateSellerUpgrade(values, { front: Boolean(files.cpfFrontDoc), back: Boolean(files.cpfBackDoc) });
+    const valuesToValidate = lockedCpf ? { ...values, cpf: lockedCpf } : values;
+    const next = validateSellerUpgrade(valuesToValidate, { front: Boolean(files.cpfFrontDoc), back: Boolean(files.cpfBackDoc) });
     setErrors(next);
     if (Object.keys(next).length) {
       focusFirstError(next);
@@ -112,8 +181,9 @@ export function SellerUpgradePage({ onUpgrade = defaultUpgradeToSeller }: { onUp
     setSubmitting(true);
     setFeedback("");
     try {
-      const result = await onUpgrade(toSellerUpgradeData(values, files.cpfFrontDoc?.name, files.cpfBackDoc?.name, files.carDoc?.name));
+      const result = await onUpgrade(toSellerUpgradeData(valuesToValidate, files.cpfFrontDoc?.name, files.cpfBackDoc?.name, files.carDoc?.name));
       if (result.ok) {
+        setVendedorEstado("HABILITADO");
         setDoneMessage(result.message);
         requestAnimationFrame(() => headingRef.current?.focus());
       } else {
@@ -153,11 +223,11 @@ export function SellerUpgradePage({ onUpgrade = defaultUpgradeToSeller }: { onUp
           <Link to={routes.home} className="icon-button" aria-label="Fechar e voltar ao início"><Icon name="close" /></Link>
         </nav>
         <div className="registration__body">
-          {doneMessage ? (
+          {doneMessage || isAlreadyHabilitado ? (
             <div className="corporate__done">
               <header className="registration__heading">
                 <p className="eyebrow">Vendedor</p>
-                <h1 id="seller-title" ref={headingRef} tabIndex={-1}>{doneMessage}</h1>
+                <h1 id="seller-title" ref={headingRef} tabIndex={-1}>{doneMessage ?? "Sua conta já está habilitada como vendedor!"}</h1>
               </header>
               <div className="registration__feedback" role="status">
                 <strong className="seller-upgrade__badge"><Icon name="leaf" /> Vendedor Habilitado</strong>
@@ -179,12 +249,42 @@ export function SellerUpgradePage({ onUpgrade = defaultUpgradeToSeller }: { onUp
                 <legend className="sr-only">Dados do produtor. Campos com asterisco são obrigatórios.</legend>
 
                 <h2 className="seller-upgrade__section">1. Identificação do produtor</h2>
-                <div className="registration-field">
-                  <label htmlFor="seller-cpf">CPF <span aria-hidden="true">*</span></label>
-                  <input {...err("cpf")} type="text" inputMode="numeric" autoComplete="off" maxLength={14} placeholder="000.000.000-00"
-                    value={values.cpf} onChange={(e) => update("cpf", formatCpf(e.target.value))} />
-                  {fieldError("cpf")}
-                </div>
+                {lockedCpf ? (
+                  <div className="registration-field seller-upgrade__locked">
+                    <label htmlFor="seller-cpf"><Icon name="lock" /> CPF</label>
+                    <input
+                      id="seller-cpf"
+                      name="cpf"
+                      type="text"
+                      value={lockedCpf}
+                      readOnly
+                      aria-readonly="true"
+                      aria-describedby="seller-cpf-locked-hint"
+                    />
+                    <p className="corporate__hint" id="seller-cpf-locked-hint">
+                      CPF vinculado à sua conta como dado protegido. Não pode ser alterado.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="registration-field">
+                    <label htmlFor="seller-cpf">CPF <span aria-hidden="true">*</span></label>
+                    <input
+                      {...err("cpf")}
+                      type="text"
+                      inputMode="numeric"
+                      autoComplete="off"
+                      maxLength={14}
+                      placeholder="000.000.000-00"
+                      value={values.cpf}
+                      onChange={(e) => update("cpf", formatCpf(e.target.value))}
+                      aria-describedby={errors.cpf ? "seller-cpf-error" : "seller-cpf-hint"}
+                    />
+                    <p className="corporate__hint" id="seller-cpf-hint">
+                      O CPF informado será vinculado permanentemente à sua conta como dado protegido.
+                    </p>
+                    {fieldError("cpf")}
+                  </div>
+                )}
 
                 <h2 className="seller-upgrade__section">2. Propriedade e localização</h2>
                 <div className="registration-field">

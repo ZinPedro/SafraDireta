@@ -3,7 +3,7 @@ import { BrowserRouter, Route, Routes, useLocation, useNavigate } from "react-ro
 import { RegistrationPage } from "./features/registration/RegistrationPage";
 import { CorporateRegistrationPage } from "./features/corporate-registration/CorporateRegistrationPage";
 import { SellerUpgradePage } from "./features/seller-upgrade/SellerUpgradePage";
-import { AuthProvider } from "./context/AuthContext";
+import { AuthProvider } from "./context/AuthProvider";
 import { ProfilePage } from "./features/profile/ProfilePage";
 import { LoginDialog } from "./features/login/LoginDialog";
 import { Header } from "./components/Header";

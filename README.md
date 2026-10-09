@@ -296,6 +296,8 @@ As dependências orientam a integração. O trabalho pode avançar em paralelo q
 
 ## Execução do projeto
 
+Para executar localmente no Windows, consulte [WINDOWS.md](WINDOWS.md), com preparação do ambiente, banco e comandos PowerShell.
+
 A documentação de execução será preenchida durante a US-001 e deverá reunir:
 
 - Tecnologias e versões utilizadas.

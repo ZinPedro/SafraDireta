@@ -8,6 +8,8 @@ export interface SessionConta {
   nome: string;
   email: string;
   telefone?: string;
+  avatar_url?: string | null;
+  avatarUrl?: string | null;
 }
 
 export interface Session {
@@ -28,9 +30,10 @@ function read(): Session | null {
     const token = localStorage.getItem(TOKEN_KEY);
     const conta = localStorage.getItem(CONTA_KEY);
     if (!token || !conta) return null;
+    const parsed = JSON.parse(conta) as SessionConta;
     const estado = localStorage.getItem(VENDEDOR_KEY) as VendedorEstado;
-    const avatar = localStorage.getItem(AVATAR_KEY) ?? undefined;
-    return { token, conta: JSON.parse(conta) as SessionConta, vendedorEstado: estado || null, avatarUrl: avatar };
+    const avatar = localStorage.getItem(AVATAR_KEY) ?? (parsed.id ? localStorage.getItem(`${AVATAR_KEY}_${parsed.id}`) : null) ?? undefined;
+    return { token, conta: parsed, vendedorEstado: estado || null, avatarUrl: avatar };
   } catch {
     return null;
   }
@@ -59,12 +62,20 @@ export function subscribeSession(listener: () => void): () => void {
 export const getSession = (): Session | null => current;
 
 export function saveSession(token: string, conta: SessionConta, vendedorEstado: VendedorEstado = null, avatarUrl?: string) {
+  const userAvatarKey = conta?.id ? `${AVATAR_KEY}_${conta.id}` : null;
+  const localSaved = userAvatarKey ? localStorage.getItem(userAvatarKey) : null;
+  const finalAvatar = avatarUrl ?? (conta.avatar_url || conta.avatarUrl || localSaved || undefined);
   localStorage.setItem(TOKEN_KEY, token);
   localStorage.setItem(CONTA_KEY, JSON.stringify(conta));
   if (vendedorEstado) localStorage.setItem(VENDEDOR_KEY, vendedorEstado);
   else localStorage.removeItem(VENDEDOR_KEY);
-  if (avatarUrl) localStorage.setItem(AVATAR_KEY, avatarUrl);
-  emit({ token, conta, vendedorEstado, avatarUrl: avatarUrl ?? current?.avatarUrl });
+  if (finalAvatar) {
+    localStorage.setItem(AVATAR_KEY, finalAvatar);
+    if (userAvatarKey) localStorage.setItem(userAvatarKey, finalAvatar);
+  } else {
+    localStorage.removeItem(AVATAR_KEY);
+  }
+  emit({ token, conta, vendedorEstado, avatarUrl: finalAvatar ?? current?.avatarUrl });
 }
 
 export function updateSession(patch: Partial<Pick<Session, "vendedorEstado" | "avatarUrl">> & { conta?: Partial<SessionConta> }) {
@@ -79,8 +90,14 @@ export function updateSession(patch: Partial<Pick<Session, "vendedorEstado" | "a
   if (next.vendedorEstado) localStorage.setItem(VENDEDOR_KEY, next.vendedorEstado);
   else localStorage.removeItem(VENDEDOR_KEY);
   if (patch.avatarUrl !== undefined) {
-    if (patch.avatarUrl) localStorage.setItem(AVATAR_KEY, patch.avatarUrl);
-    else localStorage.removeItem(AVATAR_KEY);
+    const userAvatarKey = next.conta?.id ? `${AVATAR_KEY}_${next.conta.id}` : null;
+    if (patch.avatarUrl) {
+      localStorage.setItem(AVATAR_KEY, patch.avatarUrl);
+      if (userAvatarKey) localStorage.setItem(userAvatarKey, patch.avatarUrl);
+    } else {
+      localStorage.removeItem(AVATAR_KEY);
+      if (userAvatarKey) localStorage.removeItem(userAvatarKey);
+    }
   }
   emit(next);
 }

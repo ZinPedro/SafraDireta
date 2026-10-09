@@ -1,4 +1,4 @@
-import { getSession, updateSession } from "../../context/session";
+import { clearSession, getSession, updateSession } from "../../context/session";
 import { MOCK_API } from "../../dev/mockApi";
 import { isValidCpf, ufs } from "../corporate-registration/corporateRegistration";
 
@@ -30,13 +30,13 @@ export interface SellerUpgradeData {
 }
 
 export type SellerUpgradeResult =
-  | { ok: true; status: "habilitado"; message: string }
-  | { ok: false; reason: "validation_error" | "unavailable"; message: string; fieldErrors?: Record<string, string> };
+  | { ok: true; status: "habilitado" | "pendente"; message: string; protocol?: string }
+  | { ok: false; reason: "validation_error" | "unavailable" | "unauthorized" | "forbidden"; message: string; fieldErrors?: Record<string, string> };
 
 export type UpgradeToSeller = (data: SellerUpgradeData) => Promise<SellerUpgradeResult>;
 
-// Simulação da Sprint 1 (definida no planejamento): habilitação imediata para PF.
-// Nenhum dado é enviado ou persistido; será substituído pela integração com o backend.
+// Simulação local (VITE_MOCK_API=true): habilitação imediata. Fora dela, chama o backend real,
+// que cria a solicitação em estado PENDENTE (POST /api/vendedor/habilitacao).
 export const defaultUpgradeToSeller: UpgradeToSeller = async (data: SellerUpgradeData) => {
   // Em simulação local, a sessão passa a refletir o vendedor habilitado e salva os dados no mock.
   if (MOCK_API) {
@@ -66,12 +66,54 @@ export const defaultUpgradeToSeller: UpgradeToSeller = async (data: SellerUpgrad
       }
     }
   }
+  if (!MOCK_API) return requestSellerHabilitation(data);
   return {
     ok: true,
     status: "habilitado",
     message: "Perfil de vendedor habilitado com sucesso!",
   };
 };
+
+async function requestSellerHabilitation(data: SellerUpgradeData): Promise<SellerUpgradeResult> {
+  const session = getSession();
+  if (!session) return { ok: false, reason: "unauthorized", message: "Entre na sua conta para habilitar a venda." };
+  try {
+    const response = await fetch("/api/vendedor/habilitacao", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.token}` },
+      // O backend usa cpf, possuiTransportadora e observacaoTransportadora; os demais campos
+      // (propriedade, categorias, documentos) seguem junto para quando o servidor passar a gravá-los.
+      body: JSON.stringify({ ...data, possuiTransportadora: data.hasOwnTransport, observacaoTransportadora: null }),
+    });
+    if (response.status === 201) {
+      const body = await response.json().catch(() => ({}));
+      if (body.estado === "HABILITADO") {
+        updateSession({ vendedorEstado: "HABILITADO" });
+      }
+      return {
+        ok: true,
+        status: body.estado === "HABILITADO" ? "habilitado" : "pendente",
+        message: body.estado === "HABILITADO" ? "Perfil de vendedor habilitado com sucesso!" : "Solicitação de habilitação enviada!",
+        protocol: body.protocol,
+      };
+    }
+    if (response.status === 401) {
+      clearSession();
+      return { ok: false, reason: "unauthorized", message: "Sua sessão expirou. Entre novamente." };
+    }
+    const err = await response.json().catch(() => null);
+    const message: string | undefined = err?.erro?.mensagem;
+    if (response.status === 403) {
+      return { ok: false, reason: "forbidden", message: message ?? "A solicitação está disponível apenas para pessoa física." };
+    }
+    if (response.status === 409 || response.status === 422) {
+      return { ok: false, reason: "validation_error", message: message ?? "Verifique os dados informados.", fieldErrors: err?.erro?.campos ?? {} };
+    }
+    return { ok: false, reason: "unavailable", message: "Serviço temporariamente indisponível. Tente novamente mais tarde." };
+  } catch {
+    return { ok: false, reason: "unavailable", message: "Não foi possível conectar ao servidor. Verifique sua conexão." };
+  }
+}
 
 export type TransportOption = "own" | "buyer" | "";
 

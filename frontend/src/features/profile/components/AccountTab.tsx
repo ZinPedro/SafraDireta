@@ -88,6 +88,7 @@ export function AccountTab({ profile, onSave, onSaved }: {
           nome: values.nome.trim().replace(/\s+/g, " "),
           telefone: toPhoneApi(values.telefone),
           cpfCnpj: isPj || profile.account.cpfCnpj ? profile.account.cpfCnpj : values.cpf.replace(/\D/g, ""),
+          avatarUrl: session?.avatarUrl ?? profile.account.avatarUrl,
         },
         address: {
           cep: values.cep.replace(/\D/g, ""), logradouro: values.logradouro.trim(), numero: values.numero.trim(),

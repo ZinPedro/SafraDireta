@@ -59,6 +59,7 @@ class ContaResumo(_Base):
     tipo: str
     nome: str
     email: str
+    avatar_url: str | None = None
 
 
 class VendedorResumo(_Base):
@@ -83,9 +84,124 @@ class LoginEntrada(_Base):
     @classmethod
     def _email(cls, v: str) -> str:
         return v.strip().lower()
+class EnderecoPerfilEntrada(_Base):
+    cep: str | None = None
+    logradouro: str | None = Field(default=None, min_length=1, max_length=150)
+    numero: str | None = Field(default=None, min_length=1, max_length=10)
+    complemento: str | None = Field(default=None, max_length=60)
+    bairro: str | None = Field(default=None, min_length=1, max_length=80)
+    cidade: str | None = Field(default=None, min_length=1, max_length=80)
+    uf: str | None = None
+
+    @field_validator("cep")
+    @classmethod
+    def validar_cep(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        from app.validators import normalizar_cep, validar_cep
+        v = normalizar_cep(v)
+        if not validar_cep(v):
+            raise ValueError("Informe um CEP valido.")
+        return v
+
+    @field_validator("uf")
+    @classmethod
+    def validar_uf(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        from app.validators import normalizar_uf, validar_uf
+        v = normalizar_uf(v)
+        if not validar_uf(v):
+            raise ValueError("Informe uma UF valida.")
+        return v
+
+
+class VitrineVendedorEntrada(_Base):
+    farm_name: str | None = Field(default=None, min_length=2, max_length=150)
+    bio: str | None = Field(default=None, max_length=500)
+    city: str | None = Field(default=None, min_length=1, max_length=100)
+    state: str | None = None
+    public_phone: str | None = None
+    categories: list[str] | None = None
+    has_own_transport: bool | None = None
+
+    @field_validator("state")
+    @classmethod
+    def validar_uf(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        from app.validators import normalizar_uf, validar_uf
+        v = normalizar_uf(v)
+        if not validar_uf(v):
+            raise ValueError("Informe uma UF valida.")
+        return v
+
+    @field_validator("public_phone")
+    @classmethod
+    def validar_telefone(cls, v: str | None) -> str | None:
+        if v is None or not v.strip():
+            return None
+        if not _TELEFONE.fullmatch(v):
+            raise ValueError("Informe um telefone brasileiro com DDD.")
+        return v
+
+    @field_validator("categories")
+    @classmethod
+    def validar_categorias(cls, v: list[str] | None) -> list[str] | None:
+        if v is None:
+            return v
+        validas = {"cafe", "boi_gordo", "soja", "milho"}
+        for cat in v:
+            if cat not in validas:
+                raise ValueError(f"Categoria invalida: {cat}.")
+        return v
+
+
+class ContaPerfilEntrada(_Base):
+    nome: str | None = Field(default=None, min_length=2, max_length=150)
+    telefone: str | None = None
+    cpf_cnpj: str | None = None
+    avatar_url: str | None = Field(default=None, max_length=500)
+
+    @field_validator("nome")
+    @classmethod
+    def validar_nome(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        v = " ".join(v.split())
+        if len(v) < 2:
+            raise ValueError("Informe um nome valido.")
+        return v
+
+    @field_validator("telefone")
+    @classmethod
+    def validar_telefone(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        if not _TELEFONE.fullmatch(v):
+            raise ValueError("Informe um telefone brasileiro com DDD.")
+        return v
+
+    @field_validator("cpf_cnpj")
+    @classmethod
+    def validar_cpf_informado(cls, v: str | None) -> str | None:
+        if v is None or not v.strip():
+            return None
+        from app.validators import normalizar_cpf, validar_cpf
+        v = normalizar_cpf(v)
+        if not validar_cpf(v):
+            raise ValueError("Informe um CPF valido.")
+        return v
+
+
 class EditarPerfil(_Base):
     name: str | None = Field(default=None, min_length=2, max_length=150)
     phone: str | None = None
+    cpf: str | None = None
+    avatar_url: str | None = Field(default=None, max_length=500)
+    account: ContaPerfilEntrada | None = None
+    address: EnderecoPerfilEntrada | None = None
+    seller: VitrineVendedorEntrada | None = None
 
     @field_validator("name")
     @classmethod
@@ -111,6 +227,17 @@ class EditarPerfil(_Base):
                 "Informe um telefone brasileiro com DDD."
             )
 
+        return v
+
+    @field_validator("cpf")
+    @classmethod
+    def validar_cpf_informado(cls, v: str | None) -> str | None:
+        if v is None or not v.strip():
+            return None
+        from app.validators import normalizar_cpf, validar_cpf
+        v = normalizar_cpf(v)
+        if not validar_cpf(v):
+            raise ValueError("Informe um CPF valido.")
         return v
 
 class VerificacaoResumo(_Base):

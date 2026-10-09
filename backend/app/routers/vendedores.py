@@ -49,15 +49,31 @@ def minha_habilitacao(
 
 
 
+class DocumentosHabilitacaoEntrada(BaseModel):
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+
+    has_cpf_document: bool | None = None
+    cpf_front_file_name: str | None = None
+    cpf_back_file_name: str | None = None
+    has_car_document: bool | None = None
+    car_file_name: str | None = None
+
+
 class SolicitacaoHabilitacao(BaseModel):
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
 
     cpf: str
-    possui_transportadora: bool
+    possui_transportadora: bool | None = None
+    has_own_transport: bool | None = None
     observacao_transportadora: str | None = Field(
         default=None,
         max_length=500,
     )
+    farm_name: str | None = Field(default=None, max_length=150)
+    city: str | None = Field(default=None, max_length=100)
+    state: str | None = None
+    categories: list[str] | None = None
+    documents: DocumentosHabilitacaoEntrada | None = None
 
     @field_validator("cpf")
     @classmethod
@@ -68,6 +84,28 @@ class SolicitacaoHabilitacao(BaseModel):
             raise ValueError("Informe um CPF valido.")
 
         return cpf
+
+    @field_validator("state")
+    @classmethod
+    def validar_uf_informada(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        from app.validators import normalizar_uf, validar_uf
+        v = normalizar_uf(v)
+        if not validar_uf(v):
+            raise ValueError("Informe uma UF valida.")
+        return v
+
+    @field_validator("categories")
+    @classmethod
+    def validar_categorias_informadas(cls, v: list[str] | None) -> list[str] | None:
+        if v is None:
+            return v
+        validas = {"cafe", "boi_gordo", "soja", "milho"}
+        for cat in v:
+            if cat not in validas:
+                raise ValueError(f"Categoria invalida: {cat}.")
+        return v
 
 
 
@@ -86,6 +124,13 @@ def solicitar_habilitacao(
         )
 
     conta_id = atual["conta_id"]
+    transporte = (
+        dados.possui_transportadora
+        if dados.possui_transportadora is not None
+        else (dados.has_own_transport if dados.has_own_transport is not None else False)
+    )
+    docs_dict = dados.documents.model_dump(exclude_unset=True) if dados.documents else {}
+    categorias = dados.categories or []
 
     with conn.transaction():
         perfil = conn.execute(
@@ -121,6 +166,29 @@ def solicitar_habilitacao(
                 {"cpf": "CPF ja cadastrado."},
             )
 
+        verificacao = conn.execute(
+            """
+            INSERT INTO safradireta.verificacao
+                (conta_id, tipo, estado, dados_submetidos)
+            VALUES (
+                %s,
+                'HABILITACAO_VENDEDOR',
+                'APROVADO',
+                %s
+            )
+            RETURNING id
+            """,
+            (
+                conta_id,
+                Jsonb({
+                    "possui_transportadora": transporte,
+                    "observacao_transportadora":
+                        dados.observacao_transportadora,
+                    "documentos": docs_dict,
+                }),
+            ),
+        ).fetchone()
+
         habilitacao = conn.execute(
             """
             INSERT INTO safradireta.habilitacao_vendedor
@@ -128,16 +196,29 @@ def solicitar_habilitacao(
                     conta_id,
                     estado,
                     possui_transportadora,
-                    observacao_transporte
+                    observacao_transporte,
+                    nome_propriedade,
+                    municipio,
+                    uf,
+                    categorias,
+                    habilitada_em,
+                    verificacao_id,
+                    dados_complementares
                 )
-            VALUES (%s, 'PENDENTE', %s, %s)
+            VALUES (%s, 'HABILITADO', %s, %s, %s, %s, %s, %s, now(), %s, %s)
             ON CONFLICT (conta_id) DO NOTHING
             RETURNING estado
             """,
             (
                 conta_id,
-                dados.possui_transportadora,
+                transporte,
                 dados.observacao_transportadora,
+                dados.farm_name,
+                dados.city,
+                dados.state,
+                categorias,
+                verificacao["id"],
+                Jsonb(docs_dict),
             ),
         ).fetchone()
 
@@ -155,28 +236,6 @@ def solicitar_habilitacao(
             (dados.cpf, conta_id),
         )
 
-        verificacao = conn.execute(
-            """
-            INSERT INTO safradireta.verificacao
-                (conta_id, tipo, estado, dados_submetidos)
-            VALUES (
-                %s,
-                'HABILITACAO_VENDEDOR',
-                'RASCUNHO',
-                %s
-            )
-            RETURNING id
-            """,
-            (
-                conta_id,
-                Jsonb({
-                    "possui_transportadora": dados.possui_transportadora,
-                    "observacao_transportadora":
-                        dados.observacao_transportadora,
-                }),
-            ),
-        ).fetchone()
-
         conn.execute(
             """
             INSERT INTO safradireta.evento_auditoria
@@ -191,7 +250,7 @@ def solicitar_habilitacao(
                 )
             VALUES (
                 %s, %s, 'API',
-                'HABILITACAO_SOLICITADA',
+                'VENDEDOR_HABILITADO',
                 'habilitacao_vendedor',
                 %s,
                 '{}'::jsonb
@@ -205,8 +264,21 @@ def solicitar_habilitacao(
         )
 
     return {
-        "message": "Solicitacao de habilitacao criada com sucesso.",
+        "ok": True,
+        "message": "Perfil de vendedor habilitado com sucesso!",
         "estado": habilitacao["estado"],
+        "status": "habilitado",
         "protocol": str(verificacao["id"]),
     }
+
+
+@router.post("/habilitar", status_code=201)
+def habilitar_vendedor_alias(
+    dados: SolicitacaoHabilitacao,
+    atual: dict = Depends(conta_autenticada),
+    conn: Connection = Depends(get_connection),
+):
+    """Alias para POST /api/vendedor/habilitacao."""
+    return solicitar_habilitacao(dados, atual, conn)
+
 

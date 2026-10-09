@@ -49,6 +49,7 @@ function FileSlot({ id, label, hint, required, file, error, message, onPick, onR
 export function SellerUpgradePage({ onUpgrade = defaultUpgradeToSeller }: { onUpgrade?: UpgradeToSeller }) {
   const { session, setVendedorEstado } = useAuth();
   const isAlreadyHabilitado = session?.vendedorEstado === "HABILITADO";
+  const isAlreadyPending = session?.vendedorEstado === "PENDENTE";
 
   const [lockedCpf, setLockedCpf] = useState<string>(() => {
     const s = getSession();
@@ -97,6 +98,8 @@ export function SellerUpgradePage({ onUpgrade = defaultUpgradeToSeller }: { onUp
   const [submitting, setSubmitting] = useState(false);
   const [feedback, setFeedback] = useState("");
   const [doneMessage, setDoneMessage] = useState<string | null>(null);
+  const [doneState, setDoneState] = useState<"habilitado" | "pendente" | null>(null);
+  const [protocol, setProtocol] = useState<string | undefined>();
   const formRef = useRef<HTMLFormElement>(null);
   const pendingRef = useRef(false);
   const headingRef = useRef<HTMLHeadingElement>(null);
@@ -183,7 +186,9 @@ export function SellerUpgradePage({ onUpgrade = defaultUpgradeToSeller }: { onUp
     try {
       const result = await onUpgrade(toSellerUpgradeData(valuesToValidate, files.cpfFrontDoc?.name, files.cpfBackDoc?.name, files.carDoc?.name));
       if (result.ok) {
-        setVendedorEstado("HABILITADO");
+        setVendedorEstado(result.status === "habilitado" ? "HABILITADO" : "PENDENTE");
+        setDoneState(result.status);
+        setProtocol(result.protocol);
         setDoneMessage(result.message);
         requestAnimationFrame(() => headingRef.current?.focus());
       } else {
@@ -200,6 +205,8 @@ export function SellerUpgradePage({ onUpgrade = defaultUpgradeToSeller }: { onUp
       setSubmitting(false);
     }
   }
+
+  const finalState = doneState ?? (isAlreadyHabilitado ? "habilitado" : isAlreadyPending ? "pendente" : null);
 
   const err = (name: string) => ({
     id: `seller-${name}`, name,
@@ -223,15 +230,23 @@ export function SellerUpgradePage({ onUpgrade = defaultUpgradeToSeller }: { onUp
           <Link to={routes.home} className="icon-button" aria-label="Fechar e voltar ao início"><Icon name="close" /></Link>
         </nav>
         <div className="registration__body">
-          {doneMessage || isAlreadyHabilitado ? (
+          {finalState ? (
             <div className="corporate__done">
               <header className="registration__heading">
                 <p className="eyebrow">Vendedor</p>
-                <h1 id="seller-title" ref={headingRef} tabIndex={-1}>{doneMessage ?? "Sua conta já está habilitada como vendedor!"}</h1>
+                <h1 id="seller-title" ref={headingRef} tabIndex={-1}>
+                  {doneMessage ?? (finalState === "habilitado" ? "Sua conta já está habilitada como vendedor!" : "Sua solicitação está em análise.")}
+                </h1>
+                {protocol && <p>Protocolo: <strong className="corporate__protocol">{protocol}</strong></p>}
               </header>
               <div className="registration__feedback" role="status">
-                <strong className="seller-upgrade__badge"><Icon name="leaf" /> Vendedor Habilitado</strong>
-                <p>Você já pode publicar anúncios com a mesma conta. Sua capacidade de compra continua inalterada.</p>
+                {finalState === "habilitado" ? (<>
+                  <strong className="seller-upgrade__badge"><Icon name="leaf" /> Vendedor Habilitado</strong>
+                  <p>Você já pode publicar anúncios com a mesma conta. Sua capacidade de compra continua inalterada.</p>
+                </>) : (<>
+                  <strong className="seller-upgrade__badge seller-upgrade__badge--pending"><Icon name="clock" /> Habilitação em análise</strong>
+                  <p>Recebemos sua solicitação. A venda será liberada após a análise da equipe. Enquanto isso, você continua com acesso completo às compras.</p>
+                </>)}
               </div>
               <div className="corporate__actions">
                 <Link className="button registration__submit" to={routes.market}>Explorar o Mercado</Link>

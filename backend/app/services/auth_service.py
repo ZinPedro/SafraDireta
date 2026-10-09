@@ -77,7 +77,7 @@ def registrar_pf(conn: Connection, dados: RegistroPF) -> dict:
     return {
         "token": token,
         "expira_em": expira_em.isoformat(),
-        "conta": {"id": str(conta_id), "tipo": "PF", "nome": dados.name, "email": dados.email},
+        "conta": {"id": str(conta_id), "tipo": "PF", "nome": dados.name, "email": dados.email, "avatar_url": None},
         "vendedor": {"estado": None},
         "proximo_passo": "SOLICITAR_HABILITACAO_VENDEDOR" if dados.intent == "seller" else None,
     }
@@ -123,9 +123,11 @@ def autenticar(conn: Connection, dados: LoginEntrada, ip: str) -> dict:
 
     conta = conn.execute(
         """SELECT c.id, c.tipo, c.email_acesso, c.senha_hash, c.estado,
-                  COALESCE(c.nome_publico, e.razao_social, c.email_acesso) AS nome
+                  COALESCE(c.nome_publico, e.razao_social, c.email_acesso) AS nome,
+                  COALESCE(p.avatar_url, e.logo_url) AS avatar_url
            FROM safradireta.conta c
            LEFT JOIN safradireta.empresa e ON e.conta_id = c.id
+           LEFT JOIN safradireta.perfil_pf p ON p.conta_id = c.id
            WHERE c.email_acesso = %s""",
         (dados.email,),
     ).fetchone()
@@ -163,6 +165,7 @@ def autenticar(conn: Connection, dados: LoginEntrada, ip: str) -> dict:
             "tipo": conta["tipo"],
             "nome": conta["nome"],
             "email": conta["email_acesso"],
+            "avatar_url": conta["avatar_url"],
         },
         "vendedor": {"estado": _estado_vendedor(conn, conta["id"])},
         "proximo_passo": None,
@@ -211,6 +214,7 @@ def dados_da_conta(conn: Connection, atual: dict) -> dict:
             "tipo": atual["tipo"],
             "nome": atual["nome"],
             "email": atual["email_acesso"],
+            "avatar_url": atual.get("avatar_url"),
         },
         "vendedor": {
             "estado": _estado_vendedor(conn, atual["conta_id"])
@@ -388,6 +392,7 @@ def registrar_pj(conn: Connection, dados: RegistroPJ) -> dict:
             "tipo": "PJ",
             "nome": dados.company.razao_social,
             "email": dados.access.email,
+            "avatar_url": None,
         },
     }
 
@@ -397,7 +402,7 @@ def editar_perfil(
     atual: dict,
     dados: EditarPerfil,
 ) -> dict:
-    """Atualiza nome e telefone da conta autenticada."""
+    """Atualiza perfil, endereço e vitrine da conta autenticada."""
 
     alteracoes = dados.model_dump(exclude_unset=True)
 
@@ -415,8 +420,19 @@ def editar_perfil(
             "Os campos enviados nao podem ser nulos.",
         )
 
+    account_data = alteracoes.get("account") or {}
+    name = alteracoes.get("name") or account_data.get("nome")
+    phone = alteracoes.get("phone") or account_data.get("telefone")
+    cpf = alteracoes.get("cpf") or account_data.get("cpf_cnpj")
+    avatar_url = alteracoes.get("avatar_url") or account_data.get("avatar_url")
+
+    address_data = alteracoes.get("address")
+    seller_data = alteracoes.get("seller")
+
+    campos_modificados = []
+
     with conn.transaction():
-        if "name" in alteracoes:
+        if name:
             conn.execute(
                 """
                 UPDATE safradireta.conta
@@ -424,9 +440,8 @@ def editar_perfil(
                     atualizado_em = now()
                 WHERE id = %s
                 """,
-                (alteracoes["name"], atual["conta_id"]),
+                (name, atual["conta_id"]),
             )
-
             if atual["tipo"] == "PF":
                 conn.execute(
                     """
@@ -434,10 +449,20 @@ def editar_perfil(
                     SET nome = %s
                     WHERE conta_id = %s
                     """,
-                    (alteracoes["name"], atual["conta_id"]),
+                    (name, atual["conta_id"]),
                 )
+            elif atual["tipo"] == "PJ":
+                conn.execute(
+                    """
+                    UPDATE safradireta.empresa
+                    SET razao_social = %s
+                    WHERE conta_id = %s
+                    """,
+                    (name, atual["conta_id"]),
+                )
+            campos_modificados.append("name")
 
-        if "phone" in alteracoes:
+        if phone:
             conn.execute(
                 """
                 UPDATE safradireta.conta
@@ -445,8 +470,185 @@ def editar_perfil(
                     atualizado_em = now()
                 WHERE id = %s
                 """,
-                (alteracoes["phone"], atual["conta_id"]),
+                (phone, atual["conta_id"]),
             )
+            campos_modificados.append("phone")
+
+        if cpf:
+            if atual["tipo"] == "PF":
+                perfil_pf = conn.execute(
+                    """
+                    SELECT cpf
+                    FROM safradireta.perfil_pf
+                    WHERE conta_id = %s
+                    FOR UPDATE
+                    """,
+                    (atual["conta_id"],),
+                ).fetchone()
+
+                if perfil_pf is not None:
+                    cpf_existente = perfil_pf["cpf"]
+                    if cpf_existente:
+                        if cpf_existente != cpf:
+                            raise ErroApp(
+                                422,
+                                "DOCUMENTO_PROTEGIDO",
+                                "O CPF vinculado a conta e protegido e nao pode ser alterado.",
+                                {"cpf": "O CPF vinculado a conta e protegido e nao pode ser alterado."},
+                            )
+                    else:
+                        outro = conn.execute(
+                            """
+                            SELECT conta_id
+                            FROM safradireta.perfil_pf
+                            WHERE cpf = %s AND conta_id <> %s
+                            """,
+                            (cpf, atual["conta_id"]),
+                        ).fetchone()
+                        if outro is not None:
+                            raise conflito(
+                                "Este CPF ja pertence a outra conta.",
+                                {"cpf": "CPF ja cadastrado."},
+                            )
+                        conn.execute(
+                            """
+                            UPDATE safradireta.perfil_pf
+                            SET cpf = %s
+                            WHERE conta_id = %s
+                            """,
+                            (cpf, atual["conta_id"]),
+                        )
+                        campos_modificados.append("cpf")
+
+        if avatar_url:
+            if atual["tipo"] == "PF":
+                conn.execute(
+                    """
+                    UPDATE safradireta.perfil_pf
+                    SET avatar_url = %s
+                    WHERE conta_id = %s
+                    """,
+                    (avatar_url, atual["conta_id"]),
+                )
+            elif atual["tipo"] == "PJ":
+                conn.execute(
+                    """
+                    UPDATE safradireta.empresa
+                    SET logo_url = %s
+                    WHERE conta_id = %s
+                    """,
+                    (avatar_url, atual["conta_id"]),
+                )
+            campos_modificados.append("avatar_url")
+
+        if address_data:
+            end_atual = conn.execute(
+                """
+                SELECT id, logradouro, numero, complemento, bairro, municipio, uf, cep
+                FROM safradireta.endereco
+                WHERE conta_id = %s AND principal = TRUE AND ativo = TRUE
+                FOR UPDATE
+                """,
+                (atual["conta_id"],),
+            ).fetchone()
+
+            logradouro = address_data.get("logradouro")
+            numero = address_data.get("numero")
+            complemento = address_data.get("complemento")
+            bairro = address_data.get("bairro")
+            cidade = address_data.get("cidade")
+            uf = address_data.get("uf")
+            cep = address_data.get("cep")
+
+            if end_atual is not None:
+                conn.execute(
+                    """
+                    UPDATE safradireta.endereco
+                    SET logradouro = COALESCE(%s, logradouro),
+                        numero = COALESCE(%s, numero),
+                        complemento = COALESCE(%s, complemento),
+                        bairro = COALESCE(%s, bairro),
+                        municipio = COALESCE(%s, municipio),
+                        uf = COALESCE(%s, uf),
+                        cep = COALESCE(%s, cep)
+                    WHERE id = %s
+                    """,
+                    (
+                        logradouro,
+                        numero,
+                        complemento,
+                        bairro,
+                        cidade,
+                        uf,
+                        cep,
+                        end_atual["id"],
+                    ),
+                )
+            else:
+                conn.execute(
+                    """
+                    INSERT INTO safradireta.endereco
+                        (conta_id, rotulo, logradouro, numero, complemento,
+                         bairro, municipio, uf, cep, principal, ativo)
+                    VALUES (%s, 'Principal', %s, %s, %s, %s, %s, %s, %s, TRUE, TRUE)
+                    """,
+                    (
+                        atual["conta_id"],
+                        logradouro or "Não informado",
+                        numero or "S/N",
+                        complemento,
+                        bairro,
+                        cidade or "Não informado",
+                        uf or "SP",
+                        cep,
+                    ),
+                )
+            campos_modificados.append("address")
+
+        if seller_data:
+            farm_name = seller_data.get("farm_name")
+            bio = seller_data.get("bio")
+            city = seller_data.get("city")
+            state = seller_data.get("state")
+            public_phone = seller_data.get("public_phone")
+            categories = seller_data.get("categories")
+            has_own_transport = seller_data.get("has_own_transport")
+
+            hab = conn.execute(
+                """
+                SELECT conta_id
+                FROM safradireta.habilitacao_vendedor
+                WHERE conta_id = %s
+                FOR UPDATE
+                """,
+                (atual["conta_id"],),
+            ).fetchone()
+
+            if hab is not None:
+                conn.execute(
+                    """
+                    UPDATE safradireta.habilitacao_vendedor
+                    SET nome_propriedade = COALESCE(%s, nome_propriedade),
+                        bio = COALESCE(%s, bio),
+                        municipio = COALESCE(%s, municipio),
+                        uf = COALESCE(%s, uf),
+                        telefone_comercial = COALESCE(%s, telefone_comercial),
+                        categorias = COALESCE(%s, categorias),
+                        possui_transportadora = COALESCE(%s, possui_transportadora)
+                    WHERE conta_id = %s
+                    """,
+                    (
+                        farm_name,
+                        bio,
+                        city,
+                        state,
+                        public_phone,
+                        categories,
+                        has_own_transport,
+                        atual["conta_id"],
+                    ),
+                )
+                campos_modificados.append("seller")
 
         _auditar(
             conn,
@@ -455,18 +657,19 @@ def editar_perfil(
             "PERFIL_ATUALIZADO",
             "conta",
             atual["conta_id"],
-            {"campos_alterados": list(alteracoes.keys())},
+            {"campos_alterados": campos_modificados or list(alteracoes.keys())},
         )
 
-    return {
-        "message": "Perfil atualizado com sucesso.",
-        "conta": {
-            "id": str(atual["conta_id"]),
-            "tipo": atual["tipo"],
-            "nome": alteracoes.get("name", atual["nome"]),
-            "email": atual["email_acesso"],
-        },
+    perfil = consultar_perfil(conn, atual)
+    perfil["message"] = "Perfil atualizado com sucesso."
+    perfil["conta"] = {
+        "id": str(atual["conta_id"]),
+        "tipo": atual["tipo"],
+        "nome": name or atual["nome"],
+        "email": atual["email_acesso"],
+        "avatar_url": avatar_url or atual.get("avatar_url"),
     }
+    return perfil
 
 def consultar_perfil(conn: Connection, atual: dict) -> dict:
     """Consulta os dados do perfil da conta autenticada."""
@@ -484,19 +687,17 @@ def consultar_perfil(conn: Connection, atual: dict) -> dict:
     if conta is None:
         raise nao_encontrado("Conta nao encontrada.")
 
-    perfil = {
-        "id": str(conta["id"]),
-        "tipo": conta["tipo"],
-        "nome": conta["nome_publico"],
-        "email": conta["email_acesso"],
-        "telefone": conta["telefone_recuperacao"],
-        "estado": conta["estado"],
-    }
+    nome_usuario = conta["nome_publico"]
+    avatar_url = None
+    cpf = None
+    cnpj = None
+    razao_social = None
+    nome_fantasia = None
 
     if conta["tipo"] == "PF":
         pessoa = conn.execute(
             """
-            SELECT nome, cpf
+            SELECT nome, cpf, avatar_url
             FROM safradireta.perfil_pf
             WHERE conta_id = %s
             """,
@@ -504,13 +705,14 @@ def consultar_perfil(conn: Connection, atual: dict) -> dict:
         ).fetchone()
 
         if pessoa is not None:
-            perfil["nome"] = pessoa["nome"]
-            perfil["cpf"] = pessoa["cpf"]
+            nome_usuario = pessoa["nome"] or conta["nome_publico"]
+            cpf = pessoa["cpf"]
+            avatar_url = pessoa["avatar_url"]
 
     elif conta["tipo"] == "PJ":
         empresa = conn.execute(
             """
-            SELECT razao_social, nome_fantasia, cnpj
+            SELECT razao_social, nome_fantasia, cnpj, logo_url
             FROM safradireta.empresa
             WHERE conta_id = %s
             """,
@@ -518,12 +720,15 @@ def consultar_perfil(conn: Connection, atual: dict) -> dict:
         ).fetchone()
 
         if empresa is not None:
-            perfil["razaoSocial"] = empresa["razao_social"]
-            perfil["nomeFantasia"] = empresa["nome_fantasia"]
-            perfil["cnpj"] = empresa["cnpj"]
+            nome_usuario = empresa["razao_social"] or conta["nome_publico"]
+            razao_social = empresa["razao_social"]
+            nome_fantasia = empresa["nome_fantasia"]
+            cnpj = empresa["cnpj"]
+            avatar_url = empresa["logo_url"]
+
     enderecos = conn.execute(
         """
-        SELECT rotulo, logradouro, numero, complemento,
+        SELECT id, rotulo, logradouro, numero, complemento,
                bairro, municipio, uf, cep, pais,
                referencia_acesso, principal
         FROM safradireta.endereco
@@ -534,8 +739,9 @@ def consultar_perfil(conn: Connection, atual: dict) -> dict:
         (atual["conta_id"],),
     ).fetchall()
 
-    perfil["enderecos"] = [
+    enderecos_formatados = [
         {
+            "id": str(endereco["id"]),
             "rotulo": endereco["rotulo"],
             "logradouro": endereco["logradouro"],
             "numero": endereco["numero"],
@@ -551,7 +757,72 @@ def consultar_perfil(conn: Connection, atual: dict) -> dict:
         for endereco in enderecos
     ]
 
-    if conta["tipo"] == "PJ":
+    end_principal = next((e for e in enderecos if e["principal"]), enderecos[0] if enderecos else None)
+    address_bloco = {
+        "cep": end_principal["cep"] if end_principal and end_principal["cep"] else "",
+        "logradouro": end_principal["logradouro"] if end_principal and end_principal["logradouro"] else "",
+        "numero": end_principal["numero"] if end_principal and end_principal["numero"] else "",
+        "complemento": end_principal["complemento"] if end_principal and end_principal["complemento"] else "",
+        "bairro": end_principal["bairro"] if end_principal and end_principal["bairro"] else "",
+        "cidade": end_principal["municipio"] if end_principal and end_principal["municipio"] else "",
+        "uf": end_principal["uf"] if end_principal and end_principal["uf"] else "",
+    }
+
+    hab = conn.execute(
+        """
+        SELECT estado, possui_transportadora, observacao_transporte,
+               nome_propriedade, bio, municipio, uf, telefone_comercial,
+               categorias, possui_selo_verificado
+        FROM safradireta.habilitacao_vendedor
+        WHERE conta_id = %s
+        """,
+        (atual["conta_id"],),
+    ).fetchone()
+
+    seller_bloco = None
+    if hab is not None:
+        seller_bloco = {
+            "isHabilitado": hab["estado"] == "HABILITADO",
+            "farmName": hab["nome_propriedade"] or "",
+            "bio": hab["bio"] or "",
+            "city": hab["municipio"] or "",
+            "state": hab["uf"] or "",
+            "publicPhone": hab["telefone_comercial"] or "",
+            "categories": hab["categorias"] or [],
+            "hasOwnTransport": bool(hab["possui_transportadora"]),
+            "hasVerifiedBadge": bool(hab["possui_selo_verificado"]),
+        }
+
+    perfil = {
+        "id": str(conta["id"]),
+        "tipo": conta["tipo"],
+        "nome": nome_usuario,
+        "email": conta["email_acesso"],
+        "telefone": conta["telefone_recuperacao"],
+        "estado": conta["estado"],
+        "avatarUrl": avatar_url,
+        "avatar_url": avatar_url,
+        "enderecos": enderecos_formatados,
+        "account": {
+            "id": str(conta["id"]),
+            "tipo": conta["tipo"],
+            "nome": nome_usuario,
+            "email": conta["email_acesso"],
+            "cpfCnpj": cpf or cnpj or "",
+            "telefone": conta["telefone_recuperacao"] or "",
+            "avatarUrl": avatar_url,
+        },
+        "address": address_bloco,
+        "seller": seller_bloco,
+    }
+
+    if conta["tipo"] == "PF":
+        perfil["cpf"] = cpf
+    elif conta["tipo"] == "PJ":
+        perfil["razaoSocial"] = razao_social
+        perfil["nomeFantasia"] = nome_fantasia
+        perfil["cnpj"] = cnpj
+
         representantes = conn.execute(
             """
             SELECT r.id, r.nome, r.cpf, r.vinculo,
@@ -582,6 +853,7 @@ def consultar_perfil(conn: Connection, atual: dict) -> dict:
         ]
 
     return perfil
+
 
 def alterar_email(conn: Connection, atual: dict, dados: AlterarEmail) -> dict:
     """Altera o email da conta apos confirmar a senha atual."""

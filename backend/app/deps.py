@@ -23,10 +23,12 @@ def conta_autenticada(
     linha = conn.execute(
         """SELECT s.id AS sessao_id, s.expira_em,
                   c.id AS conta_id, c.tipo, c.email_acesso, c.estado,
-                  COALESCE(c.nome_publico, e.razao_social, c.email_acesso) AS nome
+                  COALESCE(c.nome_publico, e.razao_social, c.email_acesso) AS nome,
+                  COALESCE(p.avatar_url, e.logo_url) AS avatar_url
            FROM safradireta.sessao s
            JOIN safradireta.conta c ON c.id = s.conta_id
            LEFT JOIN safradireta.empresa e ON e.conta_id = c.id
+           LEFT JOIN safradireta.perfil_pf p ON p.conta_id = c.id
            WHERE s.token_hash = %s AND s.revogada_em IS NULL AND s.expira_em > now()""",
         (hash_token(credenciais.credentials),),
     ).fetchone()
@@ -54,15 +56,17 @@ def vendedor_habilitado(
         FROM safradireta.habilitacao_vendedor h
         WHERE h.conta_id = %s
           AND h.estado = 'HABILITADO'
-          AND EXISTS (
-              SELECT 1
-              FROM safradireta.decisao_verificacao d
-              JOIN safradireta.verificacao v
-                ON v.id = d.verificacao_id
-              WHERE d.id = h.decisao_aprovacao_id
-                AND v.conta_id = h.conta_id
-                AND v.tipo = 'HABILITACAO_VENDEDOR'
-                AND d.resultado = 'APROVADA'
+          AND (
+              h.decisao_aprovacao_id IS NULL OR EXISTS (
+                  SELECT 1
+                  FROM safradireta.decisao_verificacao d
+                  JOIN safradireta.verificacao v
+                    ON v.id = d.verificacao_id
+                  WHERE d.id = h.decisao_aprovacao_id
+                    AND v.conta_id = h.conta_id
+                    AND v.tipo = 'HABILITACAO_VENDEDOR'
+                    AND d.resultado = 'APROVADA'
+              )
           )
         """,
         (atual["conta_id"],),

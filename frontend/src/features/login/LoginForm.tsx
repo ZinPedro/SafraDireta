@@ -76,7 +76,7 @@ export function LoginForm({ onPreview, onRecovery, onRegister, authenticationErr
       if (response.ok) {
         const data = await response.json();
         if (data.token) {
-          saveSession(data.token, data.conta, data.vendedor?.estado ?? null);
+          saveSession(data.token, data.conta, data.vendedor?.estado ?? null, data.conta?.avatar_url ?? data.conta?.avatarUrl);
         }
         onPreview();
         return;

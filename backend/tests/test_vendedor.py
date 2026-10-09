@@ -12,7 +12,8 @@ def test_solicitar_habilitacao(client, criar_pf):
     pf = criar_pf()
     r = _solicitar(client, pf["headers"])
     assert r.status_code == 201
-    assert r.json()["estado"] == "PENDENTE"
+    assert r.json()["estado"] == "HABILITADO"
+    assert r.json()["status"] == "habilitado"
     assert r.json()["protocol"]
 
 
@@ -41,7 +42,7 @@ def test_consultar_habilitacao_devolve_a_observacao(client, criar_pf):
     assert r.status_code == 200
     assert r.json() == {
         "possuiHabilitacao": True,
-        "estado": "PENDENTE",
+        "estado": "HABILITADO",
         "possuiTransportadora": True,
         "observacaoTransportadora": "Frete proprio",
     }
@@ -59,7 +60,7 @@ def test_me_mostra_o_estado_do_vendedor(client, criar_pf):
     pf = criar_pf()
     assert client.get("/api/auth/me", headers=pf["headers"]).json()["vendedor"]["estado"] is None
     _solicitar(client, pf["headers"])
-    assert client.get("/api/auth/me", headers=pf["headers"]).json()["vendedor"]["estado"] == "PENDENTE"
+    assert client.get("/api/auth/me", headers=pf["headers"]).json()["vendedor"]["estado"] == "HABILITADO"
 
 
 def test_consultar_sem_solicitacao_retorna_404(client, criar_pf):
@@ -113,3 +114,50 @@ def test_pj_nao_pode_solicitar(client, criar_pj):
 def test_sem_token_retorna_401(client):
     assert client.get("/api/vendedor/habilitacao").status_code == 401
     assert client.post("/api/vendedor/habilitacao", json={"cpf": CPF, "possuiTransportadora": False}).status_code == 401
+
+
+def test_solicitar_habilitacao_payload_completo(client, criar_pf):
+    pf = criar_pf()
+    payload = {
+        "cpf": CPF,
+        "farmName": "Fazenda Boa Esperança",
+        "city": "Campinas",
+        "state": "SP",
+        "categories": ["cafe", "milho"],
+        "hasOwnTransport": True,
+        "documents": {
+            "hasCpfDocument": True,
+            "cpfFrontFileName": "rg_frente.pdf",
+            "cpfBackFileName": "rg_verso.pdf",
+            "hasCarDocument": True,
+            "carFileName": "car_registro.pdf",
+        },
+    }
+    r = client.post("/api/vendedor/habilitacao", headers=pf["headers"], json=payload)
+    assert r.status_code == 201
+    assert r.json()["estado"] == "HABILITADO"
+    assert r.json()["status"] == "habilitado"
+    assert r.json()["protocol"]
+
+    perfil = client.get("/api/perfil", headers=pf["headers"]).json()
+    assert perfil["seller"] is not None
+    assert perfil["seller"]["isHabilitado"] is True
+    assert perfil["seller"]["farmName"] == "Fazenda Boa Esperança"
+    assert perfil["seller"]["city"] == "Campinas"
+    assert perfil["seller"]["state"] == "SP"
+    assert perfil["seller"]["categories"] == ["cafe", "milho"]
+    assert perfil["seller"]["hasOwnTransport"] is True
+
+
+def test_habilitar_alias_funciona(client, criar_pf):
+    pf = criar_pf()
+    r = client.post("/api/vendedor/habilitar", headers=pf["headers"], json={
+        "cpf": CPF,
+        "farmName": "Sítio Verde",
+        "city": "Ribeirão Preto",
+        "state": "SP",
+        "categories": ["soja"],
+        "hasOwnTransport": False,
+    })
+    assert r.status_code == 201
+    assert r.json()["estado"] == "HABILITADO"

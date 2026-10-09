@@ -18,7 +18,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (response.status === 401) return clearSession();
         if (!response.ok) return;
         const data = await response.json();
-        updateSession({ conta: data.conta, vendedorEstado: data.vendedor?.estado ?? null });
+        const avatarUrl = data.conta?.avatar_url ?? data.conta?.avatarUrl ?? undefined;
+        updateSession({
+          conta: data.conta,
+          vendedorEstado: data.vendedor?.estado ?? null,
+          ...(avatarUrl !== undefined ? { avatarUrl } : {}),
+        });
       })
       .catch(() => undefined);
     return () => controller.abort();

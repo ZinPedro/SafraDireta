@@ -1,5 +1,5 @@
 import { MOCK_API, mockDelay } from "../../dev/mockApi";
-import { clearSession, getSession } from "../../context/session";
+import { clearSession, getSession, updateSession } from "../../context/session";
 import type { Session } from "../../context/session";
 import { formatCnpj, formatCpf, isValidCpf } from "../corporate-registration/corporateRegistration";
 import type { SellerCategory } from "../seller-upgrade/sellerUpgrade";
@@ -113,15 +113,82 @@ function authHeaders(session: Session): HeadersInit {
   return { "Content-Type": "application/json", Authorization: `Bearer ${session.token}` };
 }
 
-function normalizeProfile(raw: Partial<UserProfileData>, session: Session): UserProfileData {
+interface BackendEndereco {
+  logradouro?: string; numero?: string; complemento?: string | null; bairro?: string;
+  municipio?: string; uf?: string; cep?: string; principal?: boolean;
+}
+
+// Aceita o formato real do backend (plano: nome, cpf/cnpj, enderecos[]) e também o
+// formato aninhado (account/address/seller) descrito no planejamento de integração.
+function normalizeProfile(raw: Record<string, unknown>, session: Session): UserProfileData {
+  if (raw.account) {
+    const nested = raw as Partial<UserProfileData>;
+    return {
+      account: {
+        id: session.conta.id, tipo: session.conta.tipo, nome: session.conta.nome, email: session.conta.email,
+        cpfCnpj: "", telefone: "",
+        avatarUrl: (nested.account?.avatarUrl as string | undefined) || session.avatarUrl,
+        ...nested.account,
+        ...(session.avatarUrl ? { avatarUrl: (nested.account?.avatarUrl as string | undefined) || session.avatarUrl } : {}),
+      },
+      address: { ...emptyAddress, ...nested.address },
+      seller: nested.seller,
+    };
+  }
+  const flat = raw as {
+    id?: string; tipo?: string; nome?: string; razaoSocial?: string; email?: string; telefone?: string | null;
+    cpf?: string | null; cnpj?: string | null; enderecos?: BackendEndereco[];
+    avatar_url?: string | null; avatarUrl?: string | null;
+  };
+  const principal = flat.enderecos?.find((e) => e.principal) ?? flat.enderecos?.[0];
   return {
     account: {
-      id: session.conta.id, tipo: session.conta.tipo, nome: session.conta.nome, email: session.conta.email,
-      cpfCnpj: "", telefone: "", ...raw.account,
+      id: String(flat.id ?? session.conta.id),
+      tipo: flat.tipo ?? session.conta.tipo,
+      nome: flat.razaoSocial ?? flat.nome ?? session.conta.nome,
+      email: flat.email ?? session.conta.email,
+      cpfCnpj: flat.cpf ?? flat.cnpj ?? "",
+      telefone: flat.telefone ?? "",
+      avatarUrl: flat.avatar_url || flat.avatarUrl || session.avatarUrl,
     },
-    address: { ...emptyAddress, ...raw.address },
-    seller: raw.seller,
+    address: {
+      cep: principal?.cep ?? "", logradouro: principal?.logradouro ?? "", numero: principal?.numero ?? "",
+      complemento: principal?.complemento ?? "", bairro: principal?.bairro ?? "",
+      cidade: principal?.municipio ?? "", uf: principal?.uf ?? "",
+    },
+    // O backend ainda não devolve a vitrine; com a conta habilitada exibimos a aba com campos vazios.
+    seller: session.vendedorEstado === "HABILITADO"
+      ? { isHabilitado: true, farmName: "", bio: "", city: "", state: "", publicPhone: "", categories: [], hasOwnTransport: false }
+      : undefined,
   };
+}
+
+// GET /api/vendedor/habilitacao: complementa a logística (possuiTransportadora) da aba de produtor.
+async function withHabilitacao(profile: UserProfileData, session: Session): Promise<UserProfileData> {
+  if (!profile.seller || session.vendedorEstado !== "HABILITADO") return profile;
+  try {
+    const response = await fetch("/api/vendedor/habilitacao", { headers: authHeaders(session) });
+    if (!response.ok) return profile;
+    const body = await response.json();
+    return { ...profile, seller: { ...profile.seller, hasOwnTransport: Boolean(body.possuiTransportadora) } };
+  } catch {
+    return profile;
+  }
+}
+
+async function fetchRealProfile(session: Session): Promise<ProfileLoadResult> {
+  try {
+    const response = await fetch("/api/perfil", { headers: authHeaders(session) });
+    if (response.status === 401) {
+      clearSession();
+      return { ok: false, reason: "unauthorized", message: "Sua sessão expirou. Entre novamente." };
+    }
+    if (!response.ok) return { ok: false, reason: "unavailable", message: "Não foi possível carregar seu perfil agora. Tente novamente mais tarde." };
+    const profile = normalizeProfile(await response.json(), session);
+    return { ok: true, profile: await withHabilitacao(profile, session) };
+  } catch {
+    return { ok: false, reason: "unavailable", message: "Não foi possível conectar ao servidor. Verifique sua conexão." };
+  }
 }
 
 export const loadUserProfile: LoadUserProfile = async () => {
@@ -131,18 +198,17 @@ export const loadUserProfile: LoadUserProfile = async () => {
     await mockDelay(300);
     return { ok: true, profile: mockRead(session) };
   }
-  try {
-    const response = await fetch("/api/perfil", { headers: authHeaders(session) });
-    if (response.status === 401) {
-      clearSession();
-      return { ok: false, reason: "unauthorized", message: "Sua sessão expirou. Entre novamente." };
-    }
-    if (!response.ok) return { ok: false, reason: "unavailable", message: "Não foi possível carregar seu perfil agora. Tente novamente mais tarde." };
-    return { ok: true, profile: normalizeProfile(await response.json(), session) };
-  } catch {
-    return { ok: false, reason: "unavailable", message: "Não foi possível conectar ao servidor. Verifique sua conexão." };
-  }
+  return fetchRealProfile(session);
 };
+
+// Campos do PATCH /api/perfil do backend -> nomes dos campos do formulário.
+const PATCH_FIELD_MAP: Record<string, string> = {
+  name: "nome",
+  phone: "telefone",
+  cpf: "cpfCnpj",
+  avatarUrl: "avatarUrl",
+};
+
 
 export const updateUserProfile: UpdateUserProfile = async (data) => {
   const session = getSession();
@@ -167,18 +233,66 @@ export const updateUserProfile: UpdateUserProfile = async (data) => {
     localStorage.setItem(`${MOCK_KEY}:${session.conta.id}`, JSON.stringify(merged));
     return { ok: true, message: "Alterações salvas (simulação local).", updatedProfile: merged };
   }
+
+  const body: Record<string, unknown> = {};
+  if (data.account?.nome) body.name = data.account.nome;
+  if (data.account?.telefone) body.phone = data.account.telefone;
+  if (data.account?.avatarUrl && !data.account.avatarUrl.startsWith("data:") && data.account.avatarUrl.length <= 500) {
+    body.avatarUrl = data.account.avatarUrl;
+  }
+
+  if (data.address && Object.values(data.address).some((v) => String(v ?? "").trim())) {
+    body.address = {
+      cep: data.address.cep ? data.address.cep.replace(/\D/g, "") : null,
+      logradouro: data.address.logradouro?.trim() || null,
+      numero: data.address.numero?.trim() || null,
+      complemento: data.address.complemento?.trim() || null,
+      bairro: data.address.bairro?.trim() || null,
+      cidade: data.address.cidade?.trim() || null,
+      uf: data.address.uf?.trim() || null,
+    };
+  }
+
+  if (data.seller) {
+    body.seller = {
+      farmName: data.seller.farmName?.trim() || null,
+      bio: data.seller.bio?.trim() || null,
+      city: data.seller.city?.trim() || null,
+      state: data.seller.state?.trim() || null,
+      publicPhone: data.seller.publicPhone?.trim() || null,
+      categories: data.seller.categories ?? [],
+      hasOwnTransport: Boolean(data.seller.hasOwnTransport),
+    };
+  }
+
+  if (Object.keys(body).length === 0) {
+    return { ok: false, reason: "validation_error", message: "Nenhuma alteração informada." };
+  }
   try {
-    const response = await fetch("/api/perfil", { method: "PATCH", headers: authHeaders(session), body: JSON.stringify(data) });
+    const response = await fetch("/api/perfil", { method: "PATCH", headers: authHeaders(session), body: JSON.stringify(body) });
     if (response.status === 401) {
       clearSession();
       return { ok: false, reason: "unauthorized", message: "Sua sessão expirou. Entre novamente." };
     }
     if (response.status === 409 || response.status === 422) {
-      const body = await response.json().catch(() => null);
-      return { ok: false, reason: "validation_error", message: body?.erro?.mensagem ?? "Verifique os dados informados.", errors: body?.erro?.campos ?? {} };
+      const err = await response.json().catch(() => null);
+      const campos = (err?.erro?.campos ?? {}) as Record<string, string>;
+      const errors = Object.fromEntries(Object.entries(campos).map(([k, v]) => [PATCH_FIELD_MAP[k] ?? k, v]));
+      return { ok: false, reason: "validation_error", message: err?.erro?.mensagem ?? "Verifique os dados informados.", errors };
     }
     if (!response.ok) return { ok: false, reason: "unavailable", message: "Não foi possível salvar agora. Tente novamente mais tarde." };
-    return { ok: true, message: "Alterações salvas com sucesso.", updatedProfile: normalizeProfile(await response.json(), session) };
+    const saved = await response.json().catch(() => null);
+    if (saved?.conta?.nome) updateSession({ conta: { nome: saved.conta.nome } });
+    if (saved?.conta?.avatar_url || saved?.conta?.avatarUrl) {
+      updateSession({ avatarUrl: saved.conta.avatar_url || saved.conta.avatarUrl });
+    }
+    if (saved && (saved.account || saved.enderecos)) {
+      const normalized = normalizeProfile(saved, getSession() ?? session);
+      return { ok: true, message: saved.message ?? "Perfil salvo com sucesso.", updatedProfile: await withHabilitacao(normalized, getSession() ?? session) };
+    }
+    const reloaded = await fetchRealProfile(getSession() ?? session);
+    if (!reloaded.ok) return { ok: false, reason: reloaded.reason, message: reloaded.message };
+    return { ok: true, message: "Perfil salvo com sucesso.", updatedProfile: reloaded.profile };
   } catch {
     return { ok: false, reason: "unavailable", message: "Não foi possível conectar ao servidor. Verifique sua conexão." };
   }

@@ -85,3 +85,119 @@ def test_perfil_so_mostra_a_propria_conta(client, criar_pf):
     a, b = criar_pf(nome="Ana Lima"), criar_pf(nome="Bia Costa")
     assert client.get("/api/perfil", headers=a["headers"]).json()["nome"] == "Ana Lima"
     assert client.get("/api/perfil", headers=b["headers"]).json()["nome"] == "Bia Costa"
+
+
+def test_avatar_url_em_perfil_e_me(client, criar_pf):
+    pf = criar_pf()
+    r = client.patch(
+        "/api/perfil",
+        headers=pf["headers"],
+        json={"avatar_url": "https://imagem.com/avatar.png"},
+    )
+    assert r.status_code == 200
+
+    me = client.get("/api/auth/me", headers=pf["headers"]).json()
+    assert (me["conta"].get("avatarUrl") or me["conta"].get("avatar_url")) == "https://imagem.com/avatar.png"
+
+    perfil = client.get("/api/perfil", headers=pf["headers"]).json()
+    assert perfil["avatarUrl"] == "https://imagem.com/avatar.png"
+    assert perfil["account"]["avatarUrl"] == "https://imagem.com/avatar.png"
+
+
+def test_editar_perfil_cpf_quando_nulo_e_bloqueia_quando_existente(client, criar_pf):
+    pf = criar_pf()
+    # 1. Usuário recém criado não tem CPF
+    perfil = client.get("/api/perfil", headers=pf["headers"]).json()
+    assert perfil.get("cpf") is None
+
+    # 2. Permite gravar CPF pela primeira vez
+    r = client.patch("/api/perfil", headers=pf["headers"], json={"cpf": "52998224725"})
+    assert r.status_code == 200
+
+    perfil = client.get("/api/perfil", headers=pf["headers"]).json()
+    assert perfil["cpf"] == "52998224725"
+
+    # 3. Tentar alterar o CPF cadastrado deve retornar 422 DOCUMENTO_PROTEGIDO
+    r_alt = client.patch("/api/perfil", headers=pf["headers"], json={"cpf": "11144477735"})
+    assert r_alt.status_code == 422
+    assert r_alt.json()["erro"]["codigo"] == "DOCUMENTO_PROTEGIDO"
+
+
+def test_editar_perfil_endereco_upsert(client, criar_pf):
+    pf = criar_pf()
+    # 1. Inserir primeiro endereço via perfil
+    r = client.patch(
+        "/api/perfil",
+        headers=pf["headers"],
+        json={
+            "address": {
+                "cep": "13083852",
+                "logradouro": "Rua das Palmeiras",
+                "numero": "50",
+                "bairro": "Jardim Guanabara",
+                "cidade": "Campinas",
+                "uf": "SP",
+            }
+        },
+    )
+    assert r.status_code == 200
+
+    perfil = client.get("/api/perfil", headers=pf["headers"]).json()
+    assert perfil["address"]["logradouro"] == "Rua das Palmeiras"
+    assert perfil["address"]["numero"] == "50"
+    assert perfil["address"]["cidade"] == "Campinas"
+    assert perfil["address"]["uf"] == "SP"
+
+    # 2. Atualizar número e complemento
+    r2 = client.patch(
+        "/api/perfil",
+        headers=pf["headers"],
+        json={"address": {"numero": "52", "complemento": "Apto 101"}},
+    )
+    assert r2.status_code == 200
+
+    perfil2 = client.get("/api/perfil", headers=pf["headers"]).json()
+    assert perfil2["address"]["numero"] == "52"
+    assert perfil2["address"]["complemento"] == "Apto 101"
+    assert perfil2["address"]["logradouro"] == "Rua das Palmeiras"
+
+
+def test_editar_perfil_vitrine_vendedor(client, criar_pf):
+    pf = criar_pf()
+    # Habilita como vendedor
+    client.post(
+        "/api/vendedor/habilitacao",
+        headers=pf["headers"],
+        json={"cpf": "52998224725", "possuiTransportadora": False},
+    )
+
+    # Atualiza vitrine
+    r = client.patch(
+        "/api/perfil",
+        headers=pf["headers"],
+        json={
+            "seller": {
+                "farmName": "Fazenda Bela Vista",
+                "bio": "Produção agroecológica sustentável",
+                "city": "Campinas",
+                "state": "SP",
+                "publicPhone": "+5519988887777",
+                "categories": ["cafe", "milho"],
+                "hasOwnTransport": True,
+            }
+        },
+    )
+    assert r.status_code == 200
+    dados_resposta = r.json()
+    assert dados_resposta["message"] == "Perfil atualizado com sucesso."
+    assert dados_resposta["seller"]["farmName"] == "Fazenda Bela Vista"
+    assert "account" in dados_resposta
+    assert "conta" in dados_resposta
+
+    perfil = client.get("/api/perfil", headers=pf["headers"]).json()
+    assert perfil["seller"]["farmName"] == "Fazenda Bela Vista"
+    assert perfil["seller"]["bio"] == "Produção agroecológica sustentável"
+    assert perfil["seller"]["city"] == "Campinas"
+    assert perfil["seller"]["categories"] == ["cafe", "milho"]
+    assert perfil["seller"]["hasOwnTransport"] is True
+

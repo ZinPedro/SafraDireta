@@ -1,5 +1,28 @@
+# Ambientes e credenciais
 .env
+.env.*
+*.env
+!.env.example
+
+# Ambientes virtuais
 .venv/
+venv/
+env/
+
+# Cache e compilação Python
 __pycache__/
+*.py[cod]
+*$py.class
+*.so
+build/
+dist/
+*.egg-info/
+
+# Testes e cobertura
 .pytest_cache/
-*.pyc
+.coverage
+htmlcov/
+
+# Banco local temporário
+*.sqlite3
+*.db

@@ -59,9 +59,12 @@ export function AccountTab({ profile, onSave, onSaved }: {
       return;
     }
     setPhotoMessage("");
-    if (session?.avatarUrl) URL.revokeObjectURL(session.avatarUrl);
-    // Upload local provisório: a imagem vive só nesta aba, sem persistência.
-    setAvatar(URL.createObjectURL(file));
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = reader.result as string;
+      setAvatar(dataUrl);
+    };
+    reader.readAsDataURL(file);
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -126,7 +129,7 @@ export function AccountTab({ profile, onSave, onSaved }: {
           <div>
             <label className="profile__photo-button" htmlFor="profile-photo">Alterar foto</label>
             <input id="profile-photo" className="sr-only" type="file" accept=".jpg,.jpeg,.png" onChange={handlePhoto} aria-describedby="profile-photo-hint" />
-            <p className="corporate__hint" id="profile-photo-hint">JPG ou PNG, até 10 MB. A foto é provisória e fica só neste navegador.</p>
+            <p className="corporate__hint" id="profile-photo-hint">JPG ou PNG, até 10 MB. Foto visível no seu perfil e cabeçalho.</p>
             {photoMessage && <p className="registration-field__error" role="alert">{photoMessage}</p>}
           </div>
         </div>

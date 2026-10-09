@@ -66,6 +66,7 @@ function mockSeed(session: Session): UserProfileData {
       id: session.conta.id, tipo: session.conta.tipo, nome: session.conta.nome, email: session.conta.email,
       cpfCnpj: session.conta.tipo === "PJ" ? "11222333000181" : "",
       telefone: session.conta.telefone ?? "+5519999998888",
+      avatarUrl: session.avatarUrl,
     },
     address: { ...emptyAddress },
     seller: isSeller
@@ -96,6 +97,7 @@ function mockRead(session: Session): UserProfileData {
           nome: session.conta.nome,
           email: session.conta.email,
           cpfCnpj,
+          avatarUrl: session.avatarUrl ?? stored.account?.avatarUrl,
         },
         address: { ...seed.address, ...stored.address },
         seller: isSeller ? (stored.seller ?? seed.seller) : undefined,
@@ -158,6 +160,7 @@ export const updateUserProfile: UpdateUserProfile = async (data) => {
       ...data.account,
       email: current.account.email,
       cpfCnpj: nextCpf,
+      avatarUrl: session.avatarUrl ?? current.account.avatarUrl,
     };
     merged.address = { ...current.address, ...data.address };
     merged.seller = current.seller && data.seller ? { ...current.seller, ...data.seller, isHabilitado: true } : current.seller;

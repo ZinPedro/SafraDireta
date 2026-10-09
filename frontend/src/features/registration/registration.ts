@@ -1,4 +1,4 @@
-import { saveSession } from "../../context/session";
+import { getSession, saveSession } from "../../context/session";
 import { MOCK_API, mockDelay } from "../../dev/mockApi";
 
 export type RegistrationIntent = "buyer" | "seller";
@@ -27,6 +27,16 @@ export type RegistrationResult =
 export type RegisterAccount = (request: RegistrationRequest) => Promise<RegistrationResult>;
 
 export const registerAccount: RegisterAccount = async (request: RegistrationRequest): Promise<RegistrationResult> => {
+  const currentSession = getSession();
+  if (currentSession) {
+    return {
+      status: "error",
+      message: currentSession.conta.tipo === "PJ"
+        ? "Você já está conectado em uma conta corporativa (PJ). Saia da conta atual antes de cadastrar uma pessoa física."
+        : "Você já possui uma conta conectada. Saia da conta atual antes de realizar um novo cadastro.",
+    };
+  }
+
   if (MOCK_API) {
     await mockDelay();
     saveSession("mock-token", { id: `mock-${request.email}`, tipo: "PF", nome: request.name, email: request.email }, null);

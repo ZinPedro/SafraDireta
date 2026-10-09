@@ -5,6 +5,7 @@ import registrationImage from "../../assets/images/registration-landscape.jpeg";
 import { Icon } from "../../components/Icon";
 import { routes } from "../../data/site";
 import type { OpenDevelopmentDialog } from "../../data/site";
+import { useAuth } from "../../context/authContext";
 import {
   formatCep, formatCnpj, formatCpf, formatFileSize, formatPhone, initialCorporateValues,
   naturezasJuridicas, registerCorporateAccount, steps, toCorporateRegistrationData, ufs,
@@ -43,6 +44,7 @@ export function CorporateRegistrationPage({ onOpenDialog, onRegister = registerC
   onOpenDialog: OpenDevelopmentDialog;
   onRegister?: RegisterCorporateAccount;
 }) {
+  const { session, signOut } = useAuth();
   const [values, setValues] = useState<CorporateFormValues>(initialCorporateValues);
   const [errors, setErrors] = useState<FieldErrors>({});
   const [stepIndex, setStepIndex] = useState(0);
@@ -186,6 +188,65 @@ export function CorporateRegistrationPage({ onOpenDialog, onRegister = registerC
       </div>
     </aside>
   );
+
+  if (session) {
+    const isPf = session.conta.tipo === "PF";
+    return (
+      <section className="registration corporate" aria-labelledby="corporate-connected-title">
+        {brand}
+        <div className="registration__content">
+          <nav className="registration__navigation" aria-label="Navegação do cadastro corporativo">
+            <Link to={routes.profile} className="registration__back">
+              <Icon name="back" /> Voltar ao perfil
+            </Link>
+            <Link to={routes.home} className="icon-button" aria-label="Fechar e voltar ao início">
+              <Icon name="close" />
+            </Link>
+          </nav>
+          <div className="registration__body corporate__done">
+            <header className="registration__heading">
+              <p className="eyebrow">Conta ativa</p>
+              <h1 id="corporate-connected-title" tabIndex={-1}>
+                {isPf ? "Você já possui uma conta de Pessoa Física" : "Você já possui uma conta corporativa"}
+              </h1>
+              <p>
+                {isPf ? (
+                  <>
+                    Você está conectado como <strong>{session.conta.nome}</strong> ({session.conta.email}).
+                    No SafraDireta, cada conta é exclusiva — <strong>ou Pessoa Física ou Pessoa Jurídica</strong>.
+                    Não é permitido criar uma conta PJ enquanto você estiver logado em sua conta PF.
+                  </>
+                ) : (
+                  <>
+                    Você já está conectado como <strong>{session.conta.nome}</strong> ({session.conta.email}).
+                    Para cadastrar uma nova empresa, saia da sessão atual.
+                  </>
+                )}
+              </p>
+            </header>
+
+            <div className="corporate__actions">
+              <button
+                type="button"
+                className="button button--primary registration__submit"
+                onClick={async () => {
+                  await signOut();
+                }}
+              >
+                Sair da conta e cadastrar empresa
+              </button>
+              <Link className="button button--outline" to={routes.profile}>
+                Continuar no Meu Perfil
+              </Link>
+              <Link className="corporate__secondary" to={routes.home}>
+                Ir para a Página Inicial
+              </Link>
+            </div>
+          </div>
+        </div>
+      </section>
+    );
+  }
 
   if (result) {
     return (

@@ -64,7 +64,7 @@ def test_cadastro_pj_sucesso(client):
     assert r.status_code == 201
     dados = r.json()
     assert dados["status"] == "registered_pending_validation"
-    assert dados["protocol"].startswith("VER-")
+    assert len(dados["protocol"]) == 36  # UUID da verificacao
     assert dados["conta"]["tipo"] == "PJ"
     assert len(dados["token"]) >= 43
 
@@ -87,7 +87,7 @@ def test_cadastro_pj_cnpj_invalido_retorna_422(client):
     corpo["company"]["cnpj"] = "00000000000000"
     r = client.post("/api/auth/register-corporate", json=corpo)
     assert r.status_code == 422
-    assert "company.cnpj" in r.json()["erro"]["campos"]
+    assert "cnpj" in r.json()["erro"]["campos"]  # chave plana, como o formulario
 
 
 def test_cadastro_pj_cpf_invalido_retorna_422(client):
@@ -95,7 +95,7 @@ def test_cadastro_pj_cpf_invalido_retorna_422(client):
     corpo["representative"]["cpf"] = "11111111111"
     r = client.post("/api/auth/register-corporate", json=corpo)
     assert r.status_code == 422
-    assert "representative.cpf" in r.json()["erro"]["campos"]
+    assert "repCpf" in r.json()["erro"]["campos"]
 
 
 def test_cadastro_pj_uf_invalida_retorna_422(client):
@@ -103,7 +103,7 @@ def test_cadastro_pj_uf_invalida_retorna_422(client):
     corpo["address"]["uf"] = "XX"
     r = client.post("/api/auth/register-corporate", json=corpo)
     assert r.status_code == 422
-    assert "address.uf" in r.json()["erro"]["campos"]
+    assert "uf" in r.json()["erro"]["campos"]
 
 
 def test_cadastro_pj_sem_documentos_retorna_422(client):
@@ -111,6 +111,6 @@ def test_cadastro_pj_sem_documentos_retorna_422(client):
     corpo["documents"]["hasCompanyDoc"] = False
     r = client.post("/api/auth/register-corporate", json=corpo)
     assert r.status_code == 422
-    assert "documents.hasCompanyDoc" in r.json()["erro"]["campos"]
+    assert "companyDoc" in r.json()["erro"]["campos"]
 
 

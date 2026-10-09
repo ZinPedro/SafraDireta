@@ -7,8 +7,9 @@ from psycopg.types.json import Jsonb
 
 from app import ratelimit
 from app.config import get_settings
-from app.errors import ErroApp, conflito, nao_autenticado, proibido
-from app.schemas.auth import LoginEntrada, RegistroPF, RegistroPJ
+from app.errors import ErroApp, conflito, invalido, nao_autenticado, proibido, nao_encontrado
+from app.schemas.auth import AlterarEmail, EditarPerfil, LoginEntrada, RegistroPF
+from app.schemas.pj import RegistroPJ
 from app.security import (
     gastar_tempo_de_verificacao,
     gerar_hash_senha,
@@ -178,7 +179,32 @@ def encerrar_sessao(conn: Connection, atual: dict) -> None:
         _auditar(conn, atual["conta_id"], atual["sessao_id"], "LOGOUT", "sessao", atual["sessao_id"])
 
 
+
 def dados_da_conta(conn: Connection, atual: dict) -> dict:
+    """Retorna os dados da conta autenticada e a verificacao PJ."""
+
+    verificacao = None
+
+    if atual["tipo"] == "PJ":
+        linha = conn.execute(
+            """
+            SELECT id, tipo, estado
+            FROM safradireta.verificacao
+            WHERE conta_id = %s
+              AND tipo = 'CADASTRO_PJ'
+            ORDER BY criada_em DESC, id DESC
+            LIMIT 1
+            """,
+            (atual["conta_id"],),
+        ).fetchone()
+
+        if linha is not None:
+            verificacao = {
+                "protocol": str(linha["id"]),
+                "tipo": linha["tipo"],
+                "estado": linha["estado"],
+            }
+
     return {
         "conta": {
             "id": str(atual["conta_id"]),
@@ -186,96 +212,440 @@ def dados_da_conta(conn: Connection, atual: dict) -> dict:
             "nome": atual["nome"],
             "email": atual["email_acesso"],
         },
-        "vendedor": {"estado": _estado_vendedor(conn, atual["conta_id"])},
+        "vendedor": {
+            "estado": _estado_vendedor(conn, atual["conta_id"])
+        },
         "expira_em": atual["expira_em"].isoformat(),
+        "verificacao": verificacao,
     }
+
 
 
 def registrar_pj(conn: Connection, dados: RegistroPJ) -> dict:
     termo = _termo_vigente(conn)
+
     if termo is None:
-        raise ErroApp(503, "TERMO_INDISPONIVEL", "Cadastro indisponível no momento.")
+        raise ErroApp(
+            503,
+            "TERMO_INDISPONIVEL",
+            "Cadastro indisponivel no momento.",
+        )
 
     senha_hash = gerar_hash_senha(dados.access.senha)
-    token = gerar_token()
-    expira_em = datetime.now(timezone.utc) + timedelta(hours=get_settings().sessao_horas)
 
     try:
         with conn.transaction():
             conta = conn.execute(
-                """INSERT INTO safradireta.conta
-                   (tipo, email_acesso, senha_hash, telefone_recuperacao, nome_publico)
-                   VALUES ('PJ', %s, %s, %s, %s) RETURNING id""",
-                (dados.access.email, senha_hash, dados.access.telefone, dados.company.razao_social),
+                """
+                INSERT INTO safradireta.conta
+                    (tipo, email_acesso, senha_hash,
+                     telefone_recuperacao, nome_publico)
+                VALUES ('PJ', %s, %s, %s, %s)
+                RETURNING id
+                """,
+                (
+                    dados.access.email,
+                    senha_hash,
+                    dados.access.telefone,
+                    dados.company.razao_social,
+                ),
             ).fetchone()
+
             conta_id = conta["id"]
 
             conn.execute(
-                """INSERT INTO safradireta.empresa
-                   (conta_id, cnpj, razao_social, nome_fantasia, natureza_juridica)
-                   VALUES (%s, %s, %s, %s, %s)""",
-                (conta_id, dados.company.cnpj, dados.company.razao_social,
-                 dados.company.nome_fantasia, dados.company.natureza_juridica),
-            )
-
-            rep = conn.execute(
-                """INSERT INTO safradireta.representante_empresa
-                   (empresa_id, nome, cpf, vinculo)
-                   VALUES (%s, %s, %s, %s) RETURNING id""",
-                (conta_id, dados.representative.nome, dados.representative.cpf, dados.representative.vinculo),
-            ).fetchone()
-            rep_id = rep["id"]
-
-            conn.execute(
-                """INSERT INTO safradireta.endereco
-                   (conta_id, cep, logradouro, numero, complemento, bairro, municipio, uf, principal, ativo)
-                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, true, true)""",
-                (conta_id, dados.address.cep, dados.address.logradouro, dados.address.numero,
-                 dados.address.complemento, dados.address.bairro, dados.address.cidade, dados.address.uf),
-            )
-
-            verif = conn.execute(
-                """INSERT INTO safradireta.verificacao
-                   (conta_id, tipo, representante_id, estado, dados_submetidos, enviada_em)
-                   VALUES (%s, 'EMPRESARIAL', %s, 'EM_ANALISE', %s, now()) RETURNING id""",
-                (conta_id, rep_id, Jsonb({
-                    "documentos": dados.documents.file_names,
-                    "hasCompanyDoc": dados.documents.has_company_doc,
-                    "hasRepresentativeDoc": dados.documents.has_representative_doc,
-                })),
-            ).fetchone()
-            protocolo = f"VER-{str(verif['id'])[:8].upper()}"
-
-            sessao = conn.execute(
-                """INSERT INTO safradireta.sessao (conta_id, token_hash, expira_em)
-                   VALUES (%s, %s, %s) RETURNING id""",
-                (conta_id, hash_token(token), expira_em),
-            ).fetchone()
-
-            conn.execute(
-                """INSERT INTO safradireta.aceite_termos (conta_id, termo_id, sessao_id)
-                   VALUES (%s, %s, %s)""",
-                (conta_id, termo["id"], sessao["id"]),
+                """
+                INSERT INTO safradireta.empresa
+                    (conta_id, cnpj, razao_social,
+                     nome_fantasia, natureza_juridica)
+                VALUES (%s, %s, %s, %s, %s)
+                """,
+                (
+                    conta_id,
+                    dados.company.cnpj,
+                    dados.company.razao_social,
+                    dados.company.nome_fantasia,
+                    dados.company.natureza_juridica,
+                ),
             )
 
             conn.execute(
-                """INSERT INTO safradireta.evento_auditoria
-                   (conta_ator_id, sessao_id, origem, acao, entidade, entidade_id, resumo)
-                   VALUES (%s, %s, 'API', 'CONTA_PJ_CRIADA', 'conta', %s, %s)""",
-                (conta_id, sessao["id"], conta_id,
-                 Jsonb({"tipo": "PJ", "cnpj": dados.company.cnpj, "protocolo": protocolo})),
+                """
+                INSERT INTO safradireta.endereco
+                    (conta_id, rotulo, logradouro, numero,
+                     complemento, bairro, municipio, uf,
+                     cep, principal)
+                VALUES (%s, 'Principal', %s, %s, %s,
+                        %s, %s, %s, %s, TRUE)
+                """,
+                (
+                    conta_id,
+                    dados.address.logradouro,
+                    dados.address.numero,
+                    dados.address.complemento,
+                    dados.address.bairro,
+                    dados.address.cidade,
+                    dados.address.uf,
+                    dados.address.cep,
+                ),
             )
-    except UniqueViolation as e:
-        err_msg = str(e).lower()
-        if "cnpj" in err_msg:
-            raise conflito("Já existe uma empresa cadastrada com este CNPJ.", {"cnpj": "Este CNPJ já está cadastrado."})
-        raise conflito("Já existe uma conta com este e-mail.", {"email": "Este e-mail já está cadastrado."})
+
+            representante = conn.execute(
+                """
+                INSERT INTO safradireta.representante_empresa
+                    (empresa_id, nome, cpf, vinculo)
+                VALUES (%s, %s, %s, %s)
+                RETURNING id
+                """,
+                (
+                    conta_id,
+                    dados.representative.nome,
+                    dados.representative.cpf,
+                    dados.representative.vinculo,
+                ),
+            ).fetchone()
+            conn.execute(
+                """
+                INSERT INTO safradireta.habilitacao_vendedor
+                    (conta_id, estado, dados_complementares)
+                VALUES (%s, 'PENDENTE', '{}'::jsonb)
+                ON CONFLICT (conta_id) DO NOTHING
+                """,
+                (conta_id,),
+            )
+
+            verificacao = conn.execute(
+                """
+                INSERT INTO safradireta.verificacao
+                    (conta_id, tipo, representante_id,
+                     estado, dados_submetidos)
+                VALUES (%s, 'CADASTRO_PJ', %s,
+                        'RASCUNHO', %s)
+                RETURNING id
+                """,
+                (
+                    conta_id,
+                    representante["id"],
+                    Jsonb({
+                        "cnpj": dados.company.cnpj,
+                        "arquivos_informados":
+                            dados.documents.file_names,
+                    }),
+                ),
+            ).fetchone()
+
+            token, sessao_id, expira_em = _criar_sessao(
+                conn, conta_id
+            )
+
+            conn.execute(
+                """
+                INSERT INTO safradireta.aceite_termos
+                    (conta_id, termo_id, sessao_id)
+                VALUES (%s, %s, %s)
+                """,
+                (conta_id, termo["id"], sessao_id),
+            )
+
+            _auditar(
+                conn,
+                conta_id,
+                sessao_id,
+                "CONTA_CRIADA",
+                "conta",
+                conta_id,
+                {"tipo": "PJ"},
+            )
+
+    except UniqueViolation as erro:
+        constraint = erro.diag.constraint_name or ""
+
+        if "cnpj" in constraint:
+            raise conflito(
+                "CNPJ ja cadastrado.",
+                {"cnpj": "Este CNPJ ja esta cadastrado."},
+            ) from erro
+
+        if "email" in constraint:
+            raise conflito(
+                "Email ja cadastrado.",
+                {"email": "Este email ja esta cadastrado."},
+            ) from erro
+
+        raise conflito("Dados ja cadastrados.") from erro
 
     return {
         "status": "registered_pending_validation",
-        "protocol": protocolo,
-        "message": "Cadastro recebido. Seus documentos serão analisados pela equipe.",
+        "protocol": str(verificacao["id"]),
+        "message": (
+            "Cadastro criado. Aguardando envio "
+            "dos documentos para analise."
+        ),
         "token": token,
-        "expira_em": expira_em.isoformat(),
-        "conta": {"id": str(conta_id), "tipo": "PJ", "nome": dados.company.razao_social, "email": dados.access.email},
+        "expiraEm": expira_em.isoformat(),
+        "conta": {
+            "id": str(conta_id),
+            "tipo": "PJ",
+            "nome": dados.company.razao_social,
+            "email": dados.access.email,
+        },
+    }
+
+
+def editar_perfil(
+    conn: Connection,
+    atual: dict,
+    dados: EditarPerfil,
+) -> dict:
+    """Atualiza nome e telefone da conta autenticada."""
+
+    alteracoes = dados.model_dump(exclude_unset=True)
+
+    if not alteracoes:
+        raise ErroApp(
+            422,
+            "DADOS_INVALIDOS",
+            "Informe pelo menos um campo para atualizar.",
+        )
+
+    if any(valor is None for valor in alteracoes.values()):
+        raise ErroApp(
+            422,
+            "DADOS_INVALIDOS",
+            "Os campos enviados nao podem ser nulos.",
+        )
+
+    with conn.transaction():
+        if "name" in alteracoes:
+            conn.execute(
+                """
+                UPDATE safradireta.conta
+                SET nome_publico = %s,
+                    atualizado_em = now()
+                WHERE id = %s
+                """,
+                (alteracoes["name"], atual["conta_id"]),
+            )
+
+            if atual["tipo"] == "PF":
+                conn.execute(
+                    """
+                    UPDATE safradireta.perfil_pf
+                    SET nome = %s
+                    WHERE conta_id = %s
+                    """,
+                    (alteracoes["name"], atual["conta_id"]),
+                )
+
+        if "phone" in alteracoes:
+            conn.execute(
+                """
+                UPDATE safradireta.conta
+                SET telefone_recuperacao = %s,
+                    atualizado_em = now()
+                WHERE id = %s
+                """,
+                (alteracoes["phone"], atual["conta_id"]),
+            )
+
+        _auditar(
+            conn,
+            atual["conta_id"],
+            atual["sessao_id"],
+            "PERFIL_ATUALIZADO",
+            "conta",
+            atual["conta_id"],
+            {"campos_alterados": list(alteracoes.keys())},
+        )
+
+    return {
+        "message": "Perfil atualizado com sucesso.",
+        "conta": {
+            "id": str(atual["conta_id"]),
+            "tipo": atual["tipo"],
+            "nome": alteracoes.get("name", atual["nome"]),
+            "email": atual["email_acesso"],
+        },
+    }
+
+def consultar_perfil(conn: Connection, atual: dict) -> dict:
+    """Consulta os dados do perfil da conta autenticada."""
+
+    conta = conn.execute(
+        """
+        SELECT id, tipo, nome_publico, email_acesso,
+               telefone_recuperacao, estado
+        FROM safradireta.conta
+        WHERE id = %s
+        """,
+        (atual["conta_id"],),
+    ).fetchone()
+
+    if conta is None:
+        raise nao_encontrado("Conta nao encontrada.")
+
+    perfil = {
+        "id": str(conta["id"]),
+        "tipo": conta["tipo"],
+        "nome": conta["nome_publico"],
+        "email": conta["email_acesso"],
+        "telefone": conta["telefone_recuperacao"],
+        "estado": conta["estado"],
+    }
+
+    if conta["tipo"] == "PF":
+        pessoa = conn.execute(
+            """
+            SELECT nome, cpf
+            FROM safradireta.perfil_pf
+            WHERE conta_id = %s
+            """,
+            (atual["conta_id"],),
+        ).fetchone()
+
+        if pessoa is not None:
+            perfil["nome"] = pessoa["nome"]
+            perfil["cpf"] = pessoa["cpf"]
+
+    elif conta["tipo"] == "PJ":
+        empresa = conn.execute(
+            """
+            SELECT razao_social, nome_fantasia, cnpj
+            FROM safradireta.empresa
+            WHERE conta_id = %s
+            """,
+            (atual["conta_id"],),
+        ).fetchone()
+
+        if empresa is not None:
+            perfil["razaoSocial"] = empresa["razao_social"]
+            perfil["nomeFantasia"] = empresa["nome_fantasia"]
+            perfil["cnpj"] = empresa["cnpj"]
+    enderecos = conn.execute(
+        """
+        SELECT rotulo, logradouro, numero, complemento,
+               bairro, municipio, uf, cep, pais,
+               referencia_acesso, principal
+        FROM safradireta.endereco
+        WHERE conta_id = %s
+          AND ativo = TRUE
+        ORDER BY principal DESC, rotulo
+        """,
+        (atual["conta_id"],),
+    ).fetchall()
+
+    perfil["enderecos"] = [
+        {
+            "rotulo": endereco["rotulo"],
+            "logradouro": endereco["logradouro"],
+            "numero": endereco["numero"],
+            "complemento": endereco["complemento"],
+            "bairro": endereco["bairro"],
+            "municipio": endereco["municipio"],
+            "uf": endereco["uf"],
+            "cep": endereco["cep"],
+            "pais": endereco["pais"],
+            "referenciaAcesso": endereco["referencia_acesso"],
+            "principal": endereco["principal"],
+        }
+        for endereco in enderecos
+    ]
+
+    if conta["tipo"] == "PJ":
+        representantes = conn.execute(
+            """
+            SELECT r.id, r.nome, r.cpf, r.vinculo,
+                   r.inicio_vigencia, r.fim_vigencia
+            FROM safradireta.representante_empresa r
+            WHERE r.empresa_id = %s
+            ORDER BY r.inicio_vigencia DESC
+            """,
+            (atual["conta_id"],),
+        ).fetchall()
+
+        perfil["representantes"] = [
+            {
+                "id": str(representante["id"]),
+                "nome": representante["nome"],
+                "cpf": representante["cpf"],
+                "vinculo": representante["vinculo"],
+                "inicioVigencia": (
+                    representante["inicio_vigencia"].isoformat()
+                    if representante["inicio_vigencia"] else None
+                ),
+                "fimVigencia": (
+                    representante["fim_vigencia"].isoformat()
+                    if representante["fim_vigencia"] else None
+                ),
+            }
+            for representante in representantes
+        ]
+
+    return perfil
+
+def alterar_email(conn: Connection, atual: dict, dados: AlterarEmail) -> dict:
+    """Altera o email da conta apos confirmar a senha atual."""
+
+    novo_email = str(dados.novo_email).strip().lower()
+
+    with conn.transaction():
+        conta = conn.execute(
+            """
+            SELECT email_acesso, senha_hash
+            FROM safradireta.conta
+            WHERE id = %s
+            FOR UPDATE
+            """,
+            (atual["conta_id"],),
+        ).fetchone()
+
+        if conta is None:
+            raise nao_autenticado()
+
+        if not verificar_senha(dados.senha_atual, conta["senha_hash"]):
+            raise invalido("Senha atual incorreta.", {"senhaAtual": "Senha atual incorreta."})
+
+        if novo_email == conta["email_acesso"]:
+            return {
+                "message": "O email informado ja pertence a esta conta.",
+                "email": novo_email,
+            }
+
+        existente = conn.execute(
+            """
+            SELECT id
+            FROM safradireta.conta
+            WHERE email_acesso = %s AND id <> %s
+            """,
+            (novo_email, atual["conta_id"]),
+        ).fetchone()
+
+        if existente is not None:
+            raise conflito("Este email ja esta cadastrado.")
+
+        try:
+            with conn.transaction():
+                conn.execute(
+                    """
+                    UPDATE safradireta.conta
+                    SET email_acesso = %s
+                    WHERE id = %s
+                    """,
+                    (novo_email, atual["conta_id"]),
+                )
+        except UniqueViolation:
+            raise conflito("Este email ja esta cadastrado.") from None
+
+        _auditar(
+            conn,
+            atual["conta_id"],
+            atual["sessao_id"],
+            "EMAIL_ALTERADO",
+            "conta",
+            atual["conta_id"],
+        )
+
+    return {
+        "message": "Email atualizado com sucesso.",
+        "email": novo_email,
     }

@@ -36,3 +36,41 @@ def conta_autenticada(
     if linha["estado"] != "ATIVA":
         raise proibido("Esta conta está suspensa ou encerrada.")
     return linha
+
+
+
+def vendedor_habilitado(
+    atual: dict = Depends(conta_autenticada),
+    conn: Connection = Depends(get_connection),
+) -> dict:
+    """Permite acesso apenas a vendedores habilitados e aprovados."""
+
+    if atual["tipo"] not in ("PF", "PJ"):
+        raise proibido("Tipo de conta invalido para vendedor.")
+
+    habilitacao = conn.execute(
+        """
+        SELECT h.estado
+        FROM safradireta.habilitacao_vendedor h
+        WHERE h.conta_id = %s
+          AND h.estado = 'HABILITADO'
+          AND EXISTS (
+              SELECT 1
+              FROM safradireta.decisao_verificacao d
+              JOIN safradireta.verificacao v
+                ON v.id = d.verificacao_id
+              WHERE d.id = h.decisao_aprovacao_id
+                AND v.conta_id = h.conta_id
+                AND v.tipo = 'HABILITACAO_VENDEDOR'
+                AND d.resultado = 'APROVADA'
+          )
+        """,
+        (atual["conta_id"],),
+    ).fetchone()
+
+    if habilitacao is None or habilitacao["estado"] != "HABILITADO":
+        raise proibido(
+            "Esta conta nao possui habilitacao de vendedor aprovada."
+        )
+
+    return atual

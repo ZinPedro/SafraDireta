@@ -67,6 +67,26 @@ def _mensagem_pt(erro: dict) -> str:
         return "O corpo da requisição não é um JSON válido."
     return "Valor inválido."
 
+# Cadastro PJ: o front usa nomes planos (cnpj, repCpf, companyDoc), nao o caminho aninhado.
+_PREFIXOS_PJ = {"company", "address", "access"}
+_CAMPOS_PJ = {
+    ("representative", "nome"): "repNome",
+    ("representative", "cpf"): "repCpf",
+    ("representative", "vinculo"): "repVinculo",
+    ("documents", "hasCompanyDoc"): "companyDoc",
+    ("documents", "hasRepresentativeDoc"): "representativeDoc",
+}
+
+
+def _nome_do_campo(caminho: list[str]) -> str:
+    if len(caminho) == 2:
+        if tuple(caminho) in _CAMPOS_PJ:
+            return _CAMPOS_PJ[tuple(caminho)]
+        if caminho[0] in _PREFIXOS_PJ:
+            return caminho[1]
+    return ".".join(caminho) or "corpo"
+
+
 def registrar_handlers(app: FastAPI) -> None:
     @app.exception_handler(ErroApp)
     async def _tratar_erro_app(request: Request, exc: ErroApp):
@@ -77,7 +97,7 @@ def registrar_handlers(app: FastAPI) -> None:
         campos = {}
         for erro in exc.errors():
             caminho = [str(p) for p in erro["loc"] if p not in ("body", "query", "path")]
-            campos[".".join(caminho) or "corpo"] = _mensagem_pt(erro)
+            campos[_nome_do_campo(caminho)] = _mensagem_pt(erro)
         return _resposta(422, "DADOS_INVALIDOS", "Dados inválidos.", campos)
 
     @app.exception_handler(StarletteHTTPException)

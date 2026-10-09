@@ -1,3 +1,6 @@
+import { saveSession } from "../../context/session";
+import { MOCK_API, mockDelay } from "../../dev/mockApi";
+
 export type RegistrationIntent = "buyer" | "seller";
 
 export interface RegistrationValues {
@@ -23,7 +26,44 @@ export type RegistrationResult =
 
 export type RegisterAccount = (request: RegistrationRequest) => Promise<RegistrationResult>;
 
-export const registerAccount: RegisterAccount = async () => ({ status: "unavailable" });
+export const registerAccount: RegisterAccount = async (request: RegistrationRequest): Promise<RegistrationResult> => {
+  if (MOCK_API) {
+    await mockDelay();
+    saveSession("mock-token", { id: `mock-${request.email}`, tipo: "PF", nome: request.name, email: request.email }, null);
+    return { status: "registered" };
+  }
+
+  try {
+    const response = await fetch("/api/auth/register", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(request),
+    });
+
+    if (response.status === 201) {
+      const data = await response.json();
+      if (data.token) {
+        saveSession(data.token, data.conta, data.vendedor?.estado ?? null);
+      }
+      return { status: "registered" };
+    }
+
+    if (response.status === 409 || response.status === 422) {
+      const data = await response.json();
+      return {
+        status: "error",
+        message: data.erro?.mensagem ?? "Verifique os dados informados.",
+        fieldErrors: data.erro?.campos ?? {},
+      };
+    }
+
+    return { status: "unavailable" };
+  } catch {
+    return { status: "unavailable" };
+  }
+};
 
 export function formatPhone(value: string): string {
   const digits = value.replace(/\D/g, "").slice(0, 11);

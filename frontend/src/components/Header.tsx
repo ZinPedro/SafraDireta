@@ -2,7 +2,9 @@ import { useEffect, useRef, useState } from "react";
 import { Link, NavLink, useLocation } from "react-router-dom";
 import { navigationCategories, routes } from "../data/site";
 import type { OpenDevelopmentDialog } from "../data/site";
+import { useAuth } from "../context/authContext";
 import { Icon } from "./Icon";
+import { UserMenu } from "./UserMenu";
 
 export function Header({
   onOpenDialog,
@@ -15,6 +17,7 @@ export function Header({
   const categoryButtonRef = useRef<HTMLButtonElement>(null);
   const mobileButtonRef = useRef<HTMLButtonElement>(null);
   const location = useLocation();
+  const { session } = useAuth();
 
   function closeMenus() {
     setMobileOpen(false);
@@ -116,6 +119,7 @@ export function Header({
             Como funciona
           </NavLink>
           <div className="site-nav__account">
+            {session ? (<UserMenu onNavigate={closeMenus} />) : (<>
             <button
               type="button"
               className="button button--outline-light button--small"
@@ -130,6 +134,7 @@ export function Header({
             >
               Cadastre-se
             </button>
+          </>)}
           </div>
         </nav>
       </div>

@@ -1,13 +1,15 @@
 import { useRef, useState } from "react";
 import type { FormEvent } from "react";
-import { Link, useLocation, useSearchParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import registrationImage from "../../assets/images/registration-landscape.jpeg";
 import { Icon } from "../../components/Icon";
 import { routes } from "../../data/site";
 import type { OpenDevelopmentDialog } from "../../data/site";
 import { formatPhone, registerAccount, toRegistrationRequest, validateRegistration } from "./registration";
 import type { RegisterAccount, RegistrationErrors, RegistrationValues } from "./registration";
+import { PostRegistrationDialog } from "./PostRegistrationDialog";
 import "./RegistrationPage.css";
+import "../corporate-registration/CorporateRegistrationPage.css";
 
 const initialValues: RegistrationValues = {
   name: "", email: "", phone: "", password: "", acceptedTerms: false,
@@ -31,12 +33,14 @@ export function RegistrationPage({ onOpenDialog, onRegister = registerAccount }:
   const [message, setMessage] = useState("");
   const [searchParams, setSearchParams] = useSearchParams();
   const location = useLocation();
+  const navigate = useNavigate();
+  const [welcomeOpen, setWelcomeOpen] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
   const pendingRef = useRef(false);
   const isSeller = searchParams.get("intencao") === "produtor";
   const isSubmitting = status === "submitting";
   const from = (location.state as { from?: string } | null)?.from;
-  const returnTo = from && Object.values(routes).some((route) => route === from) && from !== routes.registration && from !== routes.corporateRegistration ? from : routes.home;
+  const returnTo = from && Object.values(routes).some((route) => route === from) && from !== routes.registration && from !== routes.corporateRegistration && from !== routes.sellerUpgrade ? from : routes.home;
 
   function updateField<K extends keyof RegistrationValues>(name: K, value: RegistrationValues[K]) {
     setValues((current) => ({ ...current, [name]: value }));
@@ -76,6 +80,8 @@ export function RegistrationPage({ onOpenDialog, onRegister = registerAccount }:
         if (result.fieldErrors) requestAnimationFrame(() => focusFirstError(result.fieldErrors ?? {}));
       } else {
         setValues(initialValues);
+        // Intenção prévia de vender conduz direto à habilitação; senão, modal com duas opções.
+        if (isSeller) navigate(routes.sellerUpgrade); else setWelcomeOpen(true);
         setMessage(isSeller ? "Conta criada. A habilitação como produtor será uma etapa adicional da sua conta." : "Sua conta foi criada com sucesso.");
       }
     } catch {
@@ -84,6 +90,41 @@ export function RegistrationPage({ onOpenDialog, onRegister = registerAccount }:
     } finally {
       pendingRef.current = false;
     }
+  }
+
+  if (status === "registered") {
+    return (
+      <section className="registration" aria-labelledby="registration-title">
+        <aside className="registration__visual" aria-label="SafraDireta">
+          <img src={registrationImage} alt="" width="1792" height="2400" fetchPriority="high" />
+          <div className="registration__brand">
+            <Link to={routes.home}>SafraDireta</Link>
+            <p>Conectando quem produz a quem compra.</p>
+          </div>
+        </aside>
+        <div className="registration__content">
+          <div className="registration__body corporate__done">
+            <header className="registration__heading">
+              <p className="eyebrow">Cadastro concluído</p>
+              <h1 id="registration-title" tabIndex={-1}>Conta criada com sucesso!</h1>
+              <p>
+                {isSeller
+                  ? "Sua conta de produtor foi iniciada. Você já pode comprar e navegar pelos lotes do mercado. A etapa de habilitação de vendedor será solicitada no seu perfil."
+                  : "Sua conta no SafraDireta está ativa e pronta para uso. Conecte-se ao campo e encontre as melhores ofertas."}
+              </p>
+            </header>
+            <div className="corporate__actions">
+              <Link className="button registration__submit" to={returnTo !== routes.home ? returnTo : routes.market}>
+                {returnTo !== routes.home ? "Continuar navegando" : "Explorar o Mercado"}
+              </Link>
+              <Link className="corporate__secondary" to={routes.home}>
+                Ir para a Página Inicial
+              </Link>
+            </div>
+          </div>
+        </div>
+      </section>
+    );
   }
 
   return (
@@ -173,6 +214,7 @@ export function RegistrationPage({ onOpenDialog, onRegister = registerAccount }:
           </form>
         </div>
       </div>
+      <PostRegistrationDialog open={welcomeOpen} onClose={() => setWelcomeOpen(false)} />
     </section>
   );
 }

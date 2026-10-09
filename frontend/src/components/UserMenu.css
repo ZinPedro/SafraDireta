@@ -1,0 +1,104 @@
+.avatar {
+  display: inline-block;
+  flex-shrink: 0;
+  border-radius: 50%;
+  object-fit: cover;
+  overflow: hidden;
+}
+.avatar--neutral {
+  background: #e4e0d8;
+  color: #77705f;
+}
+.user-menu {
+  position: relative;
+}
+.user-menu__trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 2.75rem;
+  padding: var(--space-1) var(--space-3) var(--space-1) var(--space-1);
+  border: 1px solid rgb(255 255 255 / 35%);
+  border-radius: 999px;
+  background: none;
+  color: inherit;
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+}
+.user-menu__trigger[aria-expanded="true"] .icon:last-child {
+  transform: rotate(180deg);
+}
+.user-menu__name {
+  max-width: 9rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.user-menu__panel {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + var(--space-2));
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  width: 16.5rem;
+  padding: var(--space-2);
+  border-radius: 0.75rem;
+  background: var(--color-background);
+  color: var(--color-text-primary);
+  box-shadow: var(--shadow-menu);
+}
+.user-menu__identity {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  margin-bottom: var(--space-1);
+  border-bottom: 1px solid var(--color-border);
+  min-width: 0;
+}
+.user-menu__identity > div {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.user-menu__identity strong,
+.user-menu__identity span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.user-menu__identity span {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+}
+.user-menu__panel [role="menuitem"] {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  min-height: 2.75rem;
+  padding: var(--space-2) var(--space-3);
+  border: 0;
+  border-radius: 0.5rem;
+  background: none;
+  color: inherit;
+  font-size: var(--font-size-sm);
+  text-align: left;
+  cursor: pointer;
+}
+.user-menu__panel [role="menuitem"]:hover,
+.user-menu__panel [role="menuitem"]:focus-visible {
+  background: var(--color-background-subtle);
+}
+@media (max-width: 54rem) {
+  .user-menu__panel {
+    position: static;
+    width: 100%;
+    margin-top: var(--space-2);
+  }
+  .user-menu,
+  .user-menu__trigger {
+    width: 100%;
+  }
+}

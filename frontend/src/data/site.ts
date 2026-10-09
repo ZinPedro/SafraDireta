@@ -2,6 +2,8 @@ export const routes = {
   home: "/",
   registration: "/cadastro",
   corporateRegistration: "/cadastro/empresa",
+  sellerUpgrade: "/habilitar-vendedor",
+  profile: "/perfil",
   market: "/mercado",
   producers: "/produtores",
   guide: "/guia",

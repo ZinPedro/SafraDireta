@@ -1,4 +1,4 @@
-import { saveSession } from "../../context/session";
+import { getSession, saveSession } from "../../context/session";
 import { MOCK_API, mockDelay } from "../../dev/mockApi";
 export interface CorporateRegistrationData {
   company: {
@@ -48,6 +48,17 @@ export type CorporateRegisterResult =
 export type RegisterCorporateAccount = (data: CorporateRegistrationData) => Promise<CorporateRegisterResult>;
 
 export const registerCorporateAccount: RegisterCorporateAccount = async (data: CorporateRegistrationData): Promise<CorporateRegisterResult> => {
+  const currentSession = getSession();
+  if (currentSession) {
+    return {
+      ok: false,
+      reason: "unavailable",
+      message: currentSession.conta.tipo === "PF"
+        ? "Você já está conectado em uma conta de Pessoa Física. Saia da sua conta antes de cadastrar uma empresa."
+        : "Você já possui uma sessão ativa. Saia da sua conta antes de iniciar um novo cadastro corporativo.",
+    };
+  }
+
   if (MOCK_API) {
     await mockDelay();
     const contaId = `mock-${data.access.email}`;

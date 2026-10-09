@@ -9,6 +9,7 @@ import {
 } from "../components/PlaceholderCards";
 import { guideSteps, routes } from "../data/site";
 import type { OpenDevelopmentDialog } from "../data/site";
+import { useAuth } from "../context/authContext";
 import "./HomePage.css";
 
 export function HomePage({
@@ -16,6 +17,7 @@ export function HomePage({
 }: {
   onOpenDialog: OpenDevelopmentDialog;
 }) {
+  const { session } = useAuth();
   return (
     <>
       <section className="hero" aria-labelledby="hero-title">
@@ -47,13 +49,19 @@ export function HomePage({
                 Explorar o mercado
                 <Icon name="arrow" />
               </Link>
-              <button
-                className="button button--outline-light"
-                type="button"
-                onClick={() => onOpenDialog("registration")}
-              >
-                Cadastre-se
-              </button>
+              {session ? (
+                <Link className="button button--outline-light" to={routes.profile}>
+                  Meu perfil
+                </Link>
+              ) : (
+                <button
+                  className="button button--outline-light"
+                  type="button"
+                  onClick={() => onOpenDialog("registration")}
+                >
+                  Cadastre-se
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -194,14 +202,33 @@ export function HomePage({
             Aproxime sua produção de novos compradores.
             <br />O próximo capítulo da sua safra começa com uma conexão.
           </p>
-          <button
-            className="button button--primary"
-            type="button"
-            onClick={() => onOpenDialog("sellerRegistration")}
-          >
-            Sou vendedor — quero me cadastrar
-            <Icon name="arrow" />
-          </button>
+          {session ? (
+            session.conta.tipo === "PJ" ? (
+              <Link className="button button--primary" to={routes.profile}>
+                Acessar perfil corporativo
+                <Icon name="arrow" />
+              </Link>
+            ) : session.vendedorEstado === "HABILITADO" ? (
+              <Link className="button button--primary" to={`${routes.profile}?aba=produtor`}>
+                Minha vitrine de produtor
+                <Icon name="arrow" />
+              </Link>
+            ) : (
+              <Link className="button button--primary" to={routes.sellerUpgrade}>
+                Habilitar vendas
+                <Icon name="arrow" />
+              </Link>
+            )
+          ) : (
+            <button
+              className="button button--primary"
+              type="button"
+              onClick={() => onOpenDialog("sellerRegistration")}
+            >
+              Sou vendedor — quero me cadastrar
+              <Icon name="arrow" />
+            </button>
+          )}
         </div>
       </section>
     </>

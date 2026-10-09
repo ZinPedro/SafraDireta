@@ -5,6 +5,7 @@ import registrationImage from "../../assets/images/registration-landscape.jpeg";
 import { Icon } from "../../components/Icon";
 import { routes } from "../../data/site";
 import type { OpenDevelopmentDialog } from "../../data/site";
+import { useAuth } from "../../context/authContext";
 import { formatPhone, registerAccount, toRegistrationRequest, validateRegistration } from "./registration";
 import type { RegisterAccount, RegistrationErrors, RegistrationValues } from "./registration";
 import { PostRegistrationDialog } from "./PostRegistrationDialog";
@@ -26,6 +27,7 @@ export function RegistrationPage({ onOpenDialog, onRegister = registerAccount }:
   onOpenDialog: OpenDevelopmentDialog;
   onRegister?: RegisterAccount;
 }) {
+  const { session, signOut } = useAuth();
   const [values, setValues] = useState(initialValues);
   const [errors, setErrors] = useState<RegistrationErrors>({});
   const [showPassword, setShowPassword] = useState(false);
@@ -92,6 +94,70 @@ export function RegistrationPage({ onOpenDialog, onRegister = registerAccount }:
     }
   }
 
+  if (session && status !== "registered") {
+    const isPj = session.conta.tipo === "PJ";
+    return (
+      <section className="registration" aria-labelledby="registration-connected-title">
+        <aside className="registration__visual" aria-label="SafraDireta">
+          <img src={registrationImage} alt="" width="1792" height="2400" fetchPriority="high" />
+          <div className="registration__brand">
+            <Link to={routes.home}>SafraDireta</Link>
+            <p>Conectando quem produz a quem compra.</p>
+          </div>
+        </aside>
+        <div className="registration__content">
+          <nav className="registration__navigation" aria-label="Navegação do cadastro">
+            <Link to={routes.profile} className="registration__back">
+              <Icon name="back" /> Voltar ao perfil
+            </Link>
+            <Link to={routes.home} className="icon-button" aria-label="Fechar e voltar ao início">
+              <Icon name="close" />
+            </Link>
+          </nav>
+          <div className="registration__body corporate__done">
+            <header className="registration__heading">
+              <p className="eyebrow">Conta ativa</p>
+              <h1 id="registration-connected-title" tabIndex={-1}>
+                {isPj ? "Você já possui uma conta corporativa (PJ)" : "Você já está conectado"}
+              </h1>
+              <p>
+                {isPj ? (
+                  <>
+                    Você está conectado na conta da empresa: <strong>{session.conta.nome}</strong> ({session.conta.email}).
+                    No SafraDireta, cada conta é exclusiva — <strong>ou Pessoa Física ou Pessoa Jurídica</strong>.
+                    Para criar uma conta pessoal (PF), você precisa sair da sua conta PJ primeiro.
+                  </>
+                ) : (
+                  <>
+                    Você já está conectado como <strong>{session.conta.nome}</strong> ({session.conta.email}).
+                    Para criar um novo cadastro, encerre a sessão atual primeiro.
+                  </>
+                )}
+              </p>
+            </header>
+            <div className="corporate__actions">
+              <button
+                type="button"
+                className="button button--primary registration__submit"
+                onClick={async () => {
+                  await signOut();
+                }}
+              >
+                Sair da conta e iniciar novo cadastro
+              </button>
+              <Link className="button button--outline" to={routes.profile}>
+                Continuar no Meu Perfil
+              </Link>
+              <Link className="corporate__secondary" to={routes.home}>
+                Ir para a Página Inicial
+              </Link>
+            </div>
+          </div>
+        </div>
+      </section>
+    );
+  }
+
   if (status === "registered") {
     return (
       <section className="registration" aria-labelledby="registration-title">
@@ -114,7 +180,10 @@ export function RegistrationPage({ onOpenDialog, onRegister = registerAccount }:
               </p>
             </header>
             <div className="corporate__actions">
-              <Link className="button registration__submit" to={returnTo !== routes.home ? returnTo : routes.market}>
+              <Link className="button registration__submit" to={routes.profile}>
+                Meu Perfil
+              </Link>
+              <Link className="button button--outline" to={returnTo !== routes.home ? returnTo : routes.market}>
                 {returnTo !== routes.home ? "Continuar navegando" : "Explorar o Mercado"}
               </Link>
               <Link className="corporate__secondary" to={routes.home}>
@@ -123,6 +192,7 @@ export function RegistrationPage({ onOpenDialog, onRegister = registerAccount }:
             </div>
           </div>
         </div>
+        <PostRegistrationDialog open={welcomeOpen} onClose={() => setWelcomeOpen(false)} />
       </section>
     );
   }

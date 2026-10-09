@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import { routes } from "../data/site";
 import type { OpenDevelopmentDialog } from "../data/site";
+import { useAuth } from "../context/authContext";
 import { Icon } from "./Icon";
 
 const currentYear = new Date().getFullYear();
@@ -10,6 +11,7 @@ export function Footer({
 }: {
   onOpenDialog: OpenDevelopmentDialog;
 }) {
+  const { session } = useAuth();
   return (
     <footer className="site-footer">
       <div className="container">
@@ -36,18 +38,32 @@ export function Footer({
           </nav>
           <nav aria-label="Sua jornada">
             <h2>Sua jornada</h2>
-            <button type="button" onClick={() => onOpenDialog("registration")}>
-              Criar uma conta
-            </button>
-            <button
-              type="button"
-              onClick={() => onOpenDialog("sellerRegistration")}
-            >
-              Quero vender
-            </button>
-            <button type="button" onClick={() => onOpenDialog("login")}>
-              Acessar minha conta
-            </button>
+            {session ? (
+              <>
+                <Link to={routes.profile}>Meu perfil</Link>
+                {session.conta.tipo !== "PJ" && (
+                  <Link to={session.vendedorEstado === "HABILITADO" ? `${routes.profile}?aba=produtor` : routes.sellerUpgrade}>
+                    {session.vendedorEstado === "HABILITADO" ? "Área do produtor" : "Habilitar vendas"}
+                  </Link>
+                )}
+                <Link to={routes.market}>Mercado</Link>
+              </>
+            ) : (
+              <>
+                <button type="button" onClick={() => onOpenDialog("registration")}>
+                  Criar uma conta
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onOpenDialog("sellerRegistration")}
+                >
+                  Quero vender
+                </button>
+                <button type="button" onClick={() => onOpenDialog("login")}>
+                  Acessar minha conta
+                </button>
+              </>
+            )}
           </nav>
           <nav aria-label="Ajuda">
             <h2>Vamos conversar</h2>

@@ -9,6 +9,7 @@ import { LoginDialog } from "./features/login/LoginDialog";
 import { Header } from "./components/Header";
 import { Footer } from "./components/Footer";
 import { DevelopmentDialog } from "./components/DevelopmentDialog";
+import { LegalDialog } from "./components/LegalDialog";
 import { HomePage } from "./pages/HomePage";
 import { DevelopmentPage } from "./pages/DevelopmentPage";
 import { routes } from "./data/site";
@@ -130,8 +131,21 @@ function Site() {
           if (!isRegistrationPage) openFeature("registration");
         }}
       />}
+      {(dialogFeature === "terms" || dialogFeature === "privacy") && (
+        <LegalDialog
+          key={dialogFeature}
+          initialTab={dialogFeature}
+          onClose={() => setDialogFeature(null)}
+        />
+      )}
       <DevelopmentDialog
-        feature={dialogFeature === "login" ? null : dialogFeature}
+        feature={
+          dialogFeature === "login" ||
+          dialogFeature === "terms" ||
+          dialogFeature === "privacy"
+            ? null
+            : dialogFeature
+        }
         onClose={() => setDialogFeature(null)}
       />
     </>

@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
 import { routes } from "../../data/site";
+import "../corporate-registration/CorporateRegistrationPage.css";
 import "../seller-upgrade/SellerUpgradePage.css";
 
 export function PostRegistrationDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
@@ -29,10 +30,13 @@ export function PostRegistrationDialog({ open, onClose }: { open: boolean; onClo
       onCancel={(event) => { event.preventDefault(); onClose(); }}
     >
       <h2 id="post-registration-title" ref={titleRef} tabIndex={-1}>Sua conta foi criada!</h2>
-      <p id="post-registration-description">Como você quer começar? Você pode habilitar a venda agora ou a qualquer momento, na mesma conta.</p>
+      <p id="post-registration-description">Como você quer começar? Acesse os dados da sua conta ou comece a explorar as ofertas no mercado.</p>
       <div className="post-registration-dialog__actions">
-        <Link className="button" to={routes.sellerUpgrade} onClick={onClose}>Habilitar Vendas</Link>
+        <Link className="button" to={routes.profile} onClick={onClose}>Meu Perfil</Link>
         <Link className="button button--outline" to={routes.market} onClick={onClose}>Explorar o Mercado</Link>
+        <Link className="corporate__secondary" to={routes.sellerUpgrade} onClick={onClose} style={{ textAlign: "center", marginTop: "var(--space-2)" }}>
+          Deseja comercializar lotes? Habilitar vendas
+        </Link>
       </div>
     </dialog>
   );

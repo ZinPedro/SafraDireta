@@ -200,4 +200,17 @@ def test_editar_perfil_vitrine_vendedor(client, criar_pf):
     assert perfil["seller"]["city"] == "Campinas"
     assert perfil["seller"]["categories"] == ["cafe", "milho"]
     assert perfil["seller"]["hasOwnTransport"] is True
+    assert perfil["seller"]["publicPhone"] == "+5519988887777"
+
+    # Remove o telefone público enviando vazio
+    r_limpar = client.patch(
+        "/api/perfil",
+        headers=pf["headers"],
+        json={"seller": {"publicPhone": ""}},
+    )
+    assert r_limpar.status_code == 200
+    assert r_limpar.json()["seller"]["publicPhone"] == ""
+
+    perfil_sem_tel = client.get("/api/perfil", headers=pf["headers"]).json()
+    assert perfil_sem_tel["seller"]["publicPhone"] == ""
 

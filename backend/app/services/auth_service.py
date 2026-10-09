@@ -606,14 +606,6 @@ def editar_perfil(
             campos_modificados.append("address")
 
         if seller_data:
-            farm_name = seller_data.get("farm_name")
-            bio = seller_data.get("bio")
-            city = seller_data.get("city")
-            state = seller_data.get("state")
-            public_phone = seller_data.get("public_phone")
-            categories = seller_data.get("categories")
-            has_own_transport = seller_data.get("has_own_transport")
-
             hab = conn.execute(
                 """
                 SELECT conta_id
@@ -625,30 +617,42 @@ def editar_perfil(
             ).fetchone()
 
             if hab is not None:
-                conn.execute(
-                    """
-                    UPDATE safradireta.habilitacao_vendedor
-                    SET nome_propriedade = COALESCE(%s, nome_propriedade),
-                        bio = COALESCE(%s, bio),
-                        municipio = COALESCE(%s, municipio),
-                        uf = COALESCE(%s, uf),
-                        telefone_comercial = COALESCE(%s, telefone_comercial),
-                        categorias = COALESCE(%s, categorias),
-                        possui_transportadora = COALESCE(%s, possui_transportadora)
-                    WHERE conta_id = %s
-                    """,
-                    (
-                        farm_name,
-                        bio,
-                        city,
-                        state,
-                        public_phone,
-                        categories,
-                        has_own_transport,
-                        atual["conta_id"],
-                    ),
-                )
-                campos_modificados.append("seller")
+                updates = []
+                params = []
+
+                if "farm_name" in seller_data and seller_data["farm_name"] is not None:
+                    updates.append("nome_propriedade = %s")
+                    params.append(seller_data["farm_name"])
+                if "bio" in seller_data:
+                    updates.append("bio = %s")
+                    params.append(seller_data["bio"])
+                if "city" in seller_data and seller_data["city"] is not None:
+                    updates.append("municipio = %s")
+                    params.append(seller_data["city"])
+                if "state" in seller_data and seller_data["state"] is not None:
+                    updates.append("uf = %s")
+                    params.append(seller_data["state"])
+                if "public_phone" in seller_data:
+                    updates.append("telefone_comercial = %s")
+                    params.append(seller_data["public_phone"])
+                if "categories" in seller_data and seller_data["categories"] is not None:
+                    updates.append("categorias = %s")
+                    params.append(seller_data["categories"])
+                if "has_own_transport" in seller_data and seller_data["has_own_transport"] is not None:
+                    updates.append("possui_transportadora = %s")
+                    params.append(seller_data["has_own_transport"])
+
+                if updates:
+                    params.append(atual["conta_id"])
+                    conn.execute(
+                        f"""
+                        UPDATE safradireta.habilitacao_vendedor
+                        SET {', '.join(updates)}
+                        WHERE conta_id = %s
+                        """,
+                        tuple(params),
+                    )
+                    campos_modificados.append("seller")
 
         _auditar(
             conn,

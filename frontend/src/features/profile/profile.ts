@@ -205,7 +205,7 @@ export const loadUserProfile: LoadUserProfile = async () => {
 const PATCH_FIELD_MAP: Record<string, string> = {
   name: "nome",
   phone: "telefone",
-  cpf: "cpfCnpj",
+  cpf: "cpf",
   avatarUrl: "avatarUrl",
 };
 
@@ -237,6 +237,7 @@ export const updateUserProfile: UpdateUserProfile = async (data) => {
   const body: Record<string, unknown> = {};
   if (data.account?.nome) body.name = data.account.nome;
   if (data.account?.telefone) body.phone = data.account.telefone;
+  if (data.account?.cpfCnpj?.trim()) body.cpf = data.account.cpfCnpj.trim();
   if (data.account?.avatarUrl && !data.account.avatarUrl.startsWith("data:") && data.account.avatarUrl.length <= 500) {
     body.avatarUrl = data.account.avatarUrl;
   }

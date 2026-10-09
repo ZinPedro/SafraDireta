@@ -185,6 +185,13 @@
   font-size: 1.5rem;
   overflow-wrap: anywhere;
 }
+.profile-preview__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-4);
+  margin-top: var(--space-1);
+}
 .profile-preview__location {
   display: flex;
   align-items: center;

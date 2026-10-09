@@ -2,7 +2,7 @@ import farmImage from "../../../assets/images/farm-landscape.jpeg";
 import { Avatar } from "../../../components/Avatar";
 import { Icon } from "../../../components/Icon";
 import { useAuth } from "../../../context/authContext";
-import { sellerCategories } from "../profile";
+import { formatPhone, phoneDigits, sellerCategories } from "../profile";
 import type { UserProfileData } from "../profile";
 
 export function PublicPreviewTab({ profile }: { profile: UserProfileData }) {
@@ -10,6 +10,7 @@ export function PublicPreviewTab({ profile }: { profile: UserProfileData }) {
   const seller = profile.seller;
   if (!seller) return null;
   const labels = sellerCategories.filter((c) => seller.categories.includes(c.value));
+  const formattedPhone = seller.publicPhone ? formatPhone(phoneDigits(seller.publicPhone)) : null;
 
   return (
     <article className="profile-preview" aria-label="Prévia da vitrine pública">
@@ -22,7 +23,12 @@ export function PublicPreviewTab({ profile }: { profile: UserProfileData }) {
             <div>
               <span className="profile-preview__badge"><Icon name="leaf" /> Produtor Habilitado</span>
               <h2>{seller.farmName || "Nome da propriedade"}</h2>
-              <p className="profile-preview__location"><Icon name="location" /> {seller.city && seller.state ? `${seller.city} — ${seller.state}` : "Localização não informada"}</p>
+              <div className="profile-preview__meta">
+                <p className="profile-preview__location"><Icon name="location" /> {seller.city && seller.state ? `${seller.city} — ${seller.state}` : "Localização não informada"}</p>
+                {formattedPhone && (
+                  <p className="profile-preview__location"><Icon name="phone" /> {formattedPhone}</p>
+                )}
+              </div>
             </div>
           </div>
           <h3>Sobre a fazenda</h3>
@@ -33,7 +39,7 @@ export function PublicPreviewTab({ profile }: { profile: UserProfileData }) {
             </ul>
           )}
           <button type="button" className="button registration__submit profile-preview__contact" disabled aria-disabled="true">
-            Falar com o produtor (simulado)
+            {formattedPhone ? `Falar com o produtor (${formattedPhone})` : "Falar com o produtor (simulado)"}
           </button>
         </div>
       </div>

@@ -7,6 +7,10 @@ export const routes = {
   market: "/mercado",
   producers: "/produtores",
   guide: "/guia",
+  myAds: "/meus-anuncios",
+  createAd: "/anunciar",
+  adDetail: "/anuncios/:id",
+  producerProfile: (id: string) => `/produtor/${id}`,
 } as const;
 
 // Categorias de navegação. Os destaques da home serão definidos pelo mercado.

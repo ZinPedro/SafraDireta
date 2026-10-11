@@ -12,6 +12,11 @@ import { DevelopmentDialog } from "./components/DevelopmentDialog";
 import { LegalDialog } from "./components/LegalDialog";
 import { HomePage } from "./pages/HomePage";
 import { DevelopmentPage } from "./pages/DevelopmentPage";
+import { MarketPage } from "./features/ads/MarketPage";
+import { AnimalAdCreatePage } from "./features/ads/AnimalAdCreatePage";
+import { MyAdsPage } from "./features/ads/MyAdsPage";
+import { AdDetailPage } from "./features/ads/AdDetailPage";
+import { PublicProducerProfilePage } from "./features/ads/PublicProducerProfilePage";
 import { routes } from "./data/site";
 import type { DevelopmentFeature } from "./data/site";
 import "./App.css";
@@ -22,7 +27,9 @@ const pageTitles: Record<string, string> = {
   [routes.sellerUpgrade]: "Habilitar vendedor | SafraDireta",
   [routes.profile]: "Meu perfil | SafraDireta",
   [routes.home]: "SafraDireta — Do campo à negociação",
-  [routes.market]: "Mercado | SafraDireta",
+  [routes.market]: "Mercado Agropecuário | SafraDireta",
+  [routes.myAds]: "Meus Anúncios | SafraDireta",
+  [routes.createAd]: "Cadastrar Lote de Animais | SafraDireta",
   [routes.producers]: "Produtores | SafraDireta",
   [routes.guide]: "Guia do usuário | SafraDireta",
 };
@@ -76,16 +83,11 @@ function Site() {
             path={routes.home}
             element={<HomePage onOpenDialog={openFeature} />}
           />
-          <Route
-            path={routes.market}
-            element={
-              <DevelopmentPage
-                title="Um mercado cheio de possibilidades."
-                description="Estamos preparando o espaço onde você encontrará todos os lotes. Em breve, novas ofertas vão conectar o campo a bons negócios."
-                onOpenDialog={openFeature}
-              />
-            }
-          />
+          <Route path={routes.market} element={<MarketPage />} />
+          <Route path={routes.createAd} element={<AnimalAdCreatePage onOpenDialog={openFeature} />} />
+          <Route path={routes.myAds} element={<MyAdsPage onOpenDialog={openFeature} />} />
+          <Route path="/anuncios/:id" element={<AdDetailPage />} />
+          <Route path="/produtor/:id" element={<PublicProducerProfilePage />} />
           <Route
             path={routes.producers}
             element={

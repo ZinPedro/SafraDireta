@@ -1,4 +1,5 @@
-import { Link } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import heroImage from "../assets/images/harvest-sunset.jpeg";
 import sellerImage from "../assets/images/farm-landscape.jpeg";
 import { Icon } from "../components/Icon";
@@ -10,6 +11,9 @@ import {
 import { guideSteps, routes } from "../data/site";
 import type { OpenDevelopmentDialog } from "../data/site";
 import { useAuth } from "../context/authContext";
+import { listarAnunciosMercado } from "../features/ads/adsStorage";
+import type { AnimalLotAd } from "../features/ads/ads.types";
+import { SPECIES_LABELS } from "../features/ads/ads.types";
 import "./HomePage.css";
 
 export function HomePage({
@@ -18,6 +22,18 @@ export function HomePage({
   onOpenDialog: OpenDevelopmentDialog;
 }) {
   const { session } = useAuth();
+  const navigate = useNavigate();
+  const [anuncios, setAnuncios] = useState<AnimalLotAd[]>([]);
+
+  useEffect(() => {
+    let isMounted = true;
+    listarAnunciosMercado().then((res) => {
+      if (isMounted) setAnuncios(res.slice(0, 6));
+    });
+    return () => {
+      isMounted = false;
+    };
+  }, []);
   return (
     <>
       <section className="hero" aria-labelledby="hero-title">
@@ -109,9 +125,56 @@ export function HomePage({
             </span>
           </div>
           <div className="offer-grid">
-            {[1, 2, 3, 4, 5, 6].map((index) => (
-              <OfferPlaceholder key={index} index={index} />
-            ))}
+            {anuncios.length > 0
+              ? anuncios.map((anuncio) => (
+                  <article
+                    key={anuncio.id}
+                    className="offer-card offer-card--active"
+                    onClick={() => navigate(`/anuncios/${anuncio.id}`)}
+                    tabIndex={0}
+                    style={{ cursor: "pointer" }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        navigate(`/anuncios/${anuncio.id}`);
+                      }
+                    }}
+                  >
+                    <div className="offer-card__top">
+                      <span className="badge badge--success">
+                        {SPECIES_LABELS[anuncio.especie]} · {anuncio.raca}
+                      </span>
+                      <Icon name="leaf" />
+                    </div>
+                    <h3>{anuncio.titulo}</h3>
+                    <p className="offer-card__producer">{anuncio.farmName}</p>
+                    <p className="offer-card__location">
+                      <Icon name="location" />
+                      {anuncio.cidade}, {anuncio.uf}
+                    </p>
+                    <dl className="offer-card__details">
+                      <div>
+                        <dt>Quantidade</dt>
+                        <dd>{anuncio.quantidadeCabecas} cabeças</dd>
+                      </div>
+                      <div>
+                        <dt>Preço total</dt>
+                        <dd>
+                          {anuncio.precoTotal.toLocaleString("pt-BR", {
+                            style: "currency",
+                            currency: "BRL",
+                          })}
+                        </dd>
+                      </div>
+                    </dl>
+                    <button className="button button--primary button--small" type="button">
+                      Ver detalhes do lote
+                    </button>
+                  </article>
+                ))
+              : [1, 2, 3, 4, 5, 6].map((index) => (
+                  <OfferPlaceholder key={index} index={index} />
+                ))}
           </div>
           <div className="section-action">
             <Link className="button button--outline" to={routes.market}>

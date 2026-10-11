@@ -16,7 +16,8 @@
 }
 .brand {
   display: inline-flex;
-  align-items: baseline;
+  align-items: center;
+  gap: var(--space-2);
   color: var(--color-text-inverse);
   font-family: var(--font-family-heading);
   font-size: 1.875rem;
@@ -24,12 +25,19 @@
   line-height: 1.2;
   letter-spacing: -0.06em;
 }
+.brand__icon {
+  width: 1.625rem;
+  height: 1.625rem;
+  color: #52a447;
+  flex-shrink: 0;
+  display: inline-block;
+}
 .brand > span:not(.brand__label) {
   font-weight: 500;
 }
 .brand .brand__label {
   align-self: center;
-  margin-left: var(--space-3);
+  margin-left: var(--space-2);
   padding: var(--space-1) var(--space-2);
   background: var(--color-accent);
   color: #fff;

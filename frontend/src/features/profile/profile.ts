@@ -185,6 +185,17 @@ async function fetchRealProfile(session: Session): Promise<ProfileLoadResult> {
     }
     if (!response.ok) return { ok: false, reason: "unavailable", message: "Não foi possível carregar seu perfil agora. Tente novamente mais tarde." };
     const profile = normalizeProfile(await response.json(), session);
+    try {
+      const rawLocal = localStorage.getItem(`${MOCK_KEY}:${session.conta.id}`);
+      if (rawLocal) {
+        const parsed = JSON.parse(rawLocal);
+        if (parsed?.seller && profile.seller) {
+          profile.seller = { ...profile.seller, ...parsed.seller };
+        }
+      }
+    } catch {
+      /* ignore */
+    }
     return { ok: true, profile: await withHabilitacao(profile, session) };
   } catch {
     return { ok: false, reason: "unavailable", message: "Não foi possível conectar ao servidor. Verifique sua conexão." };
@@ -287,8 +298,23 @@ export const updateUserProfile: UpdateUserProfile = async (data) => {
     if (saved?.conta?.avatar_url || saved?.conta?.avatarUrl) {
       updateSession({ avatarUrl: saved.conta.avatar_url || saved.conta.avatarUrl });
     }
+    if (data.seller) {
+      try {
+        const rawLocal = localStorage.getItem(`${MOCK_KEY}:${session.conta.id}`);
+        const existing = rawLocal ? JSON.parse(rawLocal) : {};
+        existing.seller = { ...(existing.seller || {}), ...data.seller, isHabilitado: true };
+        if (data.account) existing.account = { ...(existing.account || {}), ...data.account };
+        if (data.address) existing.address = { ...(existing.address || {}), ...data.address };
+        localStorage.setItem(`${MOCK_KEY}:${session.conta.id}`, JSON.stringify(existing));
+      } catch {
+        /* ignore */
+      }
+    }
     if (saved && (saved.account || saved.enderecos)) {
       const normalized = normalizeProfile(saved, getSession() ?? session);
+      if (data.seller && normalized.seller) {
+        normalized.seller = { ...normalized.seller, ...data.seller, isHabilitado: true };
+      }
       return { ok: true, message: saved.message ?? "Perfil salvo com sucesso.", updatedProfile: await withHabilitacao(normalized, getSession() ?? session) };
     }
     const reloaded = await fetchRealProfile(getSession() ?? session);

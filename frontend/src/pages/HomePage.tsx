@@ -12,8 +12,8 @@ import { guideSteps, routes } from "../data/site";
 import type { OpenDevelopmentDialog } from "../data/site";
 import { useAuth } from "../context/authContext";
 import { listarAnunciosMercado } from "../features/ads/adsStorage";
-import type { AnimalLotAd } from "../features/ads/ads.types";
-import { SPECIES_LABELS } from "../features/ads/ads.types";
+import { obterTagsAnuncio } from "../features/ads/ads.types";
+import type { MarketplaceAd } from "../features/ads/ads.types";
 import "./HomePage.css";
 
 export function HomePage({
@@ -23,7 +23,7 @@ export function HomePage({
 }) {
   const { session } = useAuth();
   const navigate = useNavigate();
-  const [anuncios, setAnuncios] = useState<AnimalLotAd[]>([]);
+  const [anuncios, setAnuncios] = useState<MarketplaceAd[]>([]);
 
   useEffect(() => {
     let isMounted = true;
@@ -126,52 +126,59 @@ export function HomePage({
           </div>
           <div className="offer-grid">
             {anuncios.length > 0
-              ? anuncios.map((anuncio) => (
-                  <article
-                    key={anuncio.id}
-                    className="offer-card offer-card--active"
-                    onClick={() => navigate(`/anuncios/${anuncio.id}`)}
-                    tabIndex={0}
-                    style={{ cursor: "pointer" }}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" || e.key === " ") {
-                        e.preventDefault();
-                        navigate(`/anuncios/${anuncio.id}`);
-                      }
-                    }}
-                  >
-                    <div className="offer-card__top">
-                      <span className="badge badge--success">
-                        {SPECIES_LABELS[anuncio.especie]} · {anuncio.raca}
-                      </span>
-                      <Icon name="leaf" />
-                    </div>
-                    <h3>{anuncio.titulo}</h3>
-                    <p className="offer-card__producer">{anuncio.farmName}</p>
-                    <p className="offer-card__location">
-                      <Icon name="location" />
-                      {anuncio.cidade}, {anuncio.uf}
-                    </p>
-                    <dl className="offer-card__details">
-                      <div>
-                        <dt>Quantidade</dt>
-                        <dd>{anuncio.quantidadeCabecas} cabeças</dd>
+              ? anuncios.map((anuncio) => {
+                  const [tag1, tag2] = obterTagsAnuncio(anuncio);
+                  return (
+                    <article
+                      key={anuncio.id}
+                      className="offer-card offer-card--active"
+                      onClick={() => navigate(`/anuncios/${anuncio.id}`)}
+                      tabIndex={0}
+                      style={{ cursor: "pointer" }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          navigate(`/anuncios/${anuncio.id}`);
+                        }
+                      }}
+                    >
+                      <div className="offer-card__top">
+                        <span className="badge badge--success">
+                          {tag1} · {tag2}
+                        </span>
+                        <Icon name="leaf" />
                       </div>
-                      <div>
-                        <dt>Preço total</dt>
-                        <dd>
-                          {anuncio.precoTotal.toLocaleString("pt-BR", {
-                            style: "currency",
-                            currency: "BRL",
-                          })}
-                        </dd>
-                      </div>
-                    </dl>
-                    <button className="button button--primary button--small" type="button">
-                      Ver detalhes do lote
-                    </button>
-                  </article>
-                ))
+                      <h3>{anuncio.titulo}</h3>
+                      <p className="offer-card__producer">{anuncio.farmName}</p>
+                      <p className="offer-card__location">
+                        <Icon name="location" />
+                        {anuncio.cidade}, {anuncio.uf}
+                      </p>
+                      <dl className="offer-card__details">
+                        <div>
+                          <dt>{anuncio.categoria === "GRAOS" ? "Volume" : "Quantidade"}</dt>
+                          <dd>
+                            {anuncio.categoria === "GRAOS"
+                              ? `${anuncio.quantidadeSacas.toLocaleString("pt-BR")} sacas`
+                              : `${anuncio.quantidadeCabecas} cabeças`}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt>Preço total</dt>
+                          <dd>
+                            {anuncio.precoTotal.toLocaleString("pt-BR", {
+                              style: "currency",
+                              currency: "BRL",
+                            })}
+                          </dd>
+                        </div>
+                      </dl>
+                      <button className="button button--primary button--small" type="button">
+                        Ver detalhes do lote
+                      </button>
+                    </article>
+                  );
+                })
               : [1, 2, 3, 4, 5, 6].map((index) => (
                   <OfferPlaceholder key={index} index={index} />
                 ))}

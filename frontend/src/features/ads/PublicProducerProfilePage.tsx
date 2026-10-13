@@ -5,7 +5,8 @@ import { Icon } from "../../components/Icon";
 import { routes } from "../../data/site";
 import farmImage from "../../assets/images/farm-landscape.jpeg";
 import { formatPhone, phoneDigits } from "../profile/profile";
-import type { AnimalLotAd } from "./ads.types";
+import { GRAIN_PACKAGING_LABELS, obterTagsAnuncio } from "./ads.types";
+import type { MarketplaceAd } from "./ads.types";
 import { listarMeusAnuncios, obterPerfilProdutorPublico } from "./adsStorage";
 import type { PublicProducerProfile } from "./adsStorage";
 import "./ads.css";
@@ -14,7 +15,7 @@ export function PublicProducerProfilePage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [profile, setProfile] = useState<PublicProducerProfile | null>(null);
-  const [ads, setAds] = useState<AnimalLotAd[]>([]);
+  const [ads, setAds] = useState<MarketplaceAd[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -110,7 +111,7 @@ export function PublicProducerProfilePage() {
 
             {/* Biografia e Manejo */}
             <div className="producer-about-section">
-              <h2 className="producer-about-title">Sobre a Propriedade e Manejo</h2>
+              <h2 className="producer-about-title">Sobre a Propriedade e Produção</h2>
               <p className="producer-about-text">{profile.bio}</p>
 
               {profile.categories.length > 0 && (
@@ -156,7 +157,7 @@ export function PublicProducerProfilePage() {
                 Lotes Ativos no Mercado
               </h2>
               <p className="producer-lots-subtitle">
-                Animais disponíveis para negociação direta com {profile.farmName}
+                Ofertas disponíveis para negociação direta com {profile.farmName}
               </p>
             </div>
             <span className="producer-lots-count">
@@ -175,76 +176,113 @@ export function PublicProducerProfilePage() {
             </div>
           ) : (
             <div className="market-grid">
-              {ads.map((anuncio) => (
-                <article
-                  key={anuncio.id}
-                  className="market-card"
-                  onClick={() => navigate(`/anuncios/${anuncio.id}`)}
-                  tabIndex={0}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault();
-                      navigate(`/anuncios/${anuncio.id}`);
-                    }
-                  }}
-                >
-                  <div className="market-card__thumb">
-                    <img src={anuncio.imagemUrl} alt={anuncio.titulo} />
-                    <span className="market-card__tag" title={anuncio.raca}>
-                      {anuncio.raca}
-                    </span>
-                  </div>
-
-                  <div className="market-card__body">
-                    <h3 className="market-card__title">{anuncio.titulo}</h3>
-                    <div className="market-card__location">
-                      <Icon name="location" /> {anuncio.cidade} — {anuncio.uf}
-                    </div>
-
-                    <dl className="market-card__specs">
-                      <div>
-                        <dt>Quantidade</dt>
-                        <dd>{anuncio.quantidadeCabecas} cabeças</dd>
-                      </div>
-                      <div>
-                        <dt>Peso Médio</dt>
-                        <dd>{anuncio.pesoMedioArroba} @ ({anuncio.pesoMedioKg} kg)</dd>
-                      </div>
-                      <div>
-                        <dt>Carga Total</dt>
-                        <dd>{anuncio.pesoTotalArroba.toLocaleString("pt-BR")} @</dd>
-                      </div>
-                      <div>
-                        <dt>Finalidade</dt>
-                        <dd>Boi Gordo</dd>
-                      </div>
-                    </dl>
-
-                    <div className="market-card__footer">
-                      <div className="market-card__price-box">
-                        <span className="market-card__price-label">Preço Total</span>
-                        <strong className="market-card__price-val">
-                          {anuncio.precoTotal.toLocaleString("pt-BR", {
-                            style: "currency",
-                            currency: "BRL",
-                          })}
-                        </strong>
-                        <span className="market-card__price-sub">
-                          ({anuncio.precoPorCabeca.toLocaleString("pt-BR", {
-                            style: "currency",
-                            currency: "BRL",
-                          })}{" "}
-                          / cabeça)
+              {ads.map((anuncio) => {
+                const [tag1, tag2] = obterTagsAnuncio(anuncio);
+                return (
+                  <article
+                    key={anuncio.id}
+                    className="market-card"
+                    onClick={() => navigate(`/anuncios/${anuncio.id}`)}
+                    tabIndex={0}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        navigate(`/anuncios/${anuncio.id}`);
+                      }
+                    }}
+                  >
+                    <div className="market-card__thumb">
+                      <img src={anuncio.imagemUrl} alt={anuncio.titulo} />
+                      <div className="market-card__tags">
+                        <span className="market-card__tag market-card__tag--primary" title={tag1}>
+                          {tag1}
+                        </span>
+                        <span className="market-card__tag market-card__tag--secondary" title={tag2}>
+                          {tag2}
                         </span>
                       </div>
-
-                      <span className="market-card__btn-view">
-                        Ver Lote <Icon name="arrow" />
-                      </span>
                     </div>
-                  </div>
-                </article>
-              ))}
+
+                    <div className="market-card__body">
+                      <h3 className="market-card__title">{anuncio.titulo}</h3>
+                      <div className="market-card__location">
+                        <Icon name="location" /> {anuncio.cidade} — {anuncio.uf}
+                      </div>
+
+                      {anuncio.categoria === "GRAOS" ? (
+                        <dl className="market-card__specs">
+                          <div>
+                            <dt>Volume</dt>
+                            <dd>{anuncio.quantidadeSacas.toLocaleString("pt-BR")} sacas</dd>
+                          </div>
+                          <div>
+                            <dt>Peso Total</dt>
+                            <dd>
+                              {anuncio.pesoTotalToneladas} ton ({anuncio.pesoTotalKg.toLocaleString("pt-BR")} kg)
+                            </dd>
+                          </div>
+                          <div>
+                            <dt>Safra</dt>
+                            <dd>{anuncio.safra}</dd>
+                          </div>
+                          <div>
+                            <dt>Embalagem</dt>
+                            <dd>{GRAIN_PACKAGING_LABELS[anuncio.embalagem]}</dd>
+                          </div>
+                        </dl>
+                      ) : (
+                        <dl className="market-card__specs">
+                          <div>
+                            <dt>Quantidade</dt>
+                            <dd>{anuncio.quantidadeCabecas} cabeças</dd>
+                          </div>
+                          <div>
+                            <dt>Peso Médio</dt>
+                            <dd>
+                              {anuncio.pesoMedioArroba} @ ({anuncio.pesoMedioKg} kg)
+                            </dd>
+                          </div>
+                          <div>
+                            <dt>Carga Total</dt>
+                            <dd>{anuncio.pesoTotalArroba.toLocaleString("pt-BR")} @</dd>
+                          </div>
+                          <div>
+                            <dt>Finalidade</dt>
+                            <dd>Boi Gordo</dd>
+                          </div>
+                        </dl>
+                      )}
+
+                      <div className="market-card__footer">
+                        <div className="market-card__price-box">
+                          <span className="market-card__price-label">Preço Total</span>
+                          <strong className="market-card__price-val">
+                            {anuncio.precoTotal.toLocaleString("pt-BR", {
+                              style: "currency",
+                              currency: "BRL",
+                            })}
+                          </strong>
+                          <span className="market-card__price-sub">
+                            {anuncio.categoria === "GRAOS"
+                              ? `(${anuncio.precoPorSaca.toLocaleString("pt-BR", {
+                                  style: "currency",
+                                  currency: "BRL",
+                                })} / saca)`
+                              : `(${anuncio.precoPorCabeca.toLocaleString("pt-BR", {
+                                  style: "currency",
+                                  currency: "BRL",
+                                })} / cabeça)`}
+                          </span>
+                        </div>
+
+                        <span className="market-card__btn-view">
+                          Ver Lote <Icon name="arrow" />
+                        </span>
+                      </div>
+                    </div>
+                  </article>
+                );
+              })}
             </div>
           )}
         </section>

@@ -5,9 +5,9 @@ import { routes } from "../../data/site";
 import type { OpenDevelopmentDialog } from "../../data/site";
 import { AccessRestricted } from "../../components/AccessRestricted";
 import { Icon } from "../../components/Icon";
-import type { AnimalLotAd } from "./ads.types";
+import { GRAIN_PACKAGING_LABELS, obterTagsAnuncio } from "./ads.types";
+import type { MarketplaceAd } from "./ads.types";
 import { listarMeusAnuncios } from "./adsStorage";
-import { SPECIES_LABELS } from "./ads.types";
 import "./ads.css";
 
 interface MyAdsPageProps {
@@ -17,7 +17,7 @@ interface MyAdsPageProps {
 export function MyAdsPage({ onOpenDialog }: MyAdsPageProps) {
   const { session } = useAuth();
   const navigate = useNavigate();
-  const [anuncios, setAnuncios] = useState<AnimalLotAd[]>([]);
+  const [anuncios, setAnuncios] = useState<MarketplaceAd[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -41,7 +41,7 @@ export function MyAdsPage({ onOpenDialog }: MyAdsPageProps) {
     return (
       <AccessRestricted
         title="Área restrita para produtores habilitados"
-        description="Acesse o painel dos seus lotes de animais completando o cadastro de vendedor na sua conta."
+        description="Acesse o painel dos seus lotes de animais, grãos ou café completando o cadastro de vendedor na sua conta."
         onOpenLogin={() => onOpenDialog?.("login")}
         onOpenRegister={() => onOpenDialog?.("registration")}
       />
@@ -57,7 +57,7 @@ export function MyAdsPage({ onOpenDialog }: MyAdsPageProps) {
             <p className="eyebrow">Área do Produtor</p>
             <h1 className="my-ads-title">Meus Anúncios</h1>
             <p className="my-ads-subtitle">
-              Acompanhe seus lotes anunciados e ofertas disponíveis no mercado.
+              Acompanhe seus lotes de gado, grãos e café anunciados no mercado.
             </p>
           </div>
           <div className="my-ads-header__actions">
@@ -80,7 +80,7 @@ export function MyAdsPage({ onOpenDialog }: MyAdsPageProps) {
             </div>
             <h2>Você ainda não possui anúncios publicados</h2>
             <p>
-              Publique seu primeiro lote de animais e conecte sua produção a compradores e indústrias em todo o Brasil.
+              Publique seu primeiro lote de boi gordo, grãos ou café e conecte sua produção a compradores, cooperativas e indústrias em todo o Brasil.
             </p>
             <Link to={routes.createAd} className="button button--primary button--large">
               + Criar Primeiro Anúncio
@@ -88,70 +88,110 @@ export function MyAdsPage({ onOpenDialog }: MyAdsPageProps) {
           </div>
         ) : (
           <div className="my-ads-grid">
-            {anuncios.map((anuncio) => (
-              <article
-                key={anuncio.id}
-                className="my-ad-card"
-                onClick={() => navigate(`/anuncios/${anuncio.id}`)}
-                tabIndex={0}
-                role="button"
-                aria-label={`Ver detalhes do anúncio ${anuncio.titulo}`}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    navigate(`/anuncios/${anuncio.id}`);
-                  }
-                }}
-              >
-                <div className="my-ad-card__thumb">
-                  <img src={anuncio.imagemUrl} alt={anuncio.titulo} loading="lazy" />
-                  <span className="my-ad-card__status-badge my-ad-card__status-badge--active">
-                    Ativo no Mercado
-                  </span>
-                </div>
-                <div className="my-ad-card__content">
-                  <div className="my-ad-card__category-tag">
-                    {SPECIES_LABELS[anuncio.especie]} · {anuncio.raca}
-                  </div>
-                  <h3 className="my-ad-card__title">{anuncio.titulo}</h3>
-
-                  <div className="my-ad-card__metrics">
-                    <div>
-                      <span className="my-ad-card__metric-label">Quantidade</span>
-                      <strong>{anuncio.quantidadeCabecas} cabeças</strong>
+            {anuncios.map((anuncio) => {
+              const [tag1, tag2] = obterTagsAnuncio(anuncio);
+              return (
+                <article
+                  key={anuncio.id}
+                  className="my-ad-card"
+                  onClick={() => navigate(`/anuncios/${anuncio.id}`)}
+                  tabIndex={0}
+                  role="button"
+                  aria-label={`Ver detalhes do anúncio ${anuncio.titulo}`}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      navigate(`/anuncios/${anuncio.id}`);
+                    }
+                  }}
+                >
+                  <div className="my-ad-card__thumb">
+                    <img src={anuncio.imagemUrl} alt={anuncio.titulo} loading="lazy" />
+                    <div className="market-card__tags">
+                      <span className="market-card__tag market-card__tag--primary" title={tag1}>
+                        {tag1}
+                      </span>
+                      <span className="market-card__tag market-card__tag--secondary" title={tag2}>
+                        {tag2}
+                      </span>
                     </div>
-                    <div>
-                      <span className="my-ad-card__metric-label">Média / Cabeça</span>
-                      <strong>{anuncio.pesoMedioArroba} @ ({anuncio.pesoMedioKg} kg)</strong>
+                    <span className="my-ad-card__status-badge my-ad-card__status-badge--active">
+                      Ativo no Mercado
+                    </span>
+                  </div>
+                  <div className="my-ad-card__content">
+                    <div className="my-ad-card__category-tag">
+                      {tag1} · {tag2}
                     </div>
-                  </div>
+                    <h3 className="my-ad-card__title">{anuncio.titulo}</h3>
 
-                  <div className="my-ad-card__location">
-                    <Icon name="location" />
-                    <span>{anuncio.cidade}, {anuncio.uf}</span>
-                  </div>
+                    {anuncio.categoria === "GRAOS" ? (
+                      <div className="my-ad-card__metrics">
+                        <div>
+                          <span className="my-ad-card__metric-label">Volume</span>
+                          <strong>
+                            {anuncio.quantidadeSacas.toLocaleString("pt-BR")} sc ({anuncio.pesoTotalToneladas} ton)
+                          </strong>
+                        </div>
+                        <div>
+                          <span className="my-ad-card__metric-label">Safra / Embalagem</span>
+                          <strong>
+                            {anuncio.safra} · {GRAIN_PACKAGING_LABELS[anuncio.embalagem]}
+                          </strong>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="my-ad-card__metrics">
+                        <div>
+                          <span className="my-ad-card__metric-label">Quantidade</span>
+                          <strong>{anuncio.quantidadeCabecas} cabeças</strong>
+                        </div>
+                        <div>
+                          <span className="my-ad-card__metric-label">Média / Cabeça</span>
+                          <strong>
+                            {anuncio.pesoMedioArroba} @ ({anuncio.pesoMedioKg} kg)
+                          </strong>
+                        </div>
+                      </div>
+                    )}
 
-                  <div className="my-ad-card__footer">
-                    <div className="my-ad-card__price">
-                      <span className="my-ad-card__price-label">Preço Total do Lote</span>
-                      <strong>
-                        {anuncio.precoTotal.toLocaleString("pt-BR", {
-                          style: "currency",
-                          currency: "BRL",
-                        })}
-                      </strong>
-                      <span className="my-ad-card__price-sub">
-                        ({anuncio.precoPorCabeca.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} / cab.)
+                    <div className="my-ad-card__location">
+                      <Icon name="location" />
+                      <span>
+                        {anuncio.cidade}, {anuncio.uf}
                       </span>
                     </div>
 
-                    <span className="market-card__btn-view">
-                      Ver Ficha Técnica <Icon name="arrow" />
-                    </span>
+                    <div className="my-ad-card__footer">
+                      <div className="my-ad-card__price">
+                        <span className="my-ad-card__price-label">Preço Total do Lote</span>
+                        <strong>
+                          {anuncio.precoTotal.toLocaleString("pt-BR", {
+                            style: "currency",
+                            currency: "BRL",
+                          })}
+                        </strong>
+                        <span className="my-ad-card__price-sub">
+                          {anuncio.categoria === "GRAOS"
+                            ? `(${anuncio.precoPorSaca.toLocaleString("pt-BR", {
+                                style: "currency",
+                                currency: "BRL",
+                              })} / saca)`
+                            : `(${anuncio.precoPorCabeca.toLocaleString("pt-BR", {
+                                style: "currency",
+                                currency: "BRL",
+                              })} / cab.)`}
+                        </span>
+                      </div>
+
+                      <span className="market-card__btn-view">
+                        Ver Ficha Técnica <Icon name="arrow" />
+                      </span>
+                    </div>
                   </div>
-                </div>
-              </article>
-            ))}
+                </article>
+              );
+            })}
           </div>
         )}
       </div>

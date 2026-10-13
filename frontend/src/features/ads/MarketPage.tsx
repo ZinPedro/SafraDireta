@@ -3,16 +3,17 @@ import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/authContext";
 import { routes } from "../../data/site";
 import { Icon } from "../../components/Icon";
-import type { AnimalLotAd } from "./ads.types";
+import { GRAIN_PACKAGING_LABELS, obterTagsAnuncio } from "./ads.types";
+import type { MarketplaceAd } from "./ads.types";
 import { listarAnunciosMercado } from "./adsStorage";
 import "./ads.css";
 
 export function MarketPage() {
   const { session } = useAuth();
   const navigate = useNavigate();
-  const [anuncios, setAnuncios] = useState<AnimalLotAd[]>([]);
+  const [anuncios, setAnuncios] = useState<MarketplaceAd[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [filtroCategoria, setFiltroCategoria] = useState<string>("TODOS");
+  const [filtroCategoria, setFiltroCategoria] = useState<"TODOS" | "ANIMAL" | "GRAOS">("TODOS");
 
   const isSeller = session?.vendedorEstado === "HABILITADO";
 
@@ -34,7 +35,7 @@ export function MarketPage() {
   const anunciosFiltrados =
     filtroCategoria === "TODOS"
       ? anuncios
-      : anuncios.filter((a) => a.especie === filtroCategoria);
+      : anuncios.filter((a) => a.categoria === filtroCategoria);
 
   return (
     <div className="market-page">
@@ -45,7 +46,7 @@ export function MarketPage() {
             <p className="eyebrow">Mercado Agropecuário</p>
             <h1 className="market-title">Lotes e Ofertas Disponíveis</h1>
             <p className="market-subtitle">
-              Negociação direta com produtores rurais. Encontre lotes de gado de corte, recria e reprodução.
+              Negociação direta com produtores rurais. Encontre lotes de gado de corte, café, soja, milho e trigo.
             </p>
           </div>
 
@@ -61,7 +62,7 @@ export function MarketPage() {
 
         {/* Barra de Filtros e Categorias */}
         <div className="market-filter-bar">
-          <div className="market-filter-chips" role="radiogroup" aria-label="Filtro de espécies">
+          <div className="market-filter-chips" role="radiogroup" aria-label="Filtro de categorias">
             <button
               type="button"
               className={`market-chip ${filtroCategoria === "TODOS" ? "market-chip--active" : ""}`}
@@ -71,15 +72,23 @@ export function MarketPage() {
             </button>
             <button
               type="button"
-              className={`market-chip ${filtroCategoria === "BOVINO" ? "market-chip--active" : ""}`}
-              onClick={() => setFiltroCategoria("BOVINO")}
+              className={`market-chip ${filtroCategoria === "ANIMAL" ? "market-chip--active" : ""}`}
+              onClick={() => setFiltroCategoria("ANIMAL")}
             >
-              Boi Gordo e Bovinos
+              Boi Gordo
+            </button>
+            <button
+              type="button"
+              className={`market-chip ${filtroCategoria === "GRAOS" ? "market-chip--active" : ""}`}
+              onClick={() => setFiltroCategoria("GRAOS")}
+            >
+              Grãos e Café
             </button>
           </div>
 
           <div className="market-count-label">
-            Exibindo <strong>{anunciosFiltrados.length}</strong> {anunciosFiltrados.length === 1 ? "oferta" : "ofertas"}
+            Exibindo <strong>{anunciosFiltrados.length}</strong>{" "}
+            {anunciosFiltrados.length === 1 ? "oferta" : "ofertas"}
           </div>
         </div>
 
@@ -106,67 +115,104 @@ export function MarketPage() {
           </div>
         ) : (
           <div className="market-grid">
-            {anunciosFiltrados.map((anuncio) => (
-              <article
-                key={anuncio.id}
-                className="market-card"
-                onClick={() => navigate(`/anuncios/${anuncio.id}`)}
-                tabIndex={0}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    navigate(`/anuncios/${anuncio.id}`);
-                  }
-                }}
-              >
-                <div className="market-card__thumb">
-                  <img src={anuncio.imagemUrl} alt={anuncio.titulo} loading="lazy" />
-                  <span className="market-card__tag" title={anuncio.raca}>
-                    {anuncio.raca}
-                  </span>
-                </div>
-
-                <div className="market-card__body">
-                  <h2 className="market-card__title">{anuncio.titulo}</h2>
-                  <p className="market-card__farm">{anuncio.farmName}</p>
-
-                  <div className="market-card__location">
-                    <Icon name="location" />
-                    <span>{anuncio.cidade}, {anuncio.uf}</span>
+            {anunciosFiltrados.map((anuncio) => {
+              const [tag1, tag2] = obterTagsAnuncio(anuncio);
+              return (
+                <article
+                  key={anuncio.id}
+                  className="market-card"
+                  onClick={() => navigate(`/anuncios/${anuncio.id}`)}
+                  tabIndex={0}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      navigate(`/anuncios/${anuncio.id}`);
+                    }
+                  }}
+                >
+                  <div className="market-card__thumb">
+                    <img src={anuncio.imagemUrl} alt={anuncio.titulo} loading="lazy" />
+                    <div className="market-card__tags">
+                      <span className="market-card__tag market-card__tag--primary" title={tag1}>
+                        {tag1}
+                      </span>
+                      <span className="market-card__tag market-card__tag--secondary" title={tag2}>
+                        {tag2}
+                      </span>
+                    </div>
                   </div>
 
-                  <dl className="market-card__specs">
-                    <div>
-                      <dt>Quantidade</dt>
-                      <dd>{anuncio.quantidadeCabecas} cab.</dd>
-                    </div>
-                    <div>
-                      <dt>Média / Cabeça</dt>
-                      <dd>{anuncio.pesoMedioArroba} @ ({anuncio.pesoMedioKg} kg)</dd>
-                    </div>
-                  </dl>
+                  <div className="market-card__body">
+                    <h2 className="market-card__title">{anuncio.titulo}</h2>
+                    <p className="market-card__farm">{anuncio.farmName}</p>
 
-                  <div className="market-card__footer">
-                    <div className="market-card__price-box">
-                      <span className="market-card__price-label">Preço Total do Lote</span>
-                      <strong className="market-card__price-val">
-                        {anuncio.precoTotal.toLocaleString("pt-BR", {
-                          style: "currency",
-                          currency: "BRL",
-                        })}
-                      </strong>
-                      <span className="market-card__price-sub">
-                        ({anuncio.precoPorCabeca.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} / cabeça)
+                    <div className="market-card__location">
+                      <Icon name="location" />
+                      <span>
+                        {anuncio.cidade}, {anuncio.uf}
                       </span>
                     </div>
 
-                    <span className="market-card__btn-view">
-                      Ver Lote <Icon name="arrow" />
-                    </span>
+                    {anuncio.categoria === "GRAOS" ? (
+                      <dl className="market-card__specs">
+                        <div>
+                          <dt>Volume</dt>
+                          <dd>
+                            {anuncio.quantidadeSacas.toLocaleString("pt-BR")} sc ({anuncio.pesoTotalToneladas} ton)
+                          </dd>
+                        </div>
+                        <div>
+                          <dt>Safra / Embalagem</dt>
+                          <dd>
+                            {anuncio.safra} · {GRAIN_PACKAGING_LABELS[anuncio.embalagem]}
+                          </dd>
+                        </div>
+                      </dl>
+                    ) : (
+                      <dl className="market-card__specs">
+                        <div>
+                          <dt>Quantidade</dt>
+                          <dd>{anuncio.quantidadeCabecas} cab.</dd>
+                        </div>
+                        <div>
+                          <dt>Média / Cabeça</dt>
+                          <dd>
+                            {anuncio.pesoMedioArroba} @ ({anuncio.pesoMedioKg} kg)
+                          </dd>
+                        </div>
+                      </dl>
+                    )}
+
+                    <div className="market-card__footer">
+                      <div className="market-card__price-box">
+                        <span className="market-card__price-label">Preço Total do Lote</span>
+                        <strong className="market-card__price-val">
+                          {anuncio.precoTotal.toLocaleString("pt-BR", {
+                            style: "currency",
+                            currency: "BRL",
+                          })}
+                        </strong>
+                        <span className="market-card__price-sub">
+                          {anuncio.categoria === "GRAOS"
+                            ? `(${anuncio.precoPorSaca.toLocaleString("pt-BR", {
+                                style: "currency",
+                                currency: "BRL",
+                              })} / saca 60 kg)`
+                            : `(${anuncio.precoPorCabeca.toLocaleString("pt-BR", {
+                                style: "currency",
+                                currency: "BRL",
+                              })} / cabeça)`}
+                        </span>
+                      </div>
+
+                      <span className="market-card__btn-view">
+                        Ver Lote <Icon name="arrow" />
+                      </span>
+                    </div>
                   </div>
-                </div>
-              </article>
-            ))}
+                </article>
+              );
+            })}
           </div>
         )}
       </div>

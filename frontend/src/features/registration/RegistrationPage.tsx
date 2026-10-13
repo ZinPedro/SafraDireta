@@ -272,7 +272,6 @@ export function RegistrationPage({ onOpenDialog, onRegister = registerAccount }:
                 </button>
                 <div id="registration-seller-info" hidden={!isSeller}>
                   <p>Comece criando sua conta. Você poderá comprar e habilitar a venda no mesmo perfil.</p>
-                  <p>O cadastro de produtor está em desenvolvimento. Os dados e documentos serão solicitados em uma próxima etapa.</p>
                 </div>
               </div>
               <p className="registration__login">É uma empresa? <Link to={routes.corporateRegistration} className="registration__text-button">Crie uma conta corporativa</Link></p>

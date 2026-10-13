@@ -1,7 +1,15 @@
 import { getSession } from "../../context/session";
 import type { Session } from "../../context/session";
-import type { AnimalLotAd, CreateAnimalAdInput } from "./ads.types";
+import { GRAIN_CROP_LABELS, GRAIN_SUBTYPES } from "./ads.types";
+import type {
+  AnimalLotAd,
+  CreateAnimalAdInput,
+  CreateGrainAdInput,
+  GrainLotAd,
+  MarketplaceAd,
+} from "./ads.types";
 import defaultFarmImage from "../../assets/images/farm-landscape.jpeg";
+import harvestSunsetImage from "../../assets/images/harvest-sunset.jpeg";
 
 const STORAGE_KEY = "safradireta_anuncios";
 
@@ -19,112 +27,167 @@ export interface PublicProducerProfile {
   seloVerificado: boolean;
 }
 
-const INITIAL_SEEDS: AnimalLotAd[] = [
-  {
-    id: "lote-nelore-80",
-    vendedorId: "seed-produtor-01",
-    vendedorNome: "Pedro Zin",
-    farmName: "Fazenda Santa Maria",
-    titulo: "Lote de 80 Bois Nelore — Prontos para Abate",
-    descricao:
-      "Lote uniforme de machos Nelore terminados em confinamento de 90 dias com dieta de grão inteiro e silagem. Excelente acabamento de carcaça, vacinação e vermifugação 100% em dia. Carregamento com fácil acesso para carreta boiadeira.",
-    categoria: "ANIMAL",
-    especie: "BOVINO",
-    raca: "Nelore",
-    quantidadeCabecas: 80,
-    finalidade: "ENGORDA_ABATE",
-    idadeMeses: 30,
-    pesoMedioKg: 540,
-    pesoMedioArroba: 18,
-    pesoTotalKg: 43200,
-    pesoTotalArroba: 1440,
-    precoTotal: 240000,
-    precoPorCabeca: 3000,
-    precoPorArroba: 166.67,
-    cidade: "Uberaba",
-    uf: "MG",
-    imagemUrl: defaultFarmImage,
-    criadoEm: "2026-10-10T14:30:00.000Z",
-    status: "ATIVO",
-    seloVerificado: true,
-  },
-  {
-    id: "lote-angus-45",
-    vendedorId: "seed-produtor-02",
-    vendedorNome: "Carlos Alberto Silveira",
-    farmName: "Agropecuária Vale Verde",
-    titulo: "Lote de 45 Novilhas Angus — Recria Confinada",
-    descricao:
-      "Fêmeas Angus de excelente genética e desenvolvimento zootécnico. Criadas a pasto rotacionado com suplementação proteica. Ideais para terminação intensiva ou cruzamento industrial.",
-    categoria: "ANIMAL",
-    especie: "BOVINO",
-    raca: "Angus",
-    quantidadeCabecas: 45,
-    finalidade: "RECRIA_GARROTES",
-    idadeMeses: 18,
-    pesoMedioKg: 360,
-    pesoMedioArroba: 12,
-    pesoTotalKg: 16200,
-    pesoTotalArroba: 540,
-    precoTotal: 112500,
-    precoPorCabeca: 2500,
-    precoPorArroba: 208.33,
-    cidade: "Barretos",
-    uf: "SP",
-    imagemUrl: defaultFarmImage,
-    criadoEm: "2026-10-09T10:15:00.000Z",
-    status: "ATIVO",
-    seloVerificado: true,
-  },
-];
+function isDataOrLargeUrl(url?: string): boolean {
+  if (!url) return false;
+  return url.startsWith("data:") || url.length > 500;
+}
 
-function carregarDoStorage(): AnimalLotAd[] {
+function sanitizarAnunciosParaStorage(anuncios: MarketplaceAd[]): MarketplaceAd[] {
+  return anuncios.map((anuncio) => {
+    if (isDataOrLargeUrl(anuncio.vendedorAvatar)) {
+      const { vendedorAvatar: _avatar, ...resto } = anuncio;
+      return resto as MarketplaceAd;
+    }
+    return anuncio;
+  });
+}
+
+function carregarDoStorage(): MarketplaceAd[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(INITIAL_SEEDS));
-      return INITIAL_SEEDS;
+      return [];
     }
     const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed) || parsed.length === 0) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(INITIAL_SEEDS));
-      return INITIAL_SEEDS;
+    if (!Array.isArray(parsed)) {
+      return [];
     }
-    return parsed as AnimalLotAd[];
+    let precisaLimpeza = false;
+    const filtrados = (parsed as MarketplaceAd[]).filter((a) => {
+      if (a.id === "lote-nelore-80" || a.id === "lote-angus-45") {
+        precisaLimpeza = true;
+        return false;
+      }
+      return true;
+    });
+
+    const limpos = filtrados.map((a) => {
+      let item = a;
+      if (!(item as { categoria?: string }).categoria) {
+        item = { ...(item as object), categoria: "ANIMAL" } as AnimalLotAd;
+      }
+      if (isDataOrLargeUrl(item.vendedorAvatar)) {
+        precisaLimpeza = true;
+        const { vendedorAvatar: _avatar, ...resto } = item;
+        return resto as MarketplaceAd;
+      }
+      return item;
+    });
+
+    if (precisaLimpeza) {
+      salvarNoStorage(limpos);
+    }
+    return limpos;
   } catch {
-    return INITIAL_SEEDS;
+    return [];
   }
 }
 
-function salvarNoStorage(anuncios: AnimalLotAd[]): void {
+function salvarNoStorage(anuncios: MarketplaceAd[]): boolean {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(anuncios));
+    const limpos = sanitizarAnunciosParaStorage(anuncios);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(limpos));
+    return true;
+  } catch (err) {
+    console.warn("Aviso ao salvar anúncios no localStorage:", err);
+    try {
+      const limpos = sanitizarAnunciosParaStorage(anuncios);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(limpos));
+      return true;
+    } catch (e) {
+      console.error("Falha crítica ao persistir anúncios no localStorage:", e);
+      return false;
+    }
+  }
+}
+
+export function hidratarAnuncioComPerfil<T extends MarketplaceAd>(anuncio: T): T {
+  try {
+    const session = getSession();
+    const isCurrentUser = Boolean(session && session.conta.id === anuncio.vendedorId);
+    const raw = localStorage.getItem(`safradireta_mock_profile:${anuncio.vendedorId}`);
+    const parsed = raw ? JSON.parse(raw) : null;
+
+    const farmName =
+      parsed?.seller?.farmName?.trim() ||
+      anuncio.farmName;
+
+    const vendedorNome =
+      parsed?.account?.nome?.trim() ||
+      (isCurrentUser && session?.conta.nome ? session.conta.nome : anuncio.vendedorNome);
+
+    const vendedorAvatar =
+      parsed?.account?.avatarUrl ||
+      (isCurrentUser ? session?.avatarUrl : undefined) ||
+      localStorage.getItem(`safradireta_avatar_${anuncio.vendedorId}`) ||
+      (isCurrentUser ? localStorage.getItem("safradireta_avatar") ?? undefined : undefined) ||
+      anuncio.vendedorAvatar;
+
+    return {
+      ...anuncio,
+      farmName: farmName || anuncio.farmName,
+      vendedorNome: vendedorNome || anuncio.vendedorNome,
+      vendedorAvatar: vendedorAvatar || anuncio.vendedorAvatar,
+    };
+  } catch {
+    return anuncio;
+  }
+}
+
+export function sincronizarProdutorNosAnuncios(
+  vendedorId: string,
+  dados: { farmName?: string; vendedorNome?: string; avatarUrl?: string }
+): void {
+  try {
+    const anuncios = carregarDoStorage();
+    let modificado = false;
+
+    const avatarParaPersistir = isDataOrLargeUrl(dados.avatarUrl) ? undefined : dados.avatarUrl;
+
+    const atualizados = anuncios.map((anuncio) => {
+      if (anuncio.vendedorId !== vendedorId) {
+        return anuncio;
+      }
+      modificado = true;
+      return {
+        ...anuncio,
+        ...(dados.farmName?.trim() ? { farmName: dados.farmName.trim() } : {}),
+        ...(dados.vendedorNome?.trim() ? { vendedorNome: dados.vendedorNome.trim() } : {}),
+        ...(avatarParaPersistir !== undefined ? { vendedorAvatar: avatarParaPersistir } : {}),
+      };
+    });
+
+    if (modificado) {
+      salvarNoStorage(atualizados);
+    }
   } catch {
     /* falha silenciosa em ambientes restritos */
   }
 }
 
-export async function listarAnunciosMercado(): Promise<AnimalLotAd[]> {
+export async function listarAnunciosMercado(): Promise<MarketplaceAd[]> {
   await new Promise((resolve) => setTimeout(resolve, 80));
   const anuncios = carregarDoStorage();
   return anuncios
     .filter((a) => a.status === "ATIVO")
+    .map((a) => hidratarAnuncioComPerfil(a))
     .sort((a, b) => new Date(b.criadoEm).getTime() - new Date(a.criadoEm).getTime());
 }
 
-export async function listarMeusAnuncios(vendedorId: string): Promise<AnimalLotAd[]> {
+export async function listarMeusAnuncios(vendedorId: string): Promise<MarketplaceAd[]> {
   await new Promise((resolve) => setTimeout(resolve, 80));
   const anuncios = carregarDoStorage();
   return anuncios
     .filter((a) => a.vendedorId === vendedorId && a.status === "ATIVO")
+    .map((a) => hidratarAnuncioComPerfil(a))
     .sort((a, b) => new Date(b.criadoEm).getTime() - new Date(a.criadoEm).getTime());
 }
 
-export async function obterAnuncioPorId(id: string): Promise<AnimalLotAd | null> {
+export async function obterAnuncioPorId(id: string): Promise<MarketplaceAd | null> {
   await new Promise((resolve) => setTimeout(resolve, 60));
   const anuncios = carregarDoStorage();
   const encontrado = anuncios.find((a) => a.id === id);
-  return encontrado || null;
+  return encontrado ? hidratarAnuncioComPerfil(encontrado) : null;
 }
 
 export async function obterPerfilProdutorPublico(vendedorId: string): Promise<PublicProducerProfile | null> {
@@ -132,23 +195,27 @@ export async function obterPerfilProdutorPublico(vendedorId: string): Promise<Pu
 
   const session = getSession();
   const isCurrentUser = Boolean(session && session.conta.id === vendedorId);
+  const anuncios = carregarDoStorage();
+  const anuncioVendedor = anuncios.find((a) => a.vendedorId === vendedorId);
 
-  // 1. Tenta carregar dados sincronizados do perfil armazenado no mock ou na sessão ativa
   try {
     const raw = localStorage.getItem(`safradireta_mock_profile:${vendedorId}`);
     const parsed = raw ? JSON.parse(raw) : null;
 
-    if (parsed?.seller || parsed?.account || isCurrentUser) {
+    if (parsed?.seller || parsed?.account || isCurrentUser || anuncioVendedor) {
       const avatarUrl =
         parsed?.account?.avatarUrl ||
         (isCurrentUser ? session?.avatarUrl : undefined) ||
+        anuncioVendedor?.vendedorAvatar ||
         localStorage.getItem(`safradireta_avatar_${vendedorId}`) ||
         (isCurrentUser ? localStorage.getItem("safradireta_avatar") ?? undefined : undefined) ||
         undefined;
 
       const nome =
-        parsed?.account?.nome ||
-        (isCurrentUser && session ? session.conta.nome : "Produtor Rural");
+        parsed?.account?.nome?.trim() ||
+        (isCurrentUser && session ? session.conta.nome : undefined) ||
+        anuncioVendedor?.vendedorNome ||
+        "Produtor Rural";
 
       const rawPhone =
         parsed?.seller?.publicPhone ||
@@ -167,20 +234,23 @@ export async function obterPerfilProdutorPublico(vendedorId: string): Promise<Pu
 
       const farmName =
         parsed?.seller?.farmName?.trim() ||
+        anuncioVendedor?.farmName ||
         `Fazenda ${nome}`;
 
       const bio =
         parsed?.seller?.bio?.trim() ||
-        "Produtor rural habilitado no SafraDireta, dedicado à pecuária de corte de alta qualidade com procedência sanitária garantida.";
+        "Produtor rural habilitado no SafraDireta, dedicado à produção agropecuária de alta qualidade com procedência garantida.";
 
       const city =
         parsed?.seller?.city?.trim() ||
         parsed?.address?.cidade?.trim() ||
+        anuncioVendedor?.cidade ||
         "Uberaba";
 
       const state =
         parsed?.seller?.state?.trim() ||
         parsed?.address?.uf?.trim() ||
+        anuncioVendedor?.uf ||
         "MG";
 
       return {
@@ -195,52 +265,20 @@ export async function obterPerfilProdutorPublico(vendedorId: string): Promise<Pu
         categories:
           parsed?.seller?.categories && parsed.seller.categories.length > 0
             ? parsed.seller.categories
+            : anuncioVendedor?.categoria === "GRAOS"
+            ? ["Grãos e Café"]
             : ["Boi Gordo"],
-        hasOwnTransport: Boolean(parsed?.seller?.hasOwnTransport),
+        hasOwnTransport: Boolean(parsed?.seller?.hasOwnTransport ?? anuncioVendedor),
         seloVerificado: true,
       };
     }
   } catch {
-    /* fallback para sementes e anúncios */
+    /* fallback para anúncios */
   }
 
-  // 2. Perfis semeados de demonstração
-  if (vendedorId === "seed-produtor-01") {
-    return {
-      id: "seed-produtor-01",
-      nome: "Pedro Zin",
-      farmName: "Fazenda Santa Maria",
-      bio: "Tradição de mais de 30 anos na seleção de gado Nelore PO e cruzamento industrial de alta performance. Manejo focado em bem-estar animal, nutrição de precisão e terminação intensiva com excelente acabamento de carcaça.",
-      city: "Uberaba",
-      state: "MG",
-      publicPhone: "(34) 99876-5432",
-      categories: ["Boi Gordo", "Café"],
-      hasOwnTransport: true,
-      seloVerificado: true,
-    };
-  }
-
-  if (vendedorId === "seed-produtor-02") {
-    return {
-      id: "seed-produtor-02",
-      nome: "Carlos Alberto Silveira",
-      farmName: "Agropecuária Vale Verde",
-      bio: "Pecuária sustentável voltada à recria e engorda de bezerros e novilhas de corte no interior paulista. Rastreabilidade completa do rebanho, sanidade impecável e compromisso com o comprador.",
-      city: "Barretos",
-      state: "SP",
-      publicPhone: "(17) 98765-4321",
-      categories: ["Boi Gordo"],
-      hasOwnTransport: false,
-      seloVerificado: true,
-    };
-  }
-
-  // 3. Fallback a partir de anúncios cadastrados no storage
-  const anuncios = carregarDoStorage();
-  const anuncioProdutor = anuncios.find((a) => a.vendedorId === vendedorId);
-  if (anuncioProdutor) {
+  if (anuncioVendedor) {
     const avatarUrl =
-      anuncioProdutor.vendedorAvatar ||
+      anuncioVendedor.vendedorAvatar ||
       (isCurrentUser ? session?.avatarUrl : undefined) ||
       localStorage.getItem(`safradireta_avatar_${vendedorId}`) ||
       (isCurrentUser ? localStorage.getItem("safradireta_avatar") ?? undefined : undefined) ||
@@ -248,14 +286,14 @@ export async function obterPerfilProdutorPublico(vendedorId: string): Promise<Pu
 
     return {
       id: vendedorId,
-      nome: anuncioProdutor.vendedorNome,
+      nome: anuncioVendedor.vendedorNome,
       avatarUrl,
-      farmName: anuncioProdutor.farmName,
-      bio: "Produtor rural habilitado no SafraDireta, dedicado à pecuária de corte de alta qualidade com procedência sanitária e bem-estar animal.",
-      city: anuncioProdutor.cidade,
-      state: anuncioProdutor.uf,
+      farmName: anuncioVendedor.farmName,
+      bio: "Produtor rural habilitado no SafraDireta, dedicado à produção agropecuária de alta qualidade com procedência garantida.",
+      city: anuncioVendedor.cidade,
+      state: anuncioVendedor.uf,
       publicPhone: isCurrentUser && session?.conta.telefone ? session.conta.telefone : "",
-      categories: ["Boi Gordo"],
+      categories: anuncioVendedor.categoria === "GRAOS" ? ["Grãos e Café"] : ["Boi Gordo"],
       hasOwnTransport: true,
       seloVerificado: true,
     };
@@ -264,31 +302,10 @@ export async function obterPerfilProdutorPublico(vendedorId: string): Promise<Pu
   return null;
 }
 
-export async function criarAnuncioAnimal(
-  input: CreateAnimalAdInput,
+function resolverDadosProdutorSessao(
   session: Session,
   farmNameParam?: string
-): Promise<AnimalLotAd> {
-  await new Promise((resolve) => setTimeout(resolve, 150));
-  const anuncios = carregarDoStorage();
-
-  const cabecas = Math.max(1, Math.floor(input.quantidadeCabecas));
-  const pesoVivoPorCabeca = Math.max(1, input.pesoMedioKg);
-  const pesoArrobaPorCabeca = Number((pesoVivoPorCabeca / 30).toFixed(2));
-
-  const pesoTotalKg = Number((pesoVivoPorCabeca * cabecas).toFixed(2));
-  const pesoTotalArroba = Number((pesoTotalKg / 30).toFixed(2));
-
-  let precoTotal = 0;
-  if (input.pricingMode === "PER_HEAD" && input.precoPorCabeca) {
-    precoTotal = Number((input.precoPorCabeca * cabecas).toFixed(2));
-  } else if (input.precoTotal) {
-    precoTotal = Number(input.precoTotal.toFixed(2));
-  }
-
-  const precoPorCabeca = Number((precoTotal / cabecas).toFixed(2));
-  const precoPorArroba = pesoTotalArroba > 0 ? Number((precoTotal / pesoTotalArroba).toFixed(2)) : 0;
-
+): { resolvedFarmName: string; avatarPersistivel?: string } {
   let resolvedFarmName = farmNameParam?.trim();
   let resolvedAvatar = session.avatarUrl;
 
@@ -317,13 +334,43 @@ export async function criarAnuncioAnimal(
     resolvedFarmName = `Fazenda ${session.conta.nome}`;
   }
 
+  const avatarPersistivel = isDataOrLargeUrl(resolvedAvatar) ? undefined : resolvedAvatar;
+  return { resolvedFarmName, avatarPersistivel };
+}
+
+export async function criarAnuncioAnimal(
+  input: CreateAnimalAdInput,
+  session: Session,
+  farmNameParam?: string
+): Promise<AnimalLotAd> {
+  await new Promise((resolve) => setTimeout(resolve, 150));
+  const anuncios = carregarDoStorage();
+
+  const cabecas = Math.max(1, Math.floor(input.quantidadeCabecas));
+  const pesoVivoPorCabeca = Math.max(1, input.pesoMedioKg);
+  const pesoArrobaPorCabeca = Number((pesoVivoPorCabeca / 30).toFixed(2));
+
+  const pesoTotalKg = Number((pesoVivoPorCabeca * cabecas).toFixed(2));
+  const pesoTotalArroba = Number((pesoTotalKg / 30).toFixed(2));
+
+  let precoTotal = 0;
+  if (input.pricingMode === "PER_HEAD" && input.precoPorCabeca) {
+    precoTotal = Number((input.precoPorCabeca * cabecas).toFixed(2));
+  } else if (input.precoTotal) {
+    precoTotal = Number(input.precoTotal.toFixed(2));
+  }
+
+  const precoPorCabeca = Number((precoTotal / cabecas).toFixed(2));
+  const precoPorArroba = pesoTotalArroba > 0 ? Number((precoTotal / pesoTotalArroba).toFixed(2)) : 0;
+
+  const { resolvedFarmName, avatarPersistivel } = resolverDadosProdutorSessao(session, farmNameParam);
   const novoId = `lote-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`;
 
   const novoAnuncio: AnimalLotAd = {
     id: novoId,
     vendedorId: session.conta.id,
     vendedorNome: session.conta.nome,
-    vendedorAvatar: resolvedAvatar,
+    vendedorAvatar: avatarPersistivel,
     farmName: resolvedFarmName,
     titulo: input.titulo.trim(),
     descricao: input.descricao?.trim() || undefined,
@@ -349,7 +396,95 @@ export async function criarAnuncioAnimal(
   };
 
   const atualizados = [novoAnuncio, ...anuncios];
-  salvarNoStorage(atualizados);
+  const salvou = salvarNoStorage(atualizados);
+  if (!salvou) {
+    throw new Error("Não foi possível persistir o anúncio no armazenamento local do navegador.");
+  }
 
-  return novoAnuncio;
+  return hidratarAnuncioComPerfil(novoAnuncio);
+}
+
+export async function criarAnuncioGraos(
+  input: CreateGrainAdInput,
+  session: Session,
+  farmNameParam?: string
+): Promise<GrainLotAd> {
+  await new Promise((resolve) => setTimeout(resolve, 150));
+  const anuncios = carregarDoStorage();
+
+  const quantidadeSacas = Math.max(1, Math.round(input.quantidadeSacas));
+  const pesoTotalKg = Number((quantidadeSacas * 60).toFixed(2));
+  const pesoTotalToneladas = Number(
+    (input.pesoTotalToneladas > 0 ? input.pesoTotalToneladas : pesoTotalKg / 1000).toFixed(2)
+  );
+
+  let precoTotal = 0;
+  if (input.pricingMode === "PER_SACK" && input.precoPorSaca) {
+    precoTotal = Number((input.precoPorSaca * quantidadeSacas).toFixed(2));
+  } else if (input.precoTotal) {
+    precoTotal = Number(input.precoTotal.toFixed(2));
+  }
+
+  const precoPorSaca = Number((precoTotal / quantidadeSacas).toFixed(2));
+  const precoPorTonelada = pesoTotalToneladas > 0 ? Number((precoTotal / pesoTotalToneladas).toFixed(2)) : 0;
+
+  let tagPrincipal = GRAIN_CROP_LABELS[input.cultura];
+  let tagSecundaria = input.subtipo.trim().slice(0, 30);
+
+  if (input.cultura === "OUTRO") {
+    tagPrincipal = "Outro";
+    tagSecundaria = (input.culturaPersonalizada || input.subtipo || "Grão").trim().slice(0, 30);
+  } else {
+    const listaSubtipos = GRAIN_SUBTYPES[input.cultura];
+    const match = listaSubtipos.find((item) => item.value === input.subtipo);
+    if (match && match.value !== "OUTRO") {
+      tagSecundaria = match.shortTag;
+    }
+  }
+
+  const { resolvedFarmName, avatarPersistivel } = resolverDadosProdutorSessao(session, farmNameParam);
+  const novoId = `safra-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`;
+
+  const novoAnuncio: GrainLotAd = {
+    id: novoId,
+    vendedorId: session.conta.id,
+    vendedorNome: session.conta.nome,
+    vendedorAvatar: avatarPersistivel,
+    farmName: resolvedFarmName,
+    titulo: input.titulo.trim(),
+    descricao: input.descricao?.trim() || undefined,
+    categoria: "GRAOS",
+    cultura: input.cultura,
+    culturaPersonalizada: input.culturaPersonalizada?.trim().slice(0, 30) || undefined,
+    subtipo: input.subtipo.trim(),
+    tagPrincipal,
+    tagSecundaria,
+    safra: input.safra,
+    embalagem: input.embalagem,
+    umidadePercentual:
+      typeof input.umidadePercentual === "number" && input.umidadePercentual > 0
+        ? Number(input.umidadePercentual.toFixed(1))
+        : 13.5,
+    laudoTecnico: input.laudoTecnico,
+    quantidadeSacas,
+    pesoTotalToneladas,
+    pesoTotalKg,
+    precoTotal,
+    precoPorSaca,
+    precoPorTonelada,
+    cidade: input.cidade.trim(),
+    uf: input.uf.trim().toUpperCase(),
+    imagemUrl: harvestSunsetImage,
+    criadoEm: new Date().toISOString(),
+    status: "ATIVO",
+    seloVerificado: true,
+  };
+
+  const atualizados = [novoAnuncio, ...anuncios];
+  const salvou = salvarNoStorage(atualizados);
+  if (!salvou) {
+    throw new Error("Não foi possível persistir o anúncio no armazenamento local do navegador.");
+  }
+
+  return hidratarAnuncioComPerfil(novoAnuncio);
 }

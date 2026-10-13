@@ -3,6 +3,7 @@ import { clearSession, getSession, updateSession } from "../../context/session";
 import type { Session } from "../../context/session";
 import { formatCnpj, formatCpf, isValidCpf } from "../corporate-registration/corporateRegistration";
 import type { SellerCategory } from "../seller-upgrade/sellerUpgrade";
+import { sincronizarProdutorNosAnuncios } from "../ads/adsStorage";
 
 export { formatCep, formatCnpj, formatCpf, formatPhone, ufs } from "../corporate-registration/corporateRegistration";
 export { sellerCategories } from "../seller-upgrade/sellerUpgrade";
@@ -235,6 +236,7 @@ export const updateUserProfile: UpdateUserProfile = async (data) => {
     merged.account = {
       ...current.account,
       ...data.account,
+      nome: data.account?.nome ?? current.account.nome ?? session.conta.nome,
       email: current.account.email,
       cpfCnpj: nextCpf,
       avatarUrl: session.avatarUrl ?? current.account.avatarUrl,
@@ -242,6 +244,13 @@ export const updateUserProfile: UpdateUserProfile = async (data) => {
     merged.address = { ...current.address, ...data.address };
     merged.seller = current.seller && data.seller ? { ...current.seller, ...data.seller, isHabilitado: true } : current.seller;
     localStorage.setItem(`${MOCK_KEY}:${session.conta.id}`, JSON.stringify(merged));
+    if (merged.seller?.farmName || data.account?.nome) {
+      sincronizarProdutorNosAnuncios(session.conta.id, {
+        farmName: merged.seller?.farmName,
+        vendedorNome: merged.account.nome,
+        avatarUrl: merged.account.avatarUrl,
+      });
+    }
     return { ok: true, message: "Alterações salvas (simulação local).", updatedProfile: merged };
   }
 
@@ -298,17 +307,32 @@ export const updateUserProfile: UpdateUserProfile = async (data) => {
     if (saved?.conta?.avatar_url || saved?.conta?.avatarUrl) {
       updateSession({ avatarUrl: saved.conta.avatar_url || saved.conta.avatarUrl });
     }
-    if (data.seller) {
-      try {
-        const rawLocal = localStorage.getItem(`${MOCK_KEY}:${session.conta.id}`);
-        const existing = rawLocal ? JSON.parse(rawLocal) : {};
+    try {
+      const rawLocal = localStorage.getItem(`${MOCK_KEY}:${session.conta.id}`);
+      const existing = rawLocal ? JSON.parse(rawLocal) : {};
+      if (data.seller) {
         existing.seller = { ...(existing.seller || {}), ...data.seller, isHabilitado: true };
-        if (data.account) existing.account = { ...(existing.account || {}), ...data.account };
-        if (data.address) existing.address = { ...(existing.address || {}), ...data.address };
-        localStorage.setItem(`${MOCK_KEY}:${session.conta.id}`, JSON.stringify(existing));
-      } catch {
-        /* ignore */
       }
+      const existingAccount = (existing.account && typeof existing.account === "object" ? existing.account : {}) as Record<string, unknown>;
+      const resolvedNome = data.account?.nome ?? saved?.conta?.nome ?? (existingAccount.nome as string | undefined) ?? session.conta.nome;
+      existing.account = {
+        ...existingAccount,
+        ...(data.account || {}),
+        nome: resolvedNome,
+        avatarUrl: session.avatarUrl ?? existingAccount.avatarUrl,
+      };
+      if (data.address) existing.address = { ...(existing.address || {}), ...data.address };
+      localStorage.setItem(`${MOCK_KEY}:${session.conta.id}`, JSON.stringify(existing));
+
+      if (data.seller?.farmName || data.account?.nome) {
+        sincronizarProdutorNosAnuncios(session.conta.id, {
+          farmName: data.seller?.farmName,
+          vendedorNome: resolvedNome,
+          avatarUrl: session.avatarUrl,
+        });
+      }
+    } catch {
+      /* ignore */
     }
     if (saved && (saved.account || saved.enderecos)) {
       const normalized = normalizeProfile(saved, getSession() ?? session);

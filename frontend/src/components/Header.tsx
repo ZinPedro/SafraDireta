@@ -64,7 +64,7 @@ export function Header({
           onClick={closeMenus}
         >
           <Icon name="leaf" className="brand__icon" />
-          Safra<span>Direta</span>
+          SafraDireta
           <span className="brand__label">Mercado</span>
         </Link>
         <button

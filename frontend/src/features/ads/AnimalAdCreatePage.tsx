@@ -10,14 +10,28 @@ import { Icon } from "../../components/Icon";
 import {
   BEEF_CATTLE_BREEDS,
   BEEF_CATTLE_PURPOSES,
+  COFFEE_SCREEN_OPTIONS,
+  GRAIN_CROPS,
+  GRAIN_CROP_LABELS,
+  GRAIN_HARVEST_SEASONS,
+  GRAIN_PACKAGING_LABELS,
+  GRAIN_PACKAGING_OPTIONS,
+  GRAIN_SUBTYPES,
 } from "./ads.types";
 import type {
   AnimalPurpose,
+  CoffeeScreen,
   CreateAnimalAdInput,
+  CreateGrainAdInput,
+  GrainCrop,
+  GrainPackaging,
+  GrainPricingMode,
+  GrainQualitySpecs,
   PricingMode,
 } from "./ads.types";
-import { criarAnuncioAnimal } from "./adsStorage";
+import { criarAnuncioAnimal, criarAnuncioGraos } from "./adsStorage";
 import defaultFarmImage from "../../assets/images/farm-landscape.jpeg";
+import harvestSunsetImage from "../../assets/images/harvest-sunset.jpeg";
 import "./ads.css";
 
 interface AnimalAdCreatePageProps {
@@ -28,27 +42,91 @@ export function AnimalAdCreatePage({ onOpenDialog }: AnimalAdCreatePageProps) {
   const { session } = useAuth();
   const navigate = useNavigate();
 
-  // Estados do formulário limpos (sem valores pré-moldados)
+  // Modalidade ativa: Pecuária de Corte (ANIMAL) vs. Grãos e Café (GRAOS)
+  const [modalidade, setModalidade] = useState<"ANIMAL" | "GRAOS">("ANIMAL");
+
+  // Campos comuns
   const [titulo, setTitulo] = useState("");
   const [descricao, setDescricao] = useState("");
+
+  // Campos exclusivos de Pecuária de Corte (US-010)
   const [racaSelect, setRacaSelect] = useState("");
   const [racaCustom, setRacaCustom] = useState("");
   const [quantidadeCabecas, setQuantidadeCabecas] = useState<number | "">("");
   const [finalidade, setFinalidade] = useState<AnimalPurpose>("ENGORDA_ABATE");
   const [idadeMeses, setIdadeMeses] = useState<number | "">("");
-
-  // Mecanismo Bi-direcional de Peso (Kg <-> @)
   const [pesoUnitMode, setPesoUnitMode] = useState<"KG" | "ARROBA">("KG");
   const [pesoInputValue, setPesoInputValue] = useState<number | "">("");
-
-  // Precificação
   const [pricingMode, setPricingMode] = useState<PricingMode>("TOTAL");
   const [precoTotal, setPrecoTotal] = useState<number | "">("");
   const [precoPorCabeca, setPrecoPorCabeca] = useState<number | "">("");
 
-  // Localização
-  const [cidade, setCidade] = useState("");
-  const [uf, setUf] = useState("");
+  // Campos exclusivos de Grãos e Café (US-011)
+  const [cultura, setCultura] = useState<GrainCrop | "">("");
+  const [culturaPersonalizada, setCulturaPersonalizada] = useState("");
+  const [subtipoSelect, setSubtipoSelect] = useState("");
+  const [subtipoCustom, setSubtipoCustom] = useState("");
+  const [safra, setSafra] = useState("2024/2025");
+  const [embalagem, setEmbalagem] = useState<GrainPackaging>("SACARIA");
+  const [umidadePercentual, setUmidadePercentual] = useState<number | "">("");
+  const [volumeUnitMode, setVolumeUnitMode] = useState<"SACAS" | "TONELADAS">("SACAS");
+  const [volumeInputValue, setVolumeInputValue] = useState<number | "">("");
+  const [grainPricingMode, setGrainPricingMode] = useState<GrainPricingMode>("TOTAL");
+  const [precoTotalGraos, setPrecoTotalGraos] = useState<number | "">("");
+  const [precoPorSaca, setPrecoPorSaca] = useState<number | "">("");
+
+  // Laudo Técnico e Qualidade Física Específicos por Cultura (US-011)
+  // Soja
+  const [sojaImpurezasPct, setSojaImpurezasPct] = useState<number | "">("");
+  const [sojaAvariadosPct, setSojaAvariadosPct] = useState<number | "">("");
+  const [sojaQuebradosPct, setSojaQuebradosPct] = useState<number | "">("");
+
+  // Milho
+  const [milhoImpurezasPct, setMilhoImpurezasPct] = useState<number | "">("");
+  const [milhoArdidosPct, setMilhoArdidosPct] = useState<number | "">("");
+  const [milhoQuebradosPct, setMilhoQuebradosPct] = useState<number | "">("");
+
+  // Café
+  const [cafePeneira, setCafePeneira] = useState<CoffeeScreen | "">("");
+  const [cafeCatacaoDefeitos, setCafeCatacaoDefeitos] = useState("");
+  const [cafePontuacaoSca, setCafePontuacaoSca] = useState<number | "">("");
+
+  // Trigo
+  const [trigoPhKgHl, setTrigoPhKgHl] = useState<number | "">("");
+  const [trigoForcaGlutenW, setTrigoForcaGlutenW] = useState<number | "">("");
+  const [trigoFallingNumberSeg, setTrigoFallingNumberSeg] = useState<number | "">("");
+
+  // Outro
+  const [outroObservacoesLaudo, setOutroObservacoesLaudo] = useState("");
+
+  // Localização pré-carregada do perfil do produtor se existente
+  const [cidade, setCidade] = useState(() => {
+    if (!session) return "";
+    try {
+      const raw = localStorage.getItem(`safradireta_mock_profile:${session.conta.id}`);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        return (parsed?.seller?.city || parsed?.address?.cidade || "") as string;
+      }
+    } catch {
+      /* ignore */
+    }
+    return "";
+  });
+
+  const [uf, setUf] = useState(() => {
+    if (!session) return "";
+    try {
+      const raw = localStorage.getItem(`safradireta_mock_profile:${session.conta.id}`);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        return (parsed?.seller?.state || parsed?.address?.uf || "") as string;
+      }
+    } catch {
+      /* ignore */
+    }
+    return "";
+  });
 
   // Estados de controle
   const [erros, setErros] = useState<Record<string, string>>({});
@@ -56,34 +134,39 @@ export function AnimalAdCreatePage({ onOpenDialog }: AnimalAdCreatePageProps) {
   const [createdAdId, setCreatedAdId] = useState<string | null>(null);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
 
-  // Guarda de rota (Abordagem B): Vendedor precisa estar habilitado
+  // Guarda de rota: Vendedor precisa estar habilitado
   if (!session || session.vendedorEstado !== "HABILITADO") {
     return (
       <AccessRestricted
         title="Área de publicação exclusiva para produtores habilitados"
-        description="Para anunciar lotes de animais e comercializar com compradores de todo o país, complete sua habilitação de vendedor na sua conta."
+        description="Para anunciar lotes de gado, grãos ou café e comercializar com compradores de todo o país, complete sua habilitação de vendedor na sua conta."
         onOpenLogin={() => onOpenDialog?.("login")}
         onOpenRegister={() => onOpenDialog?.("registration")}
       />
     );
   }
 
-  // Alternador bi-direcional de unidade de peso (Kg <-> @)
+  function handleSelectModalidade(novaModalidade: "ANIMAL" | "GRAOS") {
+    if (novaModalidade === modalidade) return;
+    setModalidade(novaModalidade);
+    setErros({});
+  }
+
+  // ---------------------------------------------------------------------------
+  // Cálculos Reativos — Pecuária de Corte (Boi Gordo)
+  // ---------------------------------------------------------------------------
   function handleTogglePesoUnit(modo: "KG" | "ARROBA") {
     if (modo === pesoUnitMode) return;
     if (typeof pesoInputValue === "number" && pesoInputValue > 0) {
       if (modo === "ARROBA") {
-        // Converte Kg para @: peso / 30
         setPesoInputValue(Number((pesoInputValue / 30).toFixed(2)));
       } else {
-        // Converte @ para Kg: peso * 30
         setPesoInputValue(Number((pesoInputValue * 30).toFixed(1)));
       }
     }
     setPesoUnitMode(modo);
   }
 
-  // Cálculos reativos zootécnicos e conversões
   const cabecasNum = typeof quantidadeCabecas === "number" && quantidadeCabecas > 0 ? quantidadeCabecas : 0;
 
   const pesoKgNum =
@@ -104,7 +187,6 @@ export function AnimalAdCreatePage({ onOpenDialog }: AnimalAdCreatePageProps) {
   const pesoTotalBoiadaArrobas = pesoTotalBoiadaKg > 0 ? Number((pesoTotalBoiadaKg / 30).toFixed(2)) : 0;
   const pesoTotalToneladas = pesoTotalBoiadaKg > 0 ? Number((pesoTotalBoiadaKg / 1000).toFixed(2)) : 0;
 
-  // Cálculo de preço resultante
   const precoTotalNum = typeof precoTotal === "number" && precoTotal > 0 ? precoTotal : 0;
   const precoCabecaNum = typeof precoPorCabeca === "number" && precoPorCabeca > 0 ? precoPorCabeca : 0;
 
@@ -129,38 +211,191 @@ export function AnimalAdCreatePage({ onOpenDialog }: AnimalAdCreatePageProps) {
 
   const racaFinal = racaSelect === "OUTRA" ? racaCustom.trim() : racaSelect;
 
+  // ---------------------------------------------------------------------------
+  // Cálculos Reativos — Grãos e Café (US-011)
+  // ---------------------------------------------------------------------------
+  function handleToggleVolumeUnit(modo: "SACAS" | "TONELADAS") {
+    if (modo === volumeUnitMode) return;
+    if (typeof volumeInputValue === "number" && volumeInputValue > 0) {
+      if (modo === "TONELADAS") {
+        // Converte Sacas de 60 kg para Toneladas: (sacas * 60) / 1000
+        setVolumeInputValue(Number(((volumeInputValue * 60) / 1000).toFixed(2)));
+      } else {
+        // Converte Toneladas para Sacas de 60 kg: round((ton * 1000) / 60)
+        setVolumeInputValue(Math.max(1, Math.round((volumeInputValue * 1000) / 60)));
+      }
+    }
+    setVolumeUnitMode(modo);
+  }
+
+  const sacasCalculadas =
+    typeof volumeInputValue === "number" && volumeInputValue > 0
+      ? volumeUnitMode === "SACAS"
+        ? Math.max(1, Math.round(volumeInputValue))
+        : Math.max(1, Math.round((volumeInputValue * 1000) / 60))
+      : 0;
+
+  const kgGraosCalculados = sacasCalculadas > 0 ? Number((sacasCalculadas * 60).toFixed(1)) : 0;
+
+  const toneladasGraosCalculadas =
+    typeof volumeInputValue === "number" && volumeInputValue > 0
+      ? volumeUnitMode === "TONELADAS"
+        ? Number(volumeInputValue.toFixed(2))
+        : Number(((sacasCalculadas * 60) / 1000).toFixed(2))
+      : 0;
+
+  const precoTotalGraosNum = typeof precoTotalGraos === "number" && precoTotalGraos > 0 ? precoTotalGraos : 0;
+  const precoSacaNum = typeof precoPorSaca === "number" && precoPorSaca > 0 ? precoPorSaca : 0;
+
+  const valorTotalGraosFinal =
+    grainPricingMode === "TOTAL"
+      ? precoTotalGraosNum
+      : sacasCalculadas > 0 && precoSacaNum > 0
+      ? Number((sacasCalculadas * precoSacaNum).toFixed(2))
+      : 0;
+
+  const valorSacaFinal =
+    grainPricingMode === "PER_SACK"
+      ? precoSacaNum
+      : sacasCalculadas > 0 && valorTotalGraosFinal > 0
+      ? Number((valorTotalGraosFinal / sacasCalculadas).toFixed(2))
+      : 0;
+
+  const valorToneladaFinal =
+    toneladasGraosCalculadas > 0 && valorTotalGraosFinal > 0
+      ? Number((valorTotalGraosFinal / toneladasGraosCalculadas).toFixed(2))
+      : 0;
+
+  const subtipoGraoFinal =
+    cultura === "OUTRO"
+      ? culturaPersonalizada.trim()
+      : subtipoSelect === "OUTRO"
+      ? subtipoCustom.trim()
+      : subtipoSelect;
+
+  const grainTag1 = cultura ? GRAIN_CROP_LABELS[cultura] : "Cultura";
+  const grainTag2 = (() => {
+    if (!cultura) return "Classificação";
+    if (cultura === "OUTRO") return culturaPersonalizada.trim() || "Especifique o grão";
+    if (subtipoSelect === "OUTRO") return subtipoCustom.trim() || "Especifique o tipo";
+    if (subtipoSelect) {
+      const found = GRAIN_SUBTYPES[cultura].find((item) => item.value === subtipoSelect);
+      return found ? found.shortTag : subtipoSelect;
+    }
+    return "Tipo comercial";
+  })();
+
+  // ---------------------------------------------------------------------------
+  // Validação Condicional por Modalidade
+  // ---------------------------------------------------------------------------
   function validar(): boolean {
     const novosErros: Record<string, string> = {};
 
     if (!titulo.trim() || titulo.trim().length < 5) {
       novosErros.titulo = "Informe um título descritivo de pelo menos 5 caracteres.";
     }
-    if (!racaSelect) {
-      novosErros.raca = "Selecione a raça dos animais.";
-    } else if (racaSelect === "OUTRA" && !racaCustom.trim()) {
-      novosErros.racaCustom = "Especifique a raça ou cruzamento (máximo 30 caracteres).";
+
+    if (modalidade === "ANIMAL") {
+      if (!racaSelect) {
+        novosErros.raca = "Selecione a raça dos animais.";
+      } else if (racaSelect === "OUTRA" && !racaCustom.trim()) {
+        novosErros.racaCustom = "Especifique a raça ou cruzamento (máximo 30 caracteres).";
+      }
+      if (!quantidadeCabecas || quantidadeCabecas <= 0) {
+        novosErros.quantidadeCabecas = "A quantidade de cabeças deve ser maior que zero.";
+      }
+      if (!pesoInputValue || pesoInputValue <= 0) {
+        novosErros.peso = `Informe o peso médio estimado por cabeça (${pesoUnitMode === "KG" ? "em kg" : "em @"}).`;
+      }
+      if (pricingMode === "TOTAL" && (!precoTotal || precoTotal <= 0)) {
+        novosErros.precoTotal = "Informe o preço total do lote.";
+      }
+      if (pricingMode === "PER_HEAD" && (!precoPorCabeca || precoPorCabeca <= 0)) {
+        novosErros.precoPorCabeca = "Informe o preço unitário por cabeça.";
+      }
+    } else {
+      if (!cultura) {
+        novosErros.cultura = "Selecione a cultura principal do lote.";
+      } else if (cultura === "OUTRO" && !culturaPersonalizada.trim()) {
+        novosErros.culturaPersonalizada = "Informe qual é a cultura ou grão (máximo 30 caracteres).";
+      } else if (cultura !== "OUTRO") {
+        if (!subtipoSelect) {
+          novosErros.subtipo = "Selecione o tipo ou classificação comercial.";
+        } else if (subtipoSelect === "OUTRO" && !subtipoCustom.trim()) {
+          novosErros.subtipoCustom = "Especifique o tipo ou classificação (máximo 30 caracteres).";
+        }
+      }
+
+      if (!safra) {
+        novosErros.safra = "Selecione a safra de colheita.";
+      }
+      if (!embalagem) {
+        novosErros.embalagem = "Selecione o padrão de embalagem ou armazenamento.";
+      }
+
+      // Umidade obrigatória para todas as culturas na lavoura
+      if (
+        umidadePercentual === "" ||
+        Number(umidadePercentual) <= 0 ||
+        Number(umidadePercentual) > 50
+      ) {
+        novosErros.umidade = "Informe o percentual de umidade do grão (obrigatório, entre 1% e 50%).";
+      }
+
+      // Parâmetros obrigatórios e validações contextuais de laudo
+      if (cultura === "CAFE") {
+        if (!cafePeneira) {
+          novosErros.cafePeneira = "Selecione a peneira predominante do lote de café (obrigatório).";
+        }
+        if (
+          cafePontuacaoSca !== "" &&
+          (Number(cafePontuacaoSca) < 80 || Number(cafePontuacaoSca) > 100)
+        ) {
+          novosErros.cafePontuacao = "A pontuação SCA para cafés especiais deve estar entre 80 e 100 pontos.";
+        }
+      } else if (cultura === "TRIGO") {
+        if (
+          trigoPhKgHl === "" ||
+          Number(trigoPhKgHl) < 50 ||
+          Number(trigoPhKgHl) > 100
+        ) {
+          novosErros.trigoPh = "Informe o PH / peso hectolítrico do trigo (obrigatório, entre 50 e 100 kg/hL).";
+        }
+      }
+
+      if (!volumeInputValue || volumeInputValue <= 0) {
+        novosErros.volume =
+          volumeUnitMode === "SACAS"
+            ? "Informe a quantidade de sacas de 60 kg."
+            : "Informe o volume total em toneladas.";
+      }
+      if (grainPricingMode === "TOTAL" && (!precoTotalGraos || precoTotalGraos <= 0)) {
+        novosErros.precoTotalGraos = "Informe o valor total do lote agrícola.";
+      }
+      if (grainPricingMode === "PER_SACK" && (!precoPorSaca || precoPorSaca <= 0)) {
+        novosErros.precoPorSaca = "Informe o valor unitário por saca de 60 kg.";
+      }
     }
-    if (!quantidadeCabecas || quantidadeCabecas <= 0) {
-      novosErros.quantidadeCabecas = "A quantidade de cabeças deve ser maior que zero.";
-    }
-    if (!pesoInputValue || pesoInputValue <= 0) {
-      novosErros.peso = `Informe o peso médio estimado por cabeça (${pesoUnitMode === "KG" ? "em kg" : "em @"}).`;
-    }
-    if (pricingMode === "TOTAL" && (!precoTotal || precoTotal <= 0)) {
-      novosErros.precoTotal = "Informe o preço total do lote.";
-    }
-    if (pricingMode === "PER_HEAD" && (!precoPorCabeca || precoPorCabeca <= 0)) {
-      novosErros.precoPorCabeca = "Informe o preço unitário por cabeça.";
-    }
+
     if (!cidade.trim()) {
-      novosErros.cidade = "Informe o município da fazenda.";
+      novosErros.cidade = "Informe o município de retirada.";
     }
     if (!uf.trim()) {
       novosErros.uf = "Selecione o estado (UF).";
     }
 
     setErros(novosErros);
-    return Object.keys(novosErros).length === 0;
+    const valido = Object.keys(novosErros).length === 0;
+
+    if (!valido) {
+      setTimeout(() => {
+        const primeiroErro = document.querySelector(".form-input--error, .form-select--error") as HTMLElement;
+        primeiroErro?.scrollIntoView({ behavior: "smooth", block: "center" });
+        primeiroErro?.focus();
+      }, 50);
+    }
+
+    return valido;
   }
 
   async function handleSubmit(event: FormEvent) {
@@ -169,27 +404,93 @@ export function AnimalAdCreatePage({ onOpenDialog }: AnimalAdCreatePageProps) {
 
     setIsSubmitting(true);
     try {
-      const input: CreateAnimalAdInput = {
-        titulo: titulo.trim(),
-        descricao: descricao.trim() || undefined,
-        especie: "BOVINO",
-        raca: racaFinal.slice(0, 30),
-        quantidadeCabecas: Number(quantidadeCabecas),
-        finalidade,
-        idadeMeses: idadeMeses ? Number(idadeMeses) : undefined,
-        pesoMedioKg: pesoKgNum,
-        pricingMode,
-        precoTotal: pricingMode === "TOTAL" ? Number(precoTotal) : valorTotalFinal,
-        precoPorCabeca: pricingMode === "PER_HEAD" ? Number(precoPorCabeca) : valorCabecaFinal,
-        cidade: cidade.trim(),
-        uf,
-      };
+      if (modalidade === "ANIMAL") {
+        const input: CreateAnimalAdInput = {
+          titulo: titulo.trim(),
+          descricao: descricao.trim() || undefined,
+          especie: "BOVINO",
+          raca: racaFinal.slice(0, 30),
+          quantidadeCabecas: Number(quantidadeCabecas),
+          finalidade,
+          idadeMeses: idadeMeses ? Number(idadeMeses) : undefined,
+          pesoMedioKg: pesoKgNum,
+          pricingMode,
+          precoTotal: pricingMode === "TOTAL" ? Number(precoTotal) : valorTotalFinal,
+          precoPorCabeca: pricingMode === "PER_HEAD" ? Number(precoPorCabeca) : valorCabecaFinal,
+          cidade: cidade.trim(),
+          uf,
+        };
 
-      const criado = await criarAnuncioAnimal(input, session);
-      setCreatedAdId(criado.id);
+        const criado = await criarAnuncioAnimal(input, session);
+        setCreatedAdId(criado.id);
+      } else {
+        let laudoTecnico: GrainQualitySpecs | undefined = undefined;
+
+        if (cultura === "SOJA") {
+          const specs: GrainQualitySpecs = {};
+          if (sojaImpurezasPct !== "") specs.sojaImpurezasPct = Number(sojaImpurezasPct);
+          if (sojaAvariadosPct !== "") specs.sojaAvariadosPct = Number(sojaAvariadosPct);
+          if (sojaQuebradosPct !== "") specs.sojaQuebradosPct = Number(sojaQuebradosPct);
+          if (Object.keys(specs).length > 0) laudoTecnico = specs;
+        } else if (cultura === "MILHO") {
+          const specs: GrainQualitySpecs = {};
+          if (milhoImpurezasPct !== "") specs.milhoImpurezasPct = Number(milhoImpurezasPct);
+          if (milhoArdidosPct !== "") specs.milhoArdidosPct = Number(milhoArdidosPct);
+          if (milhoQuebradosPct !== "") specs.milhoQuebradosPct = Number(milhoQuebradosPct);
+          if (Object.keys(specs).length > 0) laudoTecnico = specs;
+        } else if (cultura === "CAFE") {
+          const specs: GrainQualitySpecs = {};
+          if (cafePeneira) specs.cafePeneira = cafePeneira as CoffeeScreen;
+          if (cafeCatacaoDefeitos.trim()) specs.cafeCatacaoDefeitos = cafeCatacaoDefeitos.trim().slice(0, 30);
+          if (cafePontuacaoSca !== "") specs.cafePontuacaoSca = Number(cafePontuacaoSca);
+          laudoTecnico = specs;
+        } else if (cultura === "TRIGO") {
+          const specs: GrainQualitySpecs = {};
+          if (trigoPhKgHl !== "") specs.trigoPhKgHl = Number(trigoPhKgHl);
+          if (trigoForcaGlutenW !== "") specs.trigoForcaGlutenW = Number(trigoForcaGlutenW);
+          if (trigoFallingNumberSeg !== "") specs.trigoFallingNumberSeg = Number(trigoFallingNumberSeg);
+          laudoTecnico = specs;
+        } else if (cultura === "OUTRO") {
+          if (outroObservacoesLaudo.trim()) {
+            laudoTecnico = { outroObservacoesLaudo: outroObservacoesLaudo.trim().slice(0, 60) };
+          }
+        }
+
+        const inputGraos: CreateGrainAdInput = {
+          titulo: titulo.trim(),
+          descricao: descricao.trim() || undefined,
+          cultura: cultura as GrainCrop,
+          culturaPersonalizada:
+            cultura === "OUTRO" ? culturaPersonalizada.trim().slice(0, 30) : undefined,
+          subtipo: subtipoGraoFinal.slice(0, 60),
+          safra,
+          embalagem,
+          umidadePercentual: Number(umidadePercentual),
+          laudoTecnico,
+          quantidadeSacas: sacasCalculadas,
+          pesoTotalToneladas: toneladasGraosCalculadas,
+          pricingMode: grainPricingMode,
+          precoTotal:
+            grainPricingMode === "TOTAL" ? Number(precoTotalGraos) : valorTotalGraosFinal,
+          precoPorSaca:
+            grainPricingMode === "PER_SACK" ? Number(precoPorSaca) : valorSacaFinal,
+          cidade: cidade.trim(),
+          uf,
+        };
+
+        const criado = await criarAnuncioGraos(inputGraos, session);
+        setCreatedAdId(criado.id);
+      }
+
       setShowSuccessModal(true);
-    } catch {
-      setErros({ geral: "Ocorreu um erro ao publicar o lote. Tente novamente." });
+    } catch (err) {
+      console.error("Erro ao publicar anúncio de lote:", err);
+      const mensagem =
+        err instanceof Error
+          ? err.message
+          : "Ocorreu um erro ao publicar o lote. Verifique o armazenamento do navegador e tente novamente.";
+      setErros({ geral: mensagem });
+      window.scrollTo({ top: 0, behavior: "smooth" });
     } finally {
       setIsSubmitting(false);
     }
@@ -204,16 +505,66 @@ export function AnimalAdCreatePage({ onOpenDialog }: AnimalAdCreatePageProps) {
           <span aria-hidden="true">/</span>
           <Link to={routes.myAds}>Meus Anúncios</Link>
           <span aria-hidden="true">/</span>
-          <span aria-current="page">Novo Lote de Boi Gordo</span>
+          <span aria-current="page">
+            {modalidade === "ANIMAL" ? "Novo Lote de Boi Gordo" : "Novo Lote de Grãos ou Café"}
+          </span>
         </nav>
 
         <header className="ad-create-header">
-          <p className="eyebrow">Pecuária de Corte · Boi Gordo</p>
-          <h1 className="ad-create-title">Cadastro de Lote de Boi Gordo</h1>
+          <p className="eyebrow">
+            {modalidade === "ANIMAL"
+              ? "Pecuária de Corte · Boi Gordo"
+              : "Produção Agrícola · Grãos e Café"}
+          </p>
+          <h1 className="ad-create-title">
+            {modalidade === "ANIMAL"
+              ? "Cadastro de Lote de Boi Gordo"
+              : "Cadastro de Lote de Grãos ou Café"}
+          </h1>
           <p className="ad-create-subtitle">
-            Publique as especificações zootécnicas e comerciais da sua boiada. O lote ficará ativo imediatamente no mercado.
+            {modalidade === "ANIMAL"
+              ? "Publique as especificações zootécnicas e comerciais da sua boiada. O lote ficará ativo imediatamente no mercado."
+              : "Publique as especificações agronômicas, safra, volume e condições comerciais da sua produção agrícola no mercado."}
           </p>
         </header>
+
+        {/* Seletor de Modalidade (Boi Gordo vs Grãos e Café) */}
+        <section className="ad-modality-selector" aria-label="Selecione a categoria do lote">
+          <span className="ad-modality-selector__label">Qual categoria de produção deseja anunciar?</span>
+          <div className="ad-modality-grid" role="radiogroup" aria-label="Modalidade do anúncio">
+            <button
+              type="button"
+              role="radio"
+              aria-checked={modalidade === "ANIMAL"}
+              className={`ad-modality-card ${modalidade === "ANIMAL" ? "ad-modality-card--active" : ""}`}
+              onClick={() => handleSelectModalidade("ANIMAL")}
+            >
+              <div className="ad-modality-card__icon">
+                <Icon name="box" />
+              </div>
+              <div className="ad-modality-card__body">
+                <strong>Pecuária de Corte (Boi Gordo)</strong>
+                <span>Lotes de engorda, terminação, recria e reprodução bovina.</span>
+              </div>
+            </button>
+
+            <button
+              type="button"
+              role="radio"
+              aria-checked={modalidade === "GRAOS"}
+              className={`ad-modality-card ${modalidade === "GRAOS" ? "ad-modality-card--active" : ""}`}
+              onClick={() => handleSelectModalidade("GRAOS")}
+            >
+              <div className="ad-modality-card__icon">
+                <Icon name="leaf" />
+              </div>
+              <div className="ad-modality-card__body">
+                <strong>Grãos e Café (Lavoura)</strong>
+                <span>Lotes de café, soja, milho, trigo e outros grãos em sacas ou toneladas.</span>
+              </div>
+            </button>
+          </div>
+        </section>
 
         {erros.geral && (
           <div className="ad-alert ad-alert--error" role="alert">
@@ -236,7 +587,11 @@ export function AnimalAdCreatePage({ onOpenDialog }: AnimalAdCreatePageProps) {
                 id="ad-titulo"
                 type="text"
                 className={`form-input ${erros.titulo ? "form-input--error" : ""}`}
-                placeholder="Ex: Lote de 80 Bois Nelore prontos para abate"
+                placeholder={
+                  modalidade === "ANIMAL"
+                    ? "Ex: Lote de 80 Bois Nelore prontos para abate"
+                    : "Ex: Lote de 500 Sacas de Café Arábica Bebida Mole — Safra 2024/2025"
+                }
                 value={titulo}
                 onChange={(e) => setTitulo(e.target.value)}
                 maxLength={120}
@@ -253,267 +608,1043 @@ export function AnimalAdCreatePage({ onOpenDialog }: AnimalAdCreatePageProps) {
 
             <div className="form-group">
               <label htmlFor="ad-descricao" className="form-label">
-                Descrição Detalhada do Manejo <span className="form-label__optional">(opcional)</span>
+                {modalidade === "ANIMAL"
+                  ? "Descrição Detalhada do Manejo"
+                  : "Descrição de Qualidade e Lote Agrícola"}{" "}
+                <span className="form-label__optional">(opcional)</span>
               </label>
               <textarea
                 id="ad-descricao"
                 className="form-textarea"
                 rows={4}
-                placeholder="Informe detalhes da pastagem, confinamento, suplementação mineral, histórico sanitário e facilidade de embarque..."
+                placeholder={
+                  modalidade === "ANIMAL"
+                    ? "Informe detalhes da pastagem, confinamento, suplementação mineral, histórico sanitário e facilidade de embarque..."
+                    : "Informe detalhes de peneira, bebida, secagem, laudo de classificação, condições de armazenagem e embarque..."
+                }
                 value={descricao}
                 onChange={(e) => setDescricao(e.target.value)}
                 maxLength={800}
               />
-              <span className="form-hint">Destaque os diferenciais de qualidade, acabamento de carcaça e rastreabilidade.</span>
+              <span className="form-hint">
+                {modalidade === "ANIMAL"
+                  ? "Destaque os diferenciais de qualidade, acabamento de carcaça e rastreabilidade."
+                  : "Destaque informações de laudo, peneira, índice de defeitos, secagem e logística de carregamento."}
+              </span>
             </div>
           </section>
 
-          {/* BLOCO 2: Especificações Zootécnicas */}
-          <section className="ad-form-section" aria-labelledby="section-zootecnica">
-            <h2 id="section-zootecnica" className="ad-form-section__title">
-              <Icon name="leaf" /> 2. Especificações Zootécnicas do Rebanho
-            </h2>
+          {/* BLOCO 2 CONDICIONAL: Pecuária (ANIMAL) vs Lavoura (GRAOS) */}
+          {modalidade === "ANIMAL" ? (
+            <section className="ad-form-section" aria-labelledby="section-zootecnica">
+              <h2 id="section-zootecnica" className="ad-form-section__title">
+                <Icon name="leaf" /> 2. Especificações Zootécnicas do Rebanho
+              </h2>
 
-            {/* Linha 1: Raça e Quantidade de cabeças */}
-            <div className="ad-form-grid ad-form-grid--2">
-              <div className="form-group">
-                <label htmlFor="ad-raca" className="form-label">
-                  Raça ou Linhagem Predominante <span className="required">*</span>
-                </label>
-                <select
-                  id="ad-raca"
-                  className={`form-select ${erros.raca ? "form-select--error" : ""}`}
-                  value={racaSelect}
-                  onChange={(e) => {
-                    setRacaSelect(e.target.value);
-                    if (erros.raca) {
-                      setErros((prev) => ({ ...prev, raca: "" }));
-                    }
-                  }}
-                  aria-invalid={Boolean(erros.raca)}
-                  aria-describedby={erros.raca ? "ad-raca-error" : "ad-raca-hint"}
-                  required
-                >
-                  <option value="">Selecione a raça</option>
-                  {BEEF_CATTLE_BREEDS.map((breed) => (
-                    <option key={breed.value} value={breed.value}>
-                      {breed.label}
-                    </option>
-                  ))}
-                </select>
-                {erros.raca && (
-                  <span id="ad-raca-error" className="form-error">
-                    {erros.raca}
+              {/* Linha 1: Raça e Quantidade de cabeças */}
+              <div className="ad-form-grid ad-form-grid--2">
+                <div className="form-group">
+                  <label htmlFor="ad-raca" className="form-label">
+                    Raça ou Linhagem Predominante <span className="required">*</span>
+                  </label>
+                  <select
+                    id="ad-raca"
+                    className={`form-select ${erros.raca ? "form-select--error" : ""}`}
+                    value={racaSelect}
+                    onChange={(e) => {
+                      setRacaSelect(e.target.value);
+                      if (erros.raca) {
+                        setErros((prev) => ({ ...prev, raca: "" }));
+                      }
+                    }}
+                    aria-invalid={Boolean(erros.raca)}
+                    aria-describedby={erros.raca ? "ad-raca-error" : "ad-raca-hint"}
+                    required
+                  >
+                    <option value="">Selecione a raça</option>
+                    {BEEF_CATTLE_BREEDS.map((breed) => (
+                      <option key={breed.value} value={breed.value}>
+                        {breed.label}
+                      </option>
+                    ))}
+                  </select>
+                  {erros.raca && (
+                    <span id="ad-raca-error" className="form-error">
+                      {erros.raca}
+                    </span>
+                  )}
+                  <span id="ad-raca-hint" className="form-hint">
+                    Informe apenas a raça ou linhagem zootécnica. Detalhes de nutrição, cocho e manejo devem ser descritos no campo Descrição.
+                  </span>
+
+                  {racaSelect === "OUTRA" && (
+                    <div className="ad-raca-custom-box">
+                      <div className="ad-raca-custom-header">
+                        <label htmlFor="ad-raca-custom" className="form-label">
+                          Especifique a Raça / Cruzamento <span className="required">*</span>
+                        </label>
+                        <span className="ad-char-counter" aria-live="polite">
+                          {racaCustom.length}/30
+                        </span>
+                      </div>
+                      <input
+                        id="ad-raca-custom"
+                        type="text"
+                        className={`form-input ${erros.racaCustom ? "form-input--error" : ""}`}
+                        placeholder="Ex: Senepol x Nelore F2"
+                        value={racaCustom}
+                        onChange={(e) => {
+                          setRacaCustom(e.target.value);
+                          if (erros.racaCustom) {
+                            setErros((prev) => ({ ...prev, racaCustom: "" }));
+                          }
+                        }}
+                        maxLength={30}
+                        aria-invalid={Boolean(erros.racaCustom)}
+                        aria-describedby={erros.racaCustom ? "ad-raca-custom-error" : undefined}
+                        required
+                      />
+                      {erros.racaCustom && (
+                        <span id="ad-raca-custom-error" className="form-error">
+                          {erros.racaCustom}
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                <div className="form-group">
+                  <label htmlFor="ad-quantidade" className="form-label">
+                    Quantidade de Cabeças <span className="required">*</span>
+                  </label>
+                  <input
+                    id="ad-quantidade"
+                    type="number"
+                    min={1}
+                    max={5000}
+                    className={`form-input ${erros.quantidadeCabecas ? "form-input--error" : ""}`}
+                    placeholder="Ex: 80"
+                    value={quantidadeCabecas}
+                    onChange={(e) => setQuantidadeCabecas(e.target.value === "" ? "" : Number(e.target.value))}
+                    aria-invalid={Boolean(erros.quantidadeCabecas)}
+                    aria-describedby={erros.quantidadeCabecas ? "ad-quantidade-error" : undefined}
+                    required
+                  />
+                  {erros.quantidadeCabecas && (
+                    <span id="ad-quantidade-error" className="form-error">
+                      {erros.quantidadeCabecas}
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Linha 2: Finalidade e Idade/Era */}
+              <div className="ad-form-grid ad-form-grid--2">
+                <div className="form-group">
+                  <label htmlFor="ad-finalidade" className="form-label">
+                    Finalidade da Criação <span className="required">*</span>
+                  </label>
+                  <select
+                    id="ad-finalidade"
+                    className="form-select"
+                    value={finalidade}
+                    onChange={(e) => setFinalidade(e.target.value as AnimalPurpose)}
+                  >
+                    {BEEF_CATTLE_PURPOSES.map((purp) => (
+                      <option key={purp.value} value={purp.value}>
+                        {purp.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="form-group">
+                  <label htmlFor="ad-idade" className="form-label">
+                    Era / Idade Aproximada <span className="form-label__optional">(meses)</span>
+                  </label>
+                  <input
+                    id="ad-idade"
+                    type="number"
+                    min={1}
+                    max={120}
+                    className="form-input"
+                    placeholder="Ex: 30"
+                    value={idadeMeses}
+                    onChange={(e) => setIdadeMeses(e.target.value === "" ? "" : Number(e.target.value))}
+                  />
+                </div>
+              </div>
+
+              {/* Linha 3: Mecanismo Bi-direcional de Peso (Kg <-> @) */}
+              <div className="ad-weight-block">
+                <div className="ad-weight-header">
+                  <div>
+                    <label htmlFor="ad-peso" className="form-label">
+                      Peso Médio por Cabeça <span className="required">*</span>
+                    </label>
+                    <span className="ad-weight-subtext">
+                      {pesoUnitMode === "KG"
+                        ? "Digitando em Quilos (kg): o sistema converte automaticamente para Arrobas (@)"
+                        : "Digitando em Arrobas (@): o sistema converte automaticamente para Quilos (kg)"}
+                    </span>
+                  </div>
+
+                  <div className="ad-weight-unit-toggle" role="group" aria-label="Unidade de entrada de peso">
+                    <button
+                      type="button"
+                      className={`ad-unit-btn ${pesoUnitMode === "KG" ? "ad-unit-btn--active" : ""}`}
+                      onClick={() => handleTogglePesoUnit("KG")}
+                    >
+                      Quilos (kg)
+                    </button>
+                    <button
+                      type="button"
+                      className={`ad-unit-btn ${pesoUnitMode === "ARROBA" ? "ad-unit-btn--active" : ""}`}
+                      onClick={() => handleTogglePesoUnit("ARROBA")}
+                    >
+                      Arrobas (@)
+                    </button>
+                  </div>
+                </div>
+
+                <div className="ad-input-with-unit">
+                  <input
+                    id="ad-peso"
+                    type="number"
+                    min={pesoUnitMode === "KG" ? 50 : 2}
+                    max={pesoUnitMode === "KG" ? 1500 : 50}
+                    step={pesoUnitMode === "KG" ? 5 : 0.5}
+                    className={`form-input ${erros.peso ? "form-input--error" : ""}`}
+                    placeholder={pesoUnitMode === "KG" ? "Ex: 540" : "Ex: 18"}
+                    value={pesoInputValue}
+                    onChange={(e) => setPesoInputValue(e.target.value === "" ? "" : Number(e.target.value))}
+                    aria-invalid={Boolean(erros.peso)}
+                    aria-describedby={erros.peso ? "ad-peso-error" : undefined}
+                    required
+                  />
+                  <span className="ad-input-unit">
+                    {pesoUnitMode === "KG" ? "kg peso vivo" : "@ por cabeça"}
+                  </span>
+                </div>
+                {erros.peso && (
+                  <span id="ad-peso-error" className="form-error">
+                    {erros.peso}
                   </span>
                 )}
-                <span id="ad-raca-hint" className="form-hint">
-                  Informe apenas a raça ou linhagem zootécnica. Detalhes de nutrição, cocho e manejo devem ser descritos no campo Descrição.
-                </span>
 
-                {racaSelect === "OUTRA" && (
-                  <div className="ad-raca-custom-box">
+                {typeof pesoInputValue === "number" && pesoInputValue > 0 && (
+                  <div className="ad-weight-helper">
+                    <Icon name="leaf" />
+                    <span>
+                      {pesoUnitMode === "KG" ? (
+                        <>
+                          Conversão zootécnica: <strong>{arrobasPorCabeca.toFixed(2)} @</strong> por cabeça (base: peso vivo ÷ 30 kg)
+                        </>
+                      ) : (
+                        <>
+                          Conversão zootécnica: <strong>{pesoKgNum.toFixed(1)} kg</strong> peso vivo por cabeça (base: @ × 30 kg)
+                        </>
+                      )}
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              {/* Linha 4: Painel Resumo da Boiada */}
+              {cabecasNum > 0 && pesoKgNum > 0 ? (
+                <div className="ad-metric-panel" aria-live="polite">
+                  <div className="ad-metric-item">
+                    <span className="ad-metric-label">Peso Médio por Cabeça</span>
+                    <strong className="ad-metric-value">
+                      {arrobasPorCabeca.toFixed(2)} @{" "}
+                      <span className="ad-metric-sub">({pesoKgNum} kg)</span>
+                    </strong>
+                  </div>
+                  <div className="ad-metric-item">
+                    <span className="ad-metric-label">Carga Total Estimada</span>
+                    <strong className="ad-metric-value">
+                      {pesoTotalBoiadaArrobas.toLocaleString("pt-BR")} @{" "}
+                      <span className="ad-metric-sub">
+                        ({pesoTotalToneladas} t · {pesoTotalBoiadaKg.toLocaleString("pt-BR")} kg)
+                      </span>
+                    </strong>
+                  </div>
+                  <div className="ad-metric-item">
+                    <span className="ad-metric-label">Total do Rebanho</span>
+                    <strong className="ad-metric-value">{cabecasNum} cabeças</strong>
+                  </div>
+                </div>
+              ) : (
+                <div className="ad-metric-panel ad-metric-panel--empty">
+                  <Icon name="leaf" />
+                  <p>Preencha a quantidade de cabeças e o peso médio para ver o resumo da boiada.</p>
+                </div>
+              )}
+            </section>
+          ) : (
+            <section className="ad-form-section" aria-labelledby="section-agronomica">
+              <h2 id="section-agronomica" className="ad-form-section__title">
+                <Icon name="leaf" /> 2. Especificações Agronômicas e Qualidade da Safra
+              </h2>
+
+              {/* Linha 1: Menu 1 (Cultura Principal) e Menu 2 (Tipo / Classificação Comercial) */}
+              <div className="ad-form-grid ad-form-grid--2">
+                <div className="form-group">
+                  <label htmlFor="ad-cultura" className="form-label">
+                    Cultura Principal <span className="required">*</span>
+                  </label>
+                  <select
+                    id="ad-cultura"
+                    className={`form-select ${erros.cultura ? "form-select--error" : ""}`}
+                    value={cultura}
+                    onChange={(e) => {
+                      const novaCultura = e.target.value as GrainCrop | "";
+                      setCultura(novaCultura);
+                      setSubtipoSelect("");
+                      setSubtipoCustom("");
+                      setCulturaPersonalizada("");
+                      setCafePeneira("");
+                      setCafeCatacaoDefeitos("");
+                      setCafePontuacaoSca("");
+                      setSojaImpurezasPct("");
+                      setSojaAvariadosPct("");
+                      setSojaQuebradosPct("");
+                      setMilhoImpurezasPct("");
+                      setMilhoArdidosPct("");
+                      setMilhoQuebradosPct("");
+                      setTrigoPhKgHl("");
+                      setTrigoForcaGlutenW("");
+                      setTrigoFallingNumberSeg("");
+                      setOutroObservacoesLaudo("");
+                      setErros((prev) => {
+                        const {
+                          cultura: _c,
+                          subtipo: _s,
+                          culturaPersonalizada: _cp,
+                          subtipoCustom: _sc,
+                          umidade: _u,
+                          cafePeneira: _cpn,
+                          cafePontuacao: _cps,
+                          trigoPh: _tph,
+                          ...resto
+                        } = prev;
+                        return resto;
+                      });
+                    }}
+                    aria-invalid={Boolean(erros.cultura)}
+                    aria-describedby={erros.cultura ? "ad-cultura-error" : "ad-cultura-hint"}
+                    required
+                  >
+                    <option value="">Selecione a cultura</option>
+                    {GRAIN_CROPS.map((crop) => (
+                      <option key={crop.value} value={crop.value}>
+                        {crop.label}
+                      </option>
+                    ))}
+                  </select>
+                  {erros.cultura && (
+                    <span id="ad-cultura-error" className="form-error">
+                      {erros.cultura}
+                    </span>
+                  )}
+                  <span id="ad-cultura-hint" className="form-hint">
+                    Escolha entre Café, Soja, Milho, Trigo ou selecione Outro para culturas diversas.
+                  </span>
+                </div>
+
+                {cultura === "OUTRO" ? (
+                  <div className="form-group">
                     <div className="ad-raca-custom-header">
-                      <label htmlFor="ad-raca-custom" className="form-label">
-                        Especifique a Raça / Cruzamento <span className="required">*</span>
+                      <label htmlFor="ad-cultura-custom" className="form-label">
+                        Qual é a Cultura ou Grão? <span className="required">*</span>
                       </label>
                       <span className="ad-char-counter" aria-live="polite">
-                        {racaCustom.length}/30
+                        {culturaPersonalizada.length}/30
                       </span>
                     </div>
                     <input
-                      id="ad-raca-custom"
+                      id="ad-cultura-custom"
                       type="text"
-                      className={`form-input ${erros.racaCustom ? "form-input--error" : ""}`}
-                      placeholder="Ex: Senepol x Nelore F2"
-                      value={racaCustom}
+                      className={`form-input ${erros.culturaPersonalizada ? "form-input--error" : ""}`}
+                      placeholder="Ex: Sorgo Granífero, Feijão Carioca, Aveia"
+                      value={culturaPersonalizada}
                       onChange={(e) => {
-                        setRacaCustom(e.target.value);
-                        if (erros.racaCustom) {
-                          setErros((prev) => ({ ...prev, racaCustom: "" }));
+                        setCulturaPersonalizada(e.target.value);
+                        if (erros.culturaPersonalizada) {
+                          setErros((prev) => ({ ...prev, culturaPersonalizada: "" }));
                         }
                       }}
                       maxLength={30}
-                      aria-invalid={Boolean(erros.racaCustom)}
-                      aria-describedby={erros.racaCustom ? "ad-raca-custom-error" : undefined}
+                      aria-invalid={Boolean(erros.culturaPersonalizada)}
+                      aria-describedby={erros.culturaPersonalizada ? "ad-cultura-custom-error" : undefined}
                       required
                     />
-                    {erros.racaCustom && (
-                      <span id="ad-raca-custom-error" className="form-error">
-                        {erros.racaCustom}
+                    {erros.culturaPersonalizada && (
+                      <span id="ad-cultura-custom-error" className="form-error">
+                        {erros.culturaPersonalizada}
                       </span>
+                    )}
+                    <span className="form-hint">
+                      Será exibido com a tag fixa <strong>Outro</strong> seguida do nome informado.
+                    </span>
+                  </div>
+                ) : (
+                  <div className="form-group">
+                    <label htmlFor="ad-subtipo" className="form-label">
+                      Tipo / Classificação Comercial <span className="required">*</span>
+                    </label>
+                    <select
+                      id="ad-subtipo"
+                      className={`form-select ${erros.subtipo ? "form-select--error" : ""}`}
+                      value={subtipoSelect}
+                      disabled={!cultura}
+                      onChange={(e) => {
+                        setSubtipoSelect(e.target.value);
+                        if (erros.subtipo) {
+                          setErros((prev) => ({ ...prev, subtipo: "" }));
+                        }
+                      }}
+                      aria-invalid={Boolean(erros.subtipo)}
+                      aria-describedby={erros.subtipo ? "ad-subtipo-error" : undefined}
+                      required
+                    >
+                      <option value="">
+                        {cultura
+                          ? `Selecione a classificação de ${GRAIN_CROP_LABELS[cultura]}`
+                          : "Selecione primeiro a cultura ao lado"}
+                      </option>
+                      {cultura &&
+                        GRAIN_SUBTYPES[cultura].map((sub) => (
+                          <option key={sub.value} value={sub.value}>
+                            {sub.label}
+                          </option>
+                        ))}
+                    </select>
+                    {erros.subtipo && (
+                      <span id="ad-subtipo-error" className="form-error">
+                        {erros.subtipo}
+                      </span>
+                    )}
+
+                    {subtipoSelect === "OUTRO" && (
+                      <div className="ad-raca-custom-box">
+                        <div className="ad-raca-custom-header">
+                          <label htmlFor="ad-subtipo-custom" className="form-label">
+                            Especifique o Tipo / Classificação <span className="required">*</span>
+                          </label>
+                          <span className="ad-char-counter" aria-live="polite">
+                            {subtipoCustom.length}/30
+                          </span>
+                        </div>
+                        <input
+                          id="ad-subtipo-custom"
+                          type="text"
+                          className={`form-input ${erros.subtipoCustom ? "form-input--error" : ""}`}
+                          placeholder="Ex: Peneira 17/18 Cereja Descascado"
+                          value={subtipoCustom}
+                          onChange={(e) => {
+                            setSubtipoCustom(e.target.value);
+                            if (erros.subtipoCustom) {
+                              setErros((prev) => ({ ...prev, subtipoCustom: "" }));
+                            }
+                          }}
+                          maxLength={30}
+                          aria-invalid={Boolean(erros.subtipoCustom)}
+                          aria-describedby={erros.subtipoCustom ? "ad-subtipo-custom-error" : undefined}
+                          required
+                        />
+                        {erros.subtipoCustom && (
+                          <span id="ad-subtipo-custom-error" className="form-error">
+                            {erros.subtipoCustom}
+                          </span>
+                        )}
+                      </div>
                     )}
                   </div>
                 )}
               </div>
 
-              <div className="form-group">
-                <label htmlFor="ad-quantidade" className="form-label">
-                  Quantidade de Cabeças <span className="required">*</span>
-                </label>
-                <input
-                  id="ad-quantidade"
-                  type="number"
-                  min={1}
-                  max={5000}
-                  className={`form-input ${erros.quantidadeCabecas ? "form-input--error" : ""}`}
-                  placeholder="Ex: 80"
-                  value={quantidadeCabecas}
-                  onChange={(e) => setQuantidadeCabecas(e.target.value === "" ? "" : Number(e.target.value))}
-                  aria-invalid={Boolean(erros.quantidadeCabecas)}
-                  aria-describedby={erros.quantidadeCabecas ? "ad-quantidade-error" : undefined}
-                  required
-                />
-                {erros.quantidadeCabecas && (
-                  <span id="ad-quantidade-error" className="form-error">
-                    {erros.quantidadeCabecas}
-                  </span>
+              {/* Prévia das 2 Tags do Card */}
+              {cultura && (
+                <div className="ad-tags-preview-bar" aria-live="polite">
+                  <span className="ad-tags-preview-bar__label">Tags geradas no card do anúncio:</span>
+                  <div className="ad-tags-preview-bar__chips">
+                    <span className="ad-tag-pill ad-tag-pill--primary">{grainTag1}</span>
+                    <span className="ad-tag-pill ad-tag-pill--secondary">{grainTag2}</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Linha 2: Safra de Colheita e Padrão de Armazenamento */}
+              <div className="ad-form-grid ad-form-grid--2">
+                <div className="form-group">
+                  <label htmlFor="ad-safra" className="form-label">
+                    Safra de Colheita <span className="required">*</span>
+                  </label>
+                  <select
+                    id="ad-safra"
+                    className={`form-select ${erros.safra ? "form-select--error" : ""}`}
+                    value={safra}
+                    onChange={(e) => setSafra(e.target.value)}
+                    required
+                  >
+                    {GRAIN_HARVEST_SEASONS.map((season) => (
+                      <option key={season} value={season}>
+                        Safra {season}
+                      </option>
+                    ))}
+                  </select>
+                  {erros.safra && (
+                    <span id="ad-safra-error" className="form-error">
+                      {erros.safra}
+                    </span>
+                  )}
+                </div>
+
+                <div className="form-group">
+                  <label htmlFor="ad-embalagem" className="form-label">
+                    Armazenamento / Embalagem <span className="required">*</span>
+                  </label>
+                  <select
+                    id="ad-embalagem"
+                    className={`form-select ${erros.embalagem ? "form-select--error" : ""}`}
+                    value={embalagem}
+                    onChange={(e) => setEmbalagem(e.target.value as GrainPackaging)}
+                    required
+                  >
+                    {GRAIN_PACKAGING_OPTIONS.map((pack) => (
+                      <option key={pack.value} value={pack.value}>
+                        {pack.label}
+                      </option>
+                    ))}
+                  </select>
+                  {erros.embalagem && (
+                    <span id="ad-embalagem-error" className="form-error">
+                      {erros.embalagem}
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Linha 3: Bloco de Laudo Técnico e Qualidade Física (US-011) */}
+              <div className="ad-quality-block" aria-labelledby="heading-laudo-tecnico-form">
+                <div className="ad-quality-block__header">
+                  <h3 id="heading-laudo-tecnico-form" className="ad-quality-block__title">
+                    <Icon name="leaf" /> Laudo Técnico e Qualidade Agronômica {cultura ? `— ${GRAIN_CROP_LABELS[cultura]}` : ""}
+                  </h3>
+                  <p className="ad-quality-block__subtitle">
+                    Parâmetros oficiais (MAPA, CONAB, ANEC e CECAFÉ). Campos com asterisco (<span className="required">*</span>) são de aferição direta na balança da fazenda; parâmetros de análise laboratorial são opcionais e podem ser deixados em branco.
+                  </p>
+                </div>
+
+                {!cultura ? (
+                  <div className="ad-quality-notice">
+                    <Icon name="leaf" />
+                    <span>Selecione a cultura principal no primeiro menu para carregar os parâmetros oficiais de qualidade física e classificação.</span>
+                  </div>
+                ) : (
+                  <div className="ad-quality-content">
+                    {/* Umidade: Obrigatória para todas as culturas */}
+                    <div className="ad-form-grid ad-form-grid--2">
+                      <div className="form-group">
+                        <label htmlFor="ad-umidade" className="form-label">
+                          Umidade Estimada <span className="required">*</span>
+                        </label>
+                        <div className="ad-input-with-unit">
+                          <input
+                            id="ad-umidade"
+                            type="number"
+                            min={1}
+                            max={50}
+                            step={0.1}
+                            className={`form-input ${erros.umidade ? "form-input--error" : ""}`}
+                            placeholder={
+                              cultura === "CAFE"
+                                ? "Ex: 11.5"
+                                : cultura === "TRIGO"
+                                ? "Ex: 12.5"
+                                : "Ex: 13.5"
+                            }
+                            value={umidadePercentual}
+                            onChange={(e) => {
+                              setUmidadePercentual(e.target.value === "" ? "" : Number(e.target.value));
+                              if (erros.umidade) {
+                                setErros((prev) => ({ ...prev, umidade: "" }));
+                              }
+                            }}
+                            aria-invalid={Boolean(erros.umidade)}
+                            aria-describedby={erros.umidade ? "ad-umidade-error" : "ad-umidade-hint"}
+                            required
+                          />
+                          <span className="ad-input-unit">%</span>
+                        </div>
+                        {erros.umidade && (
+                          <span id="ad-umidade-error" className="form-error">
+                            {erros.umidade}
+                          </span>
+                        )}
+                        <span id="ad-umidade-hint" className="form-hint">
+                          {cultura === "CAFE"
+                            ? "Padrão de mercado entre 11% e 12,5%."
+                            : cultura === "TRIGO"
+                            ? "Máximo comercial tolerado de 13%."
+                            : "Base comercial padrão máxima de 14%."}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Especificações de Qualidade: Soja */}
+                    {cultura === "SOJA" && (
+                      <div className="ad-form-grid ad-form-grid--3">
+                        <div className="form-group">
+                          <label htmlFor="ad-soja-impurezas" className="form-label">
+                            Impurezas e Matérias Estranhas <span className="form-label__optional">(opcional)</span>
+                          </label>
+                          <div className="ad-input-with-unit">
+                            <input
+                              id="ad-soja-impurezas"
+                              type="number"
+                              min={0}
+                              max={100}
+                              step={0.1}
+                              className="form-input"
+                              placeholder="Ex: máx. 1%"
+                              value={sojaImpurezasPct}
+                              onChange={(e) =>
+                                setSojaImpurezasPct(e.target.value === "" ? "" : Number(e.target.value))
+                              }
+                            />
+                            <span className="ad-input-unit">%</span>
+                          </div>
+                          <span className="form-hint">Tolerância padrão de até 1%.</span>
+                        </div>
+
+                        <div className="form-group">
+                          <label htmlFor="ad-soja-avariados" className="form-label">
+                            Grãos Avariados Totais <span className="form-label__optional">(opcional)</span>
+                          </label>
+                          <div className="ad-input-with-unit">
+                            <input
+                              id="ad-soja-avariados"
+                              type="number"
+                              min={0}
+                              max={100}
+                              step={0.1}
+                              className="form-input"
+                              placeholder="Ex: máx. 8%"
+                              value={sojaAvariadosPct}
+                              onChange={(e) =>
+                                setSojaAvariadosPct(e.target.value === "" ? "" : Number(e.target.value))
+                              }
+                            />
+                            <span className="ad-input-unit">%</span>
+                          </div>
+                          <span className="form-hint">Padrão ANEC máx. 8% (ardidos/mofados).</span>
+                        </div>
+
+                        <div className="form-group">
+                          <label htmlFor="ad-soja-quebrados" className="form-label">
+                            Grãos Quebrados <span className="form-label__optional">(opcional)</span>
+                          </label>
+                          <div className="ad-input-with-unit">
+                            <input
+                              id="ad-soja-quebrados"
+                              type="number"
+                              min={0}
+                              max={100}
+                              step={0.1}
+                              className="form-input"
+                              placeholder="Ex: até 15%"
+                              value={sojaQuebradosPct}
+                              onChange={(e) =>
+                                setSojaQuebradosPct(e.target.value === "" ? "" : Number(e.target.value))
+                              }
+                            />
+                            <span className="ad-input-unit">%</span>
+                          </div>
+                          <span className="form-hint">Tolerância de grãos quebrados.</span>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Especificações de Qualidade: Milho */}
+                    {cultura === "MILHO" && (
+                      <div className="ad-form-grid ad-form-grid--3">
+                        <div className="form-group">
+                          <label htmlFor="ad-milho-impurezas" className="form-label">
+                            Impurezas e Fragmentos <span className="form-label__optional">(opcional)</span>
+                          </label>
+                          <div className="ad-input-with-unit">
+                            <input
+                              id="ad-milho-impurezas"
+                              type="number"
+                              min={0}
+                              max={100}
+                              step={0.1}
+                              className="form-input"
+                              placeholder="Ex: máx. 1%"
+                              value={milhoImpurezasPct}
+                              onChange={(e) =>
+                                setMilhoImpurezasPct(e.target.value === "" ? "" : Number(e.target.value))
+                              }
+                            />
+                            <span className="ad-input-unit">%</span>
+                          </div>
+                          <span className="form-hint">Padrão Tipo 1 (máx. 1%).</span>
+                        </div>
+
+                        <div className="form-group">
+                          <label htmlFor="ad-milho-ardidos" className="form-label">
+                            Grãos Ardidos <span className="form-label__optional">(opcional)</span>
+                          </label>
+                          <div className="ad-input-with-unit">
+                            <input
+                              id="ad-milho-ardidos"
+                              type="number"
+                              min={0}
+                              max={100}
+                              step={0.1}
+                              className="form-input"
+                              placeholder="Ex: máx. 2%"
+                              value={milhoArdidosPct}
+                              onChange={(e) =>
+                                setMilhoArdidosPct(e.target.value === "" ? "" : Number(e.target.value))
+                              }
+                            />
+                            <span className="ad-input-unit">%</span>
+                          </div>
+                          <span className="form-hint">Nutrição animal (Tipo 1: 1%, Tipo 2: 3%).</span>
+                        </div>
+
+                        <div className="form-group">
+                          <label htmlFor="ad-milho-quebrados" className="form-label">
+                            Grãos Quebrados <span className="form-label__optional">(opcional)</span>
+                          </label>
+                          <div className="ad-input-with-unit">
+                            <input
+                              id="ad-milho-quebrados"
+                              type="number"
+                              min={0}
+                              max={100}
+                              step={0.1}
+                              className="form-input"
+                              placeholder="Ex: até 3%"
+                              value={milhoQuebradosPct}
+                              onChange={(e) =>
+                                setMilhoQuebradosPct(e.target.value === "" ? "" : Number(e.target.value))
+                              }
+                            />
+                            <span className="ad-input-unit">%</span>
+                          </div>
+                          <span className="form-hint">Tolerância padrão de até 3%.</span>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Especificações de Qualidade: Café */}
+                    {cultura === "CAFE" && (
+                      <div className="ad-form-grid ad-form-grid--3">
+                        <div className="form-group">
+                          <label htmlFor="ad-cafe-peneira" className="form-label">
+                            Peneira Predominante <span className="required">*</span>
+                          </label>
+                          <select
+                            id="ad-cafe-peneira"
+                            className={`form-select ${erros.cafePeneira ? "form-select--error" : ""}`}
+                            value={cafePeneira}
+                            onChange={(e) => {
+                              setCafePeneira(e.target.value as CoffeeScreen);
+                              if (erros.cafePeneira) {
+                                setErros((prev) => ({ ...prev, cafePeneira: "" }));
+                              }
+                            }}
+                            aria-invalid={Boolean(erros.cafePeneira)}
+                            aria-describedby={erros.cafePeneira ? "ad-cafe-peneira-error" : undefined}
+                            required
+                          >
+                            <option value="">Selecione a peneira</option>
+                            {COFFEE_SCREEN_OPTIONS.map((opt) => (
+                              <option key={opt.value} value={opt.value}>
+                                {opt.label}
+                              </option>
+                            ))}
+                          </select>
+                          {erros.cafePeneira && (
+                            <span id="ad-cafe-peneira-error" className="form-error">
+                              {erros.cafePeneira}
+                            </span>
+                          )}
+                          <span className="form-hint">Granulometria física do lote.</span>
+                        </div>
+
+                        <div className="form-group">
+                          <label htmlFor="ad-cafe-catacao" className="form-label">
+                            Catação / Defeitos <span className="form-label__optional">(opcional)</span>
+                          </label>
+                          <input
+                            id="ad-cafe-catacao"
+                            type="text"
+                            maxLength={30}
+                            className="form-input"
+                            placeholder="Ex: 12% ou Tipo 4"
+                            value={cafeCatacaoDefeitos}
+                            onChange={(e) => setCafeCatacaoDefeitos(e.target.value)}
+                          />
+                          <span className="form-hint">Percentual de catação ou contagem COB.</span>
+                        </div>
+
+                        <div className="form-group">
+                          <label htmlFor="ad-cafe-sca" className="form-label">
+                            Pontuação SCA <span className="form-label__optional">(opcional, 80-100 pts)</span>
+                          </label>
+                          <input
+                            id="ad-cafe-sca"
+                            type="number"
+                            min={80}
+                            max={100}
+                            step={0.5}
+                            className={`form-input ${erros.cafePontuacao ? "form-input--error" : ""}`}
+                            placeholder="Ex: 84"
+                            value={cafePontuacaoSca}
+                            onChange={(e) => {
+                              setCafePontuacaoSca(e.target.value === "" ? "" : Number(e.target.value));
+                              if (erros.cafePontuacao) {
+                                setErros((prev) => ({ ...prev, cafePontuacao: "" }));
+                              }
+                            }}
+                            aria-invalid={Boolean(erros.cafePontuacao)}
+                            aria-describedby={erros.cafePontuacao ? "ad-cafe-sca-error" : undefined}
+                          />
+                          {erros.cafePontuacao && (
+                            <span id="ad-cafe-sca-error" className="form-error">
+                              {erros.cafePontuacao}
+                            </span>
+                          )}
+                          <span className="form-hint">Cafés especiais (SCA ≥ 80 pts).</span>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Especificações de Qualidade: Trigo */}
+                    {cultura === "TRIGO" && (
+                      <div className="ad-form-grid ad-form-grid--3">
+                        <div className="form-group">
+                          <label htmlFor="ad-trigo-ph" className="form-label">
+                            PH / Peso Hectolítrico <span className="required">*</span>
+                          </label>
+                          <div className="ad-input-with-unit">
+                            <input
+                              id="ad-trigo-ph"
+                              type="number"
+                              min={50}
+                              max={100}
+                              step={0.5}
+                              className={`form-input ${erros.trigoPh ? "form-input--error" : ""}`}
+                              placeholder="Ex: 78"
+                              value={trigoPhKgHl}
+                              onChange={(e) => {
+                                setTrigoPhKgHl(e.target.value === "" ? "" : Number(e.target.value));
+                                if (erros.trigoPh) {
+                                  setErros((prev) => ({ ...prev, trigoPh: "" }));
+                                }
+                              }}
+                              aria-invalid={Boolean(erros.trigoPh)}
+                              aria-describedby={erros.trigoPh ? "ad-trigo-ph-error" : undefined}
+                              required
+                            />
+                            <span className="ad-input-unit">kg/hL</span>
+                          </div>
+                          {erros.trigoPh && (
+                            <span id="ad-trigo-ph-error" className="form-error">
+                              {erros.trigoPh}
+                            </span>
+                          )}
+                          <span className="form-hint">Densidade volumétrica (Tipo 1: ≥ 78).</span>
+                        </div>
+
+                        <div className="form-group">
+                          <label htmlFor="ad-trigo-gluten" className="form-label">
+                            Força de Glúten (W) <span className="form-label__optional">(opcional)</span>
+                          </label>
+                          <input
+                            id="ad-trigo-gluten"
+                            type="number"
+                            min={50}
+                            max={500}
+                            step={1}
+                            className="form-input"
+                            placeholder="Ex: 240 ou 300"
+                            value={trigoForcaGlutenW}
+                            onChange={(e) =>
+                              setTrigoForcaGlutenW(e.target.value === "" ? "" : Number(e.target.value))
+                            }
+                          />
+                          <span className="form-hint">Alveografia (Trigo Pão W ≥ 220).</span>
+                        </div>
+
+                        <div className="form-group">
+                          <label htmlFor="ad-trigo-fn" className="form-label">
+                            Falling Number (FN) <span className="form-label__optional">(opcional)</span>
+                          </label>
+                          <div className="ad-input-with-unit">
+                            <input
+                              id="ad-trigo-fn"
+                              type="number"
+                              min={60}
+                              max={600}
+                              step={1}
+                              className="form-input"
+                              placeholder="Ex: 280"
+                              value={trigoFallingNumberSeg}
+                              onChange={(e) =>
+                                setTrigoFallingNumberSeg(e.target.value === "" ? "" : Number(e.target.value))
+                              }
+                            />
+                            <span className="ad-input-unit">s</span>
+                          </div>
+                          <span className="form-hint">Atividade enzimática (padrão ≥ 250 s).</span>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Especificações de Qualidade: Outro */}
+                    {cultura === "OUTRO" && (
+                      <div className="form-group">
+                        <label htmlFor="ad-outro-obs" className="form-label">
+                          Observações Técnicas do Laudo <span className="form-label__optional">(opcional, máx. 60 caracteres)</span>
+                        </label>
+                        <input
+                          id="ad-outro-obs"
+                          type="text"
+                          maxLength={60}
+                          className="form-input"
+                          placeholder="Ex: Grão limpo em silo próprio, peneira 12..."
+                          value={outroObservacoesLaudo}
+                          onChange={(e) => setOutroObservacoesLaudo(e.target.value)}
+                        />
+                        <span className="form-hint">
+                          Detalhe o padrão de secagem, pureza ou beneficiamento do lote alternativo.
+                        </span>
+                      </div>
+                    )}
+                  </div>
                 )}
               </div>
-            </div>
 
-            {/* Linha 2: Finalidade e Idade/Era */}
-            <div className="ad-form-grid ad-form-grid--2">
-              <div className="form-group">
-                <label htmlFor="ad-finalidade" className="form-label">
-                  Finalidade da Criação <span className="required">*</span>
-                </label>
-                <select
-                  id="ad-finalidade"
-                  className="form-select"
-                  value={finalidade}
-                  onChange={(e) => setFinalidade(e.target.value as AnimalPurpose)}
-                >
-                  {BEEF_CATTLE_PURPOSES.map((purp) => (
-                    <option key={purp.value} value={purp.value}>
-                      {purp.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="form-group">
-                <label htmlFor="ad-idade" className="form-label">
-                  Era / Idade Aproximada <span className="form-label__optional">(meses)</span>
-                </label>
-                <input
-                  id="ad-idade"
-                  type="number"
-                  min={1}
-                  max={120}
-                  className="form-input"
-                  placeholder="Ex: 30"
-                  value={idadeMeses}
-                  onChange={(e) => setIdadeMeses(e.target.value === "" ? "" : Number(e.target.value))}
-                />
-              </div>
-            </div>
-
-            {/* Linha 3: Mecanismo Bi-direcional de Peso (Kg <-> @) */}
-            <div className="ad-weight-block">
-              <div className="ad-weight-header">
-                <div>
-                  <label htmlFor="ad-peso" className="form-label">
-                    Peso Médio por Cabeça <span className="required">*</span>
-                  </label>
-                  <span className="ad-weight-subtext">
-                    {pesoUnitMode === "KG"
-                      ? "Digitando em Quilos (kg): o sistema converte automaticamente para Arrobas (@)"
-                      : "Digitando em Arrobas (@): o sistema converte automaticamente para Quilos (kg)"}
-                  </span>
-                </div>
-
-                <div className="ad-weight-unit-toggle" role="group" aria-label="Unidade de entrada de peso">
-                  <button
-                    type="button"
-                    className={`ad-unit-btn ${pesoUnitMode === "KG" ? "ad-unit-btn--active" : ""}`}
-                    onClick={() => handleTogglePesoUnit("KG")}
-                  >
-                    Quilos (kg)
-                  </button>
-                  <button
-                    type="button"
-                    className={`ad-unit-btn ${pesoUnitMode === "ARROBA" ? "ad-unit-btn--active" : ""}`}
-                    onClick={() => handleTogglePesoUnit("ARROBA")}
-                  >
-                    Arrobas (@)
-                  </button>
-                </div>
-              </div>
-
-              <div className="ad-input-with-unit">
-                <input
-                  id="ad-peso"
-                  type="number"
-                  min={pesoUnitMode === "KG" ? 50 : 2}
-                  max={pesoUnitMode === "KG" ? 1500 : 50}
-                  step={pesoUnitMode === "KG" ? 5 : 0.5}
-                  className={`form-input ${erros.peso ? "form-input--error" : ""}`}
-                  placeholder={pesoUnitMode === "KG" ? "Ex: 540" : "Ex: 18"}
-                  value={pesoInputValue}
-                  onChange={(e) => setPesoInputValue(e.target.value === "" ? "" : Number(e.target.value))}
-                  aria-invalid={Boolean(erros.peso)}
-                  aria-describedby={erros.peso ? "ad-peso-error" : undefined}
-                  required
-                />
-                <span className="ad-input-unit">
-                  {pesoUnitMode === "KG" ? "kg peso vivo" : "@ por cabeça"}
-                </span>
-              </div>
-              {erros.peso && (
-                <span id="ad-peso-error" className="form-error">
-                  {erros.peso}
-                </span>
-              )}
-
-              {typeof pesoInputValue === "number" && pesoInputValue > 0 && (
-                <div className="ad-weight-helper">
-                  <Icon name="leaf" />
-                  <span>
-                    {pesoUnitMode === "KG" ? (
-                      <>
-                        Conversão zootécnica: <strong>{arrobasPorCabeca.toFixed(2)} @</strong> por cabeça (base: peso vivo ÷ 30 kg)
-                      </>
-                    ) : (
-                      <>
-                        Conversão zootécnica: <strong>{pesoKgNum.toFixed(1)} kg</strong> peso vivo por cabeça (base: @ × 30 kg)
-                      </>
-                    )}
-                  </span>
-                </div>
-              )}
-            </div>
-
-            {/* Linha 4: Painel Resumo da Boiada */}
-            {cabecasNum > 0 && pesoKgNum > 0 ? (
-              <div className="ad-metric-panel" aria-live="polite">
-                <div className="ad-metric-item">
-                  <span className="ad-metric-label">Peso Médio por Cabeça</span>
-                  <strong className="ad-metric-value">
-                    {arrobasPorCabeca.toFixed(2)} @{" "}
-                    <span className="ad-metric-sub">({pesoKgNum} kg)</span>
-                  </strong>
-                </div>
-                <div className="ad-metric-item">
-                  <span className="ad-metric-label">Carga Total Estimada</span>
-                  <strong className="ad-metric-value">
-                    {pesoTotalBoiadaArrobas.toLocaleString("pt-BR")} @{" "}
-                    <span className="ad-metric-sub">
-                      ({pesoTotalToneladas} t · {pesoTotalBoiadaKg.toLocaleString("pt-BR")} kg)
+              {/* Linha 3: Conversão Bi-direcional de Volume (Sacas <-> Toneladas) */}
+              <div className="ad-weight-block">
+                <div className="ad-weight-header">
+                  <div>
+                    <label htmlFor="ad-volume" className="form-label">
+                      Volume Total do Lote <span className="required">*</span>
+                    </label>
+                    <span className="ad-weight-subtext">
+                      {volumeUnitMode === "SACAS"
+                        ? "Digitando em Sacas (60 kg): o sistema calcula automaticamente o peso em Toneladas (ton)"
+                        : "Digitando em Toneladas (ton): o sistema calcula automaticamente o equivalente em Sacas de 60 kg"}
                     </span>
-                  </strong>
+                  </div>
+
+                  <div className="ad-weight-unit-toggle" role="group" aria-label="Unidade de entrada de volume">
+                    <button
+                      type="button"
+                      className={`ad-unit-btn ${volumeUnitMode === "SACAS" ? "ad-unit-btn--active" : ""}`}
+                      onClick={() => handleToggleVolumeUnit("SACAS")}
+                    >
+                      Sacas (60 kg)
+                    </button>
+                    <button
+                      type="button"
+                      className={`ad-unit-btn ${volumeUnitMode === "TONELADAS" ? "ad-unit-btn--active" : ""}`}
+                      onClick={() => handleToggleVolumeUnit("TONELADAS")}
+                    >
+                      Toneladas (ton)
+                    </button>
+                  </div>
                 </div>
-                <div className="ad-metric-item">
-                  <span className="ad-metric-label">Total do Rebanho</span>
-                  <strong className="ad-metric-value">{cabecasNum} cabeças</strong>
+
+                <div className="ad-input-with-unit">
+                  <input
+                    id="ad-volume"
+                    type="number"
+                    min={volumeUnitMode === "SACAS" ? 1 : 0.1}
+                    max={volumeUnitMode === "SACAS" ? 500000 : 30000}
+                    step={volumeUnitMode === "SACAS" ? 10 : 0.5}
+                    className={`form-input ${erros.volume ? "form-input--error" : ""}`}
+                    placeholder={volumeUnitMode === "SACAS" ? "Ex: 500" : "Ex: 30"}
+                    value={volumeInputValue}
+                    onChange={(e) => {
+                      setVolumeInputValue(e.target.value === "" ? "" : Number(e.target.value));
+                      if (erros.volume) {
+                        setErros((prev) => ({ ...prev, volume: "" }));
+                      }
+                    }}
+                    aria-invalid={Boolean(erros.volume)}
+                    aria-describedby={erros.volume ? "ad-volume-error" : undefined}
+                    required
+                  />
+                  <span className="ad-input-unit">
+                    {volumeUnitMode === "SACAS" ? "sacas de 60 kg" : "toneladas (1.000 kg)"}
+                  </span>
                 </div>
+                {erros.volume && (
+                  <span id="ad-volume-error" className="form-error">
+                    {erros.volume}
+                  </span>
+                )}
+
+                {typeof volumeInputValue === "number" && volumeInputValue > 0 && (
+                  <div className="ad-weight-helper">
+                    <Icon name="leaf" />
+                    <span>
+                      {volumeUnitMode === "SACAS" ? (
+                        <>
+                          Conversão comercial: <strong>{toneladasGraosCalculadas.toLocaleString("pt-BR")} toneladas</strong> ({kgGraosCalculados.toLocaleString("pt-BR")} kg totais)
+                        </>
+                      ) : (
+                        <>
+                          Conversão comercial: <strong>{sacasCalculadas.toLocaleString("pt-BR")} sacas de 60 kg</strong> ({kgGraosCalculados.toLocaleString("pt-BR")} kg totais)
+                        </>
+                      )}
+                    </span>
+                  </div>
+                )}
               </div>
-            ) : (
-              <div className="ad-metric-panel ad-metric-panel--empty">
-                <Icon name="leaf" />
-                <p>Preencha a quantidade de cabeças e o peso médio para ver o resumo da boiada.</p>
-              </div>
-            )}
-          </section>
+
+              {/* Linha 4: Painel Resumo da Safra */}
+              {sacasCalculadas > 0 ? (
+                <div className="ad-metric-panel" aria-live="polite">
+                  <div className="ad-metric-item">
+                    <span className="ad-metric-label">Volume em Sacas (60 kg)</span>
+                    <strong className="ad-metric-value">
+                      {sacasCalculadas.toLocaleString("pt-BR")} sacas
+                    </strong>
+                  </div>
+                  <div className="ad-metric-item">
+                    <span className="ad-metric-label">Peso Total da Carga</span>
+                    <strong className="ad-metric-value">
+                      {toneladasGraosCalculadas.toLocaleString("pt-BR")} ton{" "}
+                      <span className="ad-metric-sub">
+                        ({kgGraosCalculados.toLocaleString("pt-BR")} kg)
+                      </span>
+                    </strong>
+                  </div>
+                  <div className="ad-metric-item">
+                    <span className="ad-metric-label">Safra / Armazenamento</span>
+                    <strong className="ad-metric-value">
+                      {safra}{" "}
+                      <span className="ad-metric-sub">· {GRAIN_PACKAGING_LABELS[embalagem]}</span>
+                    </strong>
+                  </div>
+                </div>
+              ) : (
+                <div className="ad-metric-panel ad-metric-panel--empty">
+                  <Icon name="leaf" />
+                  <p>Informe o volume em sacas ou toneladas para visualizar o resumo da carga agrícola.</p>
+                </div>
+              )}
+            </section>
+          )}
 
           {/* BLOCO 3: Precificação e Localização */}
           <section className="ad-form-section" aria-labelledby="section-preco">
@@ -521,136 +1652,287 @@ export function AnimalAdCreatePage({ onOpenDialog }: AnimalAdCreatePageProps) {
               <Icon name="location" /> 3. Precificação Comercial e Localização
             </h2>
 
-            <div className="form-group">
-              <span className="form-label">Como deseja definir o valor?</span>
-              <div className="ad-pricing-tabs" role="radiogroup" aria-label="Modo de precificação">
-                <label className={`ad-pricing-tab ${pricingMode === "TOTAL" ? "ad-pricing-tab--active" : ""}`}>
-                  <input
-                    type="radio"
-                    name="pricingMode"
-                    value="TOTAL"
-                    checked={pricingMode === "TOTAL"}
-                    onChange={() => setPricingMode("TOTAL")}
-                    className="sr-only"
-                  />
-                  <span>Preço Total do Lote (R$)</span>
-                </label>
-                <label className={`ad-pricing-tab ${pricingMode === "PER_HEAD" ? "ad-pricing-tab--active" : ""}`}>
-                  <input
-                    type="radio"
-                    name="pricingMode"
-                    value="PER_HEAD"
-                    checked={pricingMode === "PER_HEAD"}
-                    onChange={() => setPricingMode("PER_HEAD")}
-                    className="sr-only"
-                  />
-                  <span>Calcular por Cabeça (R$)</span>
-                </label>
-              </div>
-            </div>
-
-            {pricingMode === "TOTAL" ? (
-              <div className="form-group">
-                <label htmlFor="ad-preco-total" className="form-label">
-                  Valor Total do Lote (R$) <span className="required">*</span>
-                </label>
-                <div className="ad-input-with-unit">
-                  <span className="ad-input-prefix">R$</span>
-                  <input
-                    id="ad-preco-total"
-                    type="number"
-                    min={100}
-                    step={100}
-                    className={`form-input ${erros.precoTotal ? "form-input--error" : ""}`}
-                    placeholder="Ex: 240000"
-                    value={precoTotal}
-                    onChange={(e) => setPrecoTotal(e.target.value === "" ? "" : Number(e.target.value))}
-                    aria-invalid={Boolean(erros.precoTotal)}
-                    aria-describedby={erros.precoTotal ? "ad-preco-total-error" : undefined}
-                    required
-                  />
+            {modalidade === "ANIMAL" ? (
+              <>
+                <div className="form-group">
+                  <span className="form-label">Como deseja definir o valor?</span>
+                  <div className="ad-pricing-tabs" role="radiogroup" aria-label="Modo de precificação">
+                    <label className={`ad-pricing-tab ${pricingMode === "TOTAL" ? "ad-pricing-tab--active" : ""}`}>
+                      <input
+                        type="radio"
+                        name="pricingMode"
+                        value="TOTAL"
+                        checked={pricingMode === "TOTAL"}
+                        onChange={() => setPricingMode("TOTAL")}
+                        className="sr-only"
+                      />
+                      <span>Preço Total do Lote (R$)</span>
+                    </label>
+                    <label className={`ad-pricing-tab ${pricingMode === "PER_HEAD" ? "ad-pricing-tab--active" : ""}`}>
+                      <input
+                        type="radio"
+                        name="pricingMode"
+                        value="PER_HEAD"
+                        checked={pricingMode === "PER_HEAD"}
+                        onChange={() => setPricingMode("PER_HEAD")}
+                        className="sr-only"
+                      />
+                      <span>Calcular por Cabeça (R$)</span>
+                    </label>
+                  </div>
                 </div>
-                {erros.precoTotal && (
-                  <span id="ad-preco-total-error" className="form-error">
-                    {erros.precoTotal}
-                  </span>
+
+                {pricingMode === "TOTAL" ? (
+                  <div className="form-group">
+                    <label htmlFor="ad-preco-total" className="form-label">
+                      Valor Total do Lote (R$) <span className="required">*</span>
+                    </label>
+                    <div className="ad-input-with-unit">
+                      <span className="ad-input-prefix">R$</span>
+                      <input
+                        id="ad-preco-total"
+                        type="number"
+                        min={100}
+                        step={100}
+                        className={`form-input ${erros.precoTotal ? "form-input--error" : ""}`}
+                        placeholder="Ex: 240000"
+                        value={precoTotal}
+                        onChange={(e) => setPrecoTotal(e.target.value === "" ? "" : Number(e.target.value))}
+                        aria-invalid={Boolean(erros.precoTotal)}
+                        aria-describedby={erros.precoTotal ? "ad-preco-total-error" : undefined}
+                        required
+                      />
+                    </div>
+                    {erros.precoTotal && (
+                      <span id="ad-preco-total-error" className="form-error">
+                        {erros.precoTotal}
+                      </span>
+                    )}
+                  </div>
+                ) : (
+                  <div className="form-group">
+                    <label htmlFor="ad-preco-cabeca" className="form-label">
+                      Valor Unitário por Cabeça (R$) <span className="required">*</span>
+                    </label>
+                    <div className="ad-input-with-unit">
+                      <span className="ad-input-prefix">R$</span>
+                      <input
+                        id="ad-preco-cabeca"
+                        type="number"
+                        min={100}
+                        step={50}
+                        className={`form-input ${erros.precoPorCabeca ? "form-input--error" : ""}`}
+                        placeholder="Ex: 3000"
+                        value={precoPorCabeca}
+                        onChange={(e) => setPrecoPorCabeca(e.target.value === "" ? "" : Number(e.target.value))}
+                        aria-invalid={Boolean(erros.precoPorCabeca)}
+                        aria-describedby={erros.precoPorCabeca ? "ad-preco-cabeca-error" : undefined}
+                        required
+                      />
+                    </div>
+                    {erros.precoPorCabeca && (
+                      <span id="ad-preco-cabeca-error" className="form-error">
+                        {erros.precoPorCabeca}
+                      </span>
+                    )}
+                  </div>
                 )}
-              </div>
+
+                {/* Resumo Financeiro Dinâmico (Boi Gordo) */}
+                <div className="ad-pricing-summary" aria-live="polite">
+                  <div className="ad-pricing-summary__total">
+                    <span>Valor Total da Carga</span>
+                    <strong>
+                      {valorTotalFinal > 0
+                        ? valorTotalFinal.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
+                        : "—"}
+                    </strong>
+                  </div>
+                  <div className="ad-pricing-summary__breakdown">
+                    <div>
+                      <span>Preço por Cabeça</span>
+                      <strong>
+                        {valorCabecaFinal > 0
+                          ? valorCabecaFinal.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
+                          : "—"}
+                      </strong>
+                    </div>
+                    <div>
+                      <span>Preço por Arroba (@)</span>
+                      <strong>
+                        {valorArrobaFinal > 0
+                          ? valorArrobaFinal.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
+                          : "—"}
+                      </strong>
+                    </div>
+                  </div>
+                  {valorTotalFinal === 0 && (
+                    <p className="ad-pricing-summary__hint">
+                      Preencha o valor do lote para visualizar as conversões por cabeça e arroba.
+                    </p>
+                  )}
+                </div>
+              </>
             ) : (
-              <div className="form-group">
-                <label htmlFor="ad-preco-cabeca" className="form-label">
-                  Valor Unitário por Cabeça (R$) <span className="required">*</span>
-                </label>
-                <div className="ad-input-with-unit">
-                  <span className="ad-input-prefix">R$</span>
-                  <input
-                    id="ad-preco-cabeca"
-                    type="number"
-                    min={100}
-                    step={50}
-                    className={`form-input ${erros.precoPorCabeca ? "form-input--error" : ""}`}
-                    placeholder="Ex: 3000"
-                    value={precoPorCabeca}
-                    onChange={(e) => setPrecoPorCabeca(e.target.value === "" ? "" : Number(e.target.value))}
-                    aria-invalid={Boolean(erros.precoPorCabeca)}
-                    aria-describedby={erros.precoPorCabeca ? "ad-preco-cabeca-error" : undefined}
-                    required
-                  />
+              <>
+                <div className="form-group">
+                  <span className="form-label">Como deseja precificar a safra?</span>
+                  <div className="ad-pricing-tabs" role="radiogroup" aria-label="Modo de precificação agrícola">
+                    <label className={`ad-pricing-tab ${grainPricingMode === "TOTAL" ? "ad-pricing-tab--active" : ""}`}>
+                      <input
+                        type="radio"
+                        name="grainPricingMode"
+                        value="TOTAL"
+                        checked={grainPricingMode === "TOTAL"}
+                        onChange={() => setGrainPricingMode("TOTAL")}
+                        className="sr-only"
+                      />
+                      <span>Preço Total do Lote (R$)</span>
+                    </label>
+                    <label className={`ad-pricing-tab ${grainPricingMode === "PER_SACK" ? "ad-pricing-tab--active" : ""}`}>
+                      <input
+                        type="radio"
+                        name="grainPricingMode"
+                        value="PER_SACK"
+                        checked={grainPricingMode === "PER_SACK"}
+                        onChange={() => setGrainPricingMode("PER_SACK")}
+                        className="sr-only"
+                      />
+                      <span>Calcular por Saca de 60 kg (R$/sc)</span>
+                    </label>
+                  </div>
                 </div>
-                {erros.precoPorCabeca && (
-                  <span id="ad-preco-cabeca-error" className="form-error">
-                    {erros.precoPorCabeca}
-                  </span>
-                )}
-              </div>
-            )}
 
-            {/* Resumo Financeiro Dinâmico */}
-            <div className="ad-pricing-summary" aria-live="polite">
-              <div className="ad-pricing-summary__total">
-                <span>Valor Total da Carga</span>
-                <strong>
-                  {valorTotalFinal > 0
-                    ? valorTotalFinal.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
-                    : "—"}
-                </strong>
-              </div>
-              <div className="ad-pricing-summary__breakdown">
-                <div>
-                  <span>Preço por Cabeça</span>
-                  <strong>
-                    {valorCabecaFinal > 0
-                      ? valorCabecaFinal.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
-                      : "—"}
-                  </strong>
+                {grainPricingMode === "TOTAL" ? (
+                  <div className="form-group">
+                    <label htmlFor="ad-preco-total-graos" className="form-label">
+                      Valor Total do Lote Agrícola (R$) <span className="required">*</span>
+                    </label>
+                    <div className="ad-input-with-unit">
+                      <span className="ad-input-prefix">R$</span>
+                      <input
+                        id="ad-preco-total-graos"
+                        type="number"
+                        min={50}
+                        step={100}
+                        className={`form-input ${erros.precoTotalGraos ? "form-input--error" : ""}`}
+                        placeholder="Ex: 750000"
+                        value={precoTotalGraos}
+                        onChange={(e) => {
+                          setPrecoTotalGraos(e.target.value === "" ? "" : Number(e.target.value));
+                          if (erros.precoTotalGraos) {
+                            setErros((prev) => ({ ...prev, precoTotalGraos: "" }));
+                          }
+                        }}
+                        aria-invalid={Boolean(erros.precoTotalGraos)}
+                        aria-describedby={erros.precoTotalGraos ? "ad-preco-total-graos-error" : undefined}
+                        required
+                      />
+                    </div>
+                    {erros.precoTotalGraos && (
+                      <span id="ad-preco-total-graos-error" className="form-error">
+                        {erros.precoTotalGraos}
+                      </span>
+                    )}
+                  </div>
+                ) : (
+                  <div className="form-group">
+                    <label htmlFor="ad-preco-saca" className="form-label">
+                      Valor Unitário por Saca de 60 kg (R$/sc) <span className="required">*</span>
+                    </label>
+                    <div className="ad-input-with-unit">
+                      <span className="ad-input-prefix">R$</span>
+                      <input
+                        id="ad-preco-saca"
+                        type="number"
+                        min={10}
+                        step={5}
+                        className={`form-input ${erros.precoPorSaca ? "form-input--error" : ""}`}
+                        placeholder="Ex: 1500"
+                        value={precoPorSaca}
+                        onChange={(e) => {
+                          setPrecoPorSaca(e.target.value === "" ? "" : Number(e.target.value));
+                          if (erros.precoPorSaca) {
+                            setErros((prev) => ({ ...prev, precoPorSaca: "" }));
+                          }
+                        }}
+                        aria-invalid={Boolean(erros.precoPorSaca)}
+                        aria-describedby={erros.precoPorSaca ? "ad-preco-saca-error" : undefined}
+                        required
+                      />
+                    </div>
+                    {erros.precoPorSaca && (
+                      <span id="ad-preco-saca-error" className="form-error">
+                        {erros.precoPorSaca}
+                      </span>
+                    )}
+                  </div>
+                )}
+
+                {/* Resumo Financeiro Dinâmico (Grãos e Café) */}
+                <div className="ad-pricing-summary" aria-live="polite">
+                  <div className="ad-pricing-summary__total">
+                    <span>Valor Total do Lote</span>
+                    <strong>
+                      {valorTotalGraosFinal > 0
+                        ? valorTotalGraosFinal.toLocaleString("pt-BR", {
+                            style: "currency",
+                            currency: "BRL",
+                          })
+                        : "—"}
+                    </strong>
+                  </div>
+                  <div className="ad-pricing-summary__breakdown">
+                    <div>
+                      <span>Preço por Saca (60 kg)</span>
+                      <strong>
+                        {valorSacaFinal > 0
+                          ? valorSacaFinal.toLocaleString("pt-BR", {
+                              style: "currency",
+                              currency: "BRL",
+                            })
+                          : "—"}
+                      </strong>
+                    </div>
+                    <div>
+                      <span>Equivalente por Tonelada</span>
+                      <strong>
+                        {valorToneladaFinal > 0
+                          ? valorToneladaFinal.toLocaleString("pt-BR", {
+                              style: "currency",
+                              currency: "BRL",
+                            })
+                          : "—"}
+                      </strong>
+                    </div>
+                  </div>
+                  {valorTotalGraosFinal === 0 && (
+                    <p className="ad-pricing-summary__hint">
+                      Preencha o volume e o valor para visualizar o cálculo automático por saca e por tonelada.
+                    </p>
+                  )}
                 </div>
-                <div>
-                  <span>Preço por Arroba (@)</span>
-                  <strong>
-                    {valorArrobaFinal > 0
-                      ? valorArrobaFinal.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
-                      : "—"}
-                  </strong>
-                </div>
-              </div>
-              {valorTotalFinal === 0 && (
-                <p className="ad-pricing-summary__hint">
-                  Preencha o valor do lote para visualizar as conversões por cabeça e arroba.
-                </p>
-              )}
-            </div>
+              </>
+            )}
 
             {/* Localização */}
             <div className="ad-form-grid ad-form-grid--2">
               <div className="form-group">
                 <label htmlFor="ad-cidade" className="form-label">
-                  Município de Retirada <span className="required">*</span>
+                  {modalidade === "ANIMAL"
+                    ? "Município de Retirada"
+                    : "Município de Retirada / Armazém"}{" "}
+                  <span className="required">*</span>
                 </label>
                 <input
                   id="ad-cidade"
                   type="text"
                   className={`form-input ${erros.cidade ? "form-input--error" : ""}`}
-                  placeholder="Ex: Uberaba ou Barretos"
+                  placeholder={
+                    modalidade === "ANIMAL"
+                      ? "Ex: Uberaba ou Barretos"
+                      : "Ex: Patrocínio, Rio Verde ou Sorriso"
+                  }
                   value={cidade}
                   onChange={(e) => setCidade(e.target.value)}
                   aria-invalid={Boolean(erros.cidade)}
@@ -695,24 +1977,47 @@ export function AnimalAdCreatePage({ onOpenDialog }: AnimalAdCreatePageProps) {
             {/* Imagem de Capa (Placeholder estruturado para US-012) */}
             <div className="ad-cover-preview-box">
               <div className="ad-cover-preview-box__thumb">
-                <img src={defaultFarmImage} alt="Fotografia de pastagem rural da fazenda" />
-                <span className="ad-cover-badge">Boi Gordo · {racaFinal || "Nelore"}</span>
+                <img
+                  src={modalidade === "ANIMAL" ? defaultFarmImage : harvestSunsetImage}
+                  alt={
+                    modalidade === "ANIMAL"
+                      ? "Fotografia de pastagem rural da fazenda"
+                      : "Fotografia de colheita agrícola"
+                  }
+                />
+                <span className="ad-cover-badge">
+                  {modalidade === "ANIMAL"
+                    ? `Boi Gordo · ${racaFinal || "Nelore"}`
+                    : `${grainTag1} · ${grainTag2}`}
+                </span>
               </div>
               <div className="ad-cover-preview-box__info">
-                <strong>Foto da Propriedade / Lote</strong>
+                <strong>Foto de Capa do Lote</strong>
                 <p>
-                  O lote será anunciado com a fotografia campestre padrão da fazenda. Na US-012, será liberado o envio de fotos e vídeos específicos da boiada.
+                  {modalidade === "ANIMAL"
+                    ? "O lote será anunciado com a fotografia campestre padrão da fazenda. Na US-012, será liberado o envio de fotos e vídeos específicos da boiada."
+                    : "O lote agrícola será anunciado com a fotografia de safra padrão. Na US-012, será liberado o envio de fotos e vídeos reais dos grãos e amostras."}
                 </p>
               </div>
             </div>
           </section>
+
+          {Object.keys(erros).length > 0 && (
+            <div className="ad-alert ad-alert--error" role="alert" style={{ marginBottom: "1.5rem" }}>
+              {erros.geral || "Existem campos obrigatórios não preenchidos ou com valores pendentes. Verifique as pendências destacadas acima."}
+            </div>
+          )}
 
           <div className="ad-form-actions">
             <Link to={routes.myAds} className="button button--outline">
               Cancelar
             </Link>
             <button type="submit" className="button button--primary button--large" disabled={isSubmitting}>
-              {isSubmitting ? "Publicando Lote..." : "Publicar Lote de Boi Gordo"}
+              {isSubmitting
+                ? "Publicando Lote..."
+                : modalidade === "ANIMAL"
+                ? "Publicar Lote de Boi Gordo"
+                : "Publicar Lote Agrícola"}
             </button>
           </div>
         </form>
@@ -729,7 +2034,19 @@ export function AnimalAdCreatePage({ onOpenDialog }: AnimalAdCreatePageProps) {
                 Lote publicado com sucesso!
               </h2>
               <p className="ad-modal-description">
-                Seu lote de <strong>{quantidadeCabecas} {racaFinal || "bois"}</strong> já está ativo e visível no mercado para compradores, frigoríficos e cooperativas.
+                {modalidade === "ANIMAL" ? (
+                  <>
+                    Seu lote de <strong>{quantidadeCabecas} {racaFinal || "bois"}</strong> já está ativo e visível no mercado para compradores, frigoríficos e cooperativas.
+                  </>
+                ) : (
+                  <>
+                    Seu lote de{" "}
+                    <strong>
+                      {sacasCalculadas.toLocaleString("pt-BR")} sacas ({toneladasGraosCalculadas} ton) de {grainTag1} ({grainTag2})
+                    </strong>{" "}
+                    já está ativo e visível no mercado para compradores, cooperativas e cerealistas.
+                  </>
+                )}
               </p>
               <div className="ad-modal-actions">
                 <button
@@ -752,7 +2069,7 @@ export function AnimalAdCreatePage({ onOpenDialog }: AnimalAdCreatePageProps) {
                     className="button button--text"
                     onClick={() => navigate(`/anuncios/${createdAdId}`)}
                   >
-                    Ver Ficha Técnica Completa
+                    Visualizar Ficha Técnica do Anúncio
                   </button>
                 )}
               </div>

@@ -6,8 +6,15 @@ import { Icon } from "../../components/Icon";
 import { Avatar } from "../../components/Avatar";
 import farmImage from "../../assets/images/farm-landscape.jpeg";
 import { formatPhone, phoneDigits } from "../profile/profile";
-import type { AnimalLotAd } from "./ads.types";
-import { PURPOSE_LABELS, SPECIES_LABELS } from "./ads.types";
+import {
+  COFFEE_SCREEN_LABELS,
+  GRAIN_CROP_LABELS,
+  GRAIN_PACKAGING_LABELS,
+  PURPOSE_LABELS,
+  SPECIES_LABELS,
+  obterTagsAnuncio,
+} from "./ads.types";
+import type { MarketplaceAd } from "./ads.types";
 import { obterAnuncioPorId, obterPerfilProdutorPublico } from "./adsStorage";
 import type { PublicProducerProfile } from "./adsStorage";
 import "./ads.css";
@@ -16,7 +23,7 @@ export function AdDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { session } = useAuth();
-  const [anuncio, setAnuncio] = useState<AnimalLotAd | null>(null);
+  const [anuncio, setAnuncio] = useState<MarketplaceAd | null>(null);
   const [producerProfile, setProducerProfile] = useState<PublicProducerProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [contactSuccess, setContactSuccess] = useState(false);
@@ -61,7 +68,7 @@ export function AdDetailPage() {
       <div className="ad-detail-page">
         <div className="container">
           <div className="ad-not-found">
-            <h2>Lote de animais não encontrado</h2>
+            <h2>Lote não encontrado</h2>
             <p>O anúncio solicitado pode ter sido encerrado ou o identificador está incorreto.</p>
             <Link to={routes.market} className="button button--primary">
               Voltar ao Mercado
@@ -73,6 +80,7 @@ export function AdDetailPage() {
   }
 
   const isOwner = session && session.conta.id === anuncio.vendedorId;
+  const [tag1, tag2] = obterTagsAnuncio(anuncio);
 
   return (
     <div className="ad-detail-page">
@@ -88,15 +96,14 @@ export function AdDetailPage() {
 
         {/* Layout Principal da Ficha Técnica */}
         <div className="ad-detail-layout">
-          {/* Coluna Esquerda: Fotos e Dados Zootécnicos */}
+          {/* Coluna Esquerda: Fotos e Dados Técnicos */}
           <div className="ad-detail-main">
             {/* Banner Fotográfico */}
             <div className="ad-detail-banner">
               <img src={anuncio.imagemUrl} alt={anuncio.titulo} />
               <div className="ad-detail-banner__overlay">
-                <span className="ad-badge ad-badge--category">
-                  {SPECIES_LABELS[anuncio.especie]} · {anuncio.raca}
-                </span>
+                <span className="ad-badge ad-badge--category">{tag1}</span>
+                <span className="ad-badge ad-badge--category">{tag2}</span>
               </div>
             </div>
 
@@ -113,61 +120,250 @@ export function AdDetailPage() {
               <h1 className="ad-detail-title">{anuncio.titulo}</h1>
             </div>
 
-            {/* Ficha Zootécnica Completa */}
-            <section className="ad-detail-section" aria-labelledby="heading-zootecnica">
-              <h2 id="heading-zootecnica" className="ad-detail-section__title">
-                <Icon name="leaf" /> Ficha Zootécnica do Lote
-              </h2>
-              <div className="ad-spec-grid">
-                <div className="ad-spec-card">
-                  <span className="ad-spec-label">Espécie</span>
-                  <strong className="ad-spec-val">{SPECIES_LABELS[anuncio.especie]}</strong>
-                </div>
-                <div className="ad-spec-card">
-                  <span className="ad-spec-label">Raça / Cruzamento</span>
-                  <strong className="ad-spec-val">{anuncio.raca}</strong>
-                </div>
-                <div className="ad-spec-card">
-                  <span className="ad-spec-label">Quantidade</span>
-                  <strong className="ad-spec-val">{anuncio.quantidadeCabecas} cabeças</strong>
-                </div>
-                <div className="ad-spec-card">
-                  <span className="ad-spec-label">Finalidade</span>
-                  <strong className="ad-spec-val">{PURPOSE_LABELS[anuncio.finalidade]}</strong>
-                </div>
-                <div className="ad-spec-card">
-                  <span className="ad-spec-label">Era / Idade</span>
-                  <strong className="ad-spec-val">
-                    {anuncio.idadeMeses ? `${anuncio.idadeMeses} meses` : "Não informada"}
-                  </strong>
-                </div>
-                <div className="ad-spec-card">
-                  <span className="ad-spec-label">Peso Médio Estimado</span>
-                  <strong className="ad-spec-val">
-                    {anuncio.pesoMedioArroba} @ ({anuncio.pesoMedioKg} kg)
-                  </strong>
-                </div>
-                <div className="ad-spec-card ad-spec-card--highlight">
-                  <span className="ad-spec-label">Peso Total da Carga</span>
-                  <strong className="ad-spec-val">
-                    {anuncio.pesoTotalArroba.toLocaleString("pt-BR")} @ (
-                    {anuncio.pesoTotalKg.toLocaleString("pt-BR")} kg)
-                  </strong>
-                </div>
-                <div className="ad-spec-card">
-                  <span className="ad-spec-label">Local de Retirada</span>
-                  <strong className="ad-spec-val">
-                    {anuncio.cidade} / {anuncio.uf}
-                  </strong>
-                </div>
-              </div>
-            </section>
+            {/* Ficha Técnica Polimórfica (Pecuária vs. Grãos e Café) */}
+            {anuncio.categoria === "GRAOS" ? (
+              <>
+                {/* 1. Quadro de Volume e Carga */}
+                <section className="ad-detail-section" aria-labelledby="heading-volume-carga">
+                  <h2 id="heading-volume-carga" className="ad-detail-section__title">
+                    <Icon name="box" /> Volume e Carga da Safra
+                  </h2>
+                  <div className="ad-spec-grid">
+                    <div className="ad-spec-card">
+                      <span className="ad-spec-label">Cultura Principal</span>
+                      <strong className="ad-spec-val">
+                        {anuncio.cultura === "OUTRO"
+                          ? `Outro (${anuncio.culturaPersonalizada || anuncio.tagSecundaria})`
+                          : GRAIN_CROP_LABELS[anuncio.cultura]}
+                      </strong>
+                    </div>
+                    <div className="ad-spec-card">
+                      <span className="ad-spec-label">Tipo / Classificação Comercial</span>
+                      <strong className="ad-spec-val">{anuncio.subtipo}</strong>
+                    </div>
+                    <div className="ad-spec-card">
+                      <span className="ad-spec-label">Safra de Colheita</span>
+                      <strong className="ad-spec-val">Safra {anuncio.safra}</strong>
+                    </div>
+                    <div className="ad-spec-card">
+                      <span className="ad-spec-label">Armazenamento / Embalagem</span>
+                      <strong className="ad-spec-val">
+                        {GRAIN_PACKAGING_LABELS[anuncio.embalagem]}
+                      </strong>
+                    </div>
+                    <div className="ad-spec-card">
+                      <span className="ad-spec-label">Volume em Sacas (60 kg)</span>
+                      <strong className="ad-spec-val">
+                        {anuncio.quantidadeSacas.toLocaleString("pt-BR")} sacas
+                      </strong>
+                    </div>
+                    <div className="ad-spec-card ad-spec-card--highlight">
+                      <span className="ad-spec-label">Peso Total da Carga</span>
+                      <strong className="ad-spec-val">
+                        {anuncio.pesoTotalToneladas.toLocaleString("pt-BR")} ton (
+                        {anuncio.pesoTotalKg.toLocaleString("pt-BR")} kg)
+                      </strong>
+                    </div>
+                    <div className="ad-spec-card">
+                      <span className="ad-spec-label">Local de Retirada / Armazém</span>
+                      <strong className="ad-spec-val">
+                        {anuncio.cidade} / {anuncio.uf}
+                      </strong>
+                    </div>
+                  </div>
+                </section>
 
-            {/* Descrição e Manejo */}
+                {/* 2. Quadro de Laudo Técnico e Qualidade Física */}
+                <section className="ad-detail-section" aria-labelledby="heading-laudo-tecnico">
+                  <h2 id="heading-laudo-tecnico" className="ad-detail-section__title">
+                    <Icon name="leaf" /> Laudo Técnico e Qualidade Agronômica
+                  </h2>
+                  <div className="ad-spec-grid">
+                    {/* Umidade: sempre informada */}
+                    <div className="ad-spec-card">
+                      <span className="ad-spec-label">Umidade Estimada</span>
+                      <strong className="ad-spec-val">
+                        {anuncio.umidadePercentual
+                          ? `${anuncio.umidadePercentual}%`
+                          : "Padrão comercial"}
+                      </strong>
+                    </div>
+
+                    {/* Especificações de Café */}
+                    {anuncio.cultura === "CAFE" && anuncio.laudoTecnico?.cafePeneira && (
+                      <div className="ad-spec-card">
+                        <span className="ad-spec-label">Peneira Predominante</span>
+                        <strong className="ad-spec-val">
+                          {COFFEE_SCREEN_LABELS[anuncio.laudoTecnico.cafePeneira]}
+                        </strong>
+                      </div>
+                    )}
+                    {anuncio.cultura === "CAFE" && anuncio.laudoTecnico?.cafeCatacaoDefeitos && (
+                      <div className="ad-spec-card">
+                        <span className="ad-spec-label">Catação / Defeitos</span>
+                        <strong className="ad-spec-val">
+                          {anuncio.laudoTecnico.cafeCatacaoDefeitos}
+                        </strong>
+                      </div>
+                    )}
+                    {anuncio.cultura === "CAFE" && typeof anuncio.laudoTecnico?.cafePontuacaoSca === "number" && (
+                      <div className="ad-spec-card ad-spec-card--highlight">
+                        <span className="ad-spec-label">Pontuação SCA (Especial)</span>
+                        <strong className="ad-spec-val">
+                          {anuncio.laudoTecnico.cafePontuacaoSca} pts
+                        </strong>
+                      </div>
+                    )}
+
+                    {/* Especificações de Soja */}
+                    {anuncio.cultura === "SOJA" && typeof anuncio.laudoTecnico?.sojaImpurezasPct === "number" && (
+                      <div className="ad-spec-card">
+                        <span className="ad-spec-label">Impurezas e Matérias Estranhas</span>
+                        <strong className="ad-spec-val">
+                          {anuncio.laudoTecnico.sojaImpurezasPct}%
+                        </strong>
+                      </div>
+                    )}
+                    {anuncio.cultura === "SOJA" && typeof anuncio.laudoTecnico?.sojaAvariadosPct === "number" && (
+                      <div className="ad-spec-card">
+                        <span className="ad-spec-label">Grãos Avariados Totais</span>
+                        <strong className="ad-spec-val">
+                          {anuncio.laudoTecnico.sojaAvariadosPct}%
+                        </strong>
+                      </div>
+                    )}
+                    {anuncio.cultura === "SOJA" && typeof anuncio.laudoTecnico?.sojaQuebradosPct === "number" && (
+                      <div className="ad-spec-card">
+                        <span className="ad-spec-label">Grãos Quebrados</span>
+                        <strong className="ad-spec-val">
+                          {anuncio.laudoTecnico.sojaQuebradosPct}%
+                        </strong>
+                      </div>
+                    )}
+
+                    {/* Especificações de Milho */}
+                    {anuncio.cultura === "MILHO" && typeof anuncio.laudoTecnico?.milhoImpurezasPct === "number" && (
+                      <div className="ad-spec-card">
+                        <span className="ad-spec-label">Impurezas e Fragmentos</span>
+                        <strong className="ad-spec-val">
+                          {anuncio.laudoTecnico.milhoImpurezasPct}%
+                        </strong>
+                      </div>
+                    )}
+                    {anuncio.cultura === "MILHO" && typeof anuncio.laudoTecnico?.milhoArdidosPct === "number" && (
+                      <div className="ad-spec-card">
+                        <span className="ad-spec-label">Grãos Ardidos</span>
+                        <strong className="ad-spec-val">
+                          {anuncio.laudoTecnico.milhoArdidosPct}%
+                        </strong>
+                      </div>
+                    )}
+                    {anuncio.cultura === "MILHO" && typeof anuncio.laudoTecnico?.milhoQuebradosPct === "number" && (
+                      <div className="ad-spec-card">
+                        <span className="ad-spec-label">Grãos Quebrados</span>
+                        <strong className="ad-spec-val">
+                          {anuncio.laudoTecnico.milhoQuebradosPct}%
+                        </strong>
+                      </div>
+                    )}
+
+                    {/* Especificações de Trigo */}
+                    {anuncio.cultura === "TRIGO" && typeof anuncio.laudoTecnico?.trigoPhKgHl === "number" && (
+                      <div className="ad-spec-card">
+                        <span className="ad-spec-label">PH / Peso Hectolítrico</span>
+                        <strong className="ad-spec-val">
+                          {anuncio.laudoTecnico.trigoPhKgHl} kg/hL
+                        </strong>
+                      </div>
+                    )}
+                    {anuncio.cultura === "TRIGO" && typeof anuncio.laudoTecnico?.trigoForcaGlutenW === "number" && (
+                      <div className="ad-spec-card">
+                        <span className="ad-spec-label">Força de Glúten (W)</span>
+                        <strong className="ad-spec-val">
+                          W {anuncio.laudoTecnico.trigoForcaGlutenW}
+                        </strong>
+                      </div>
+                    )}
+                    {anuncio.cultura === "TRIGO" && typeof anuncio.laudoTecnico?.trigoFallingNumberSeg === "number" && (
+                      <div className="ad-spec-card">
+                        <span className="ad-spec-label">Falling Number (FN)</span>
+                        <strong className="ad-spec-val">
+                          {anuncio.laudoTecnico.trigoFallingNumberSeg} s
+                        </strong>
+                      </div>
+                    )}
+
+                    {/* Especificações de Outro */}
+                    {anuncio.cultura === "OUTRO" && anuncio.laudoTecnico?.outroObservacoesLaudo && (
+                      <div className="ad-spec-card ad-spec-card--wide">
+                        <span className="ad-spec-label">Observações Técnicas do Laudo</span>
+                        <strong className="ad-spec-val">
+                          {anuncio.laudoTecnico.outroObservacoesLaudo}
+                        </strong>
+                      </div>
+                    )}
+                  </div>
+                </section>
+              </>
+            ) : (
+              <section className="ad-detail-section" aria-labelledby="heading-zootecnica">
+                <h2 id="heading-zootecnica" className="ad-detail-section__title">
+                  <Icon name="leaf" /> Ficha Zootécnica do Lote
+                </h2>
+                <div className="ad-spec-grid">
+                  <div className="ad-spec-card">
+                    <span className="ad-spec-label">Espécie</span>
+                    <strong className="ad-spec-val">{SPECIES_LABELS[anuncio.especie]}</strong>
+                  </div>
+                  <div className="ad-spec-card">
+                    <span className="ad-spec-label">Raça / Cruzamento</span>
+                    <strong className="ad-spec-val">{anuncio.raca}</strong>
+                  </div>
+                  <div className="ad-spec-card">
+                    <span className="ad-spec-label">Quantidade</span>
+                    <strong className="ad-spec-val">{anuncio.quantidadeCabecas} cabeças</strong>
+                  </div>
+                  <div className="ad-spec-card">
+                    <span className="ad-spec-label">Finalidade</span>
+                    <strong className="ad-spec-val">{PURPOSE_LABELS[anuncio.finalidade]}</strong>
+                  </div>
+                  <div className="ad-spec-card">
+                    <span className="ad-spec-label">Era / Idade</span>
+                    <strong className="ad-spec-val">
+                      {anuncio.idadeMeses ? `${anuncio.idadeMeses} meses` : "Não informada"}
+                    </strong>
+                  </div>
+                  <div className="ad-spec-card">
+                    <span className="ad-spec-label">Peso Médio Estimado</span>
+                    <strong className="ad-spec-val">
+                      {anuncio.pesoMedioArroba} @ ({anuncio.pesoMedioKg} kg)
+                    </strong>
+                  </div>
+                  <div className="ad-spec-card ad-spec-card--highlight">
+                    <span className="ad-spec-label">Peso Total da Carga</span>
+                    <strong className="ad-spec-val">
+                      {anuncio.pesoTotalArroba.toLocaleString("pt-BR")} @ (
+                      {anuncio.pesoTotalKg.toLocaleString("pt-BR")} kg)
+                    </strong>
+                  </div>
+                  <div className="ad-spec-card">
+                    <span className="ad-spec-label">Local de Retirada</span>
+                    <strong className="ad-spec-val">
+                      {anuncio.cidade} / {anuncio.uf}
+                    </strong>
+                  </div>
+                </div>
+              </section>
+            )}
+
+            {/* Descrição e Manejo / Qualidade */}
             {anuncio.descricao && (
               <section className="ad-detail-section" aria-labelledby="heading-manejo">
                 <h2 id="heading-manejo" className="ad-detail-section__title">
-                  <Icon name="box" /> Descrição e Manejo da Boiada
+                  <Icon name="box" />{" "}
+                  {anuncio.categoria === "GRAOS"
+                    ? "Descrição da Qualidade e Lote Agrícola"
+                    : "Descrição e Manejo da Boiada"}
                 </h2>
                 <div className="ad-detail-description">
                   <p>{anuncio.descricao}</p>
@@ -189,26 +385,49 @@ export function AdDetailPage() {
               </div>
               <p className="ad-sidebar-price-hint">Venda do lote completo no MVP</p>
 
-              <div className="ad-sidebar-subprices">
-                <div className="ad-sidebar-subprice-item">
-                  <span>Valor por cabeça</span>
-                  <strong>
-                    {anuncio.precoPorCabeca.toLocaleString("pt-BR", {
-                      style: "currency",
-                      currency: "BRL",
-                    })}
-                  </strong>
+              {anuncio.categoria === "GRAOS" ? (
+                <div className="ad-sidebar-subprices">
+                  <div className="ad-sidebar-subprice-item">
+                    <span>Valor por saca (60 kg)</span>
+                    <strong>
+                      {anuncio.precoPorSaca.toLocaleString("pt-BR", {
+                        style: "currency",
+                        currency: "BRL",
+                      })}
+                    </strong>
+                  </div>
+                  <div className="ad-sidebar-subprice-item">
+                    <span>Valor por tonelada</span>
+                    <strong>
+                      {anuncio.precoPorTonelada.toLocaleString("pt-BR", {
+                        style: "currency",
+                        currency: "BRL",
+                      })}
+                    </strong>
+                  </div>
                 </div>
-                <div className="ad-sidebar-subprice-item">
-                  <span>Valor por arroba (@)</span>
-                  <strong>
-                    {anuncio.precoPorArroba.toLocaleString("pt-BR", {
-                      style: "currency",
-                      currency: "BRL",
-                    })}
-                  </strong>
+              ) : (
+                <div className="ad-sidebar-subprices">
+                  <div className="ad-sidebar-subprice-item">
+                    <span>Valor por cabeça</span>
+                    <strong>
+                      {anuncio.precoPorCabeca.toLocaleString("pt-BR", {
+                        style: "currency",
+                        currency: "BRL",
+                      })}
+                    </strong>
+                  </div>
+                  <div className="ad-sidebar-subprice-item">
+                    <span>Valor por arroba (@)</span>
+                    <strong>
+                      {anuncio.precoPorArroba.toLocaleString("pt-BR", {
+                        style: "currency",
+                        currency: "BRL",
+                      })}
+                    </strong>
+                  </div>
                 </div>
-              </div>
+              )}
 
               {/* Botões de Ação */}
               {isOwner ? (
@@ -258,7 +477,7 @@ export function AdDetailPage() {
             <Link
               to={`/produtor/${anuncio.vendedorId}`}
               className="ad-sidebar-card ad-sidebar-card--producer-preview"
-              aria-label={`Ver perfil público e vitrine de ${anuncio.farmName}`}
+              aria-label={`Ver perfil público e vitrine de ${producerProfile?.farmName || anuncio.farmName}`}
             >
               <div className="ad-producer-preview-banner">
                 <img src={farmImage} alt="" width="380" height="120" />
@@ -273,7 +492,9 @@ export function AdDetailPage() {
                     className="ad-producer-preview-avatar"
                   />
                   <div className="ad-producer-preview-titles">
-                    <h3 className="ad-producer-preview-name">{anuncio.farmName}</h3>
+                    <h3 className="ad-producer-preview-name">
+                      {producerProfile?.farmName || anuncio.farmName}
+                    </h3>
                     <p className="ad-producer-preview-owner">Produtor: {anuncio.vendedorNome}</p>
                   </div>
                 </div>
@@ -289,7 +510,7 @@ export function AdDetailPage() {
 
                 <p className="ad-producer-preview-bio">
                   {producerProfile?.bio ||
-                    "Produtor rural habilitado no SafraDireta, dedicado à pecuária de corte de alta qualidade."}
+                    "Produtor rural habilitado no SafraDireta, dedicado à produção agropecuária de alta qualidade."}
                 </p>
 
                 <div className="ad-producer-preview-cta">

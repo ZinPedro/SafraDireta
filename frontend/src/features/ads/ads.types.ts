@@ -11,7 +11,13 @@ export type AnimalPurpose =
 
 export type PricingMode = "TOTAL" | "PER_HEAD";
 
+export type GrainPricingMode = "TOTAL" | "PER_SACK";
+
 export type AdStatus = "ATIVO" | "PAUSADO" | "VENDIDO";
+
+export type GrainCrop = "CAFE" | "SOJA" | "MILHO" | "TRIGO" | "OUTRO";
+
+export type GrainPackaging = "SACARIA" | "BIG_BAG" | "GRANEL";
 
 export interface AnimalLotAd {
   id: string;
@@ -42,6 +48,72 @@ export interface AnimalLotAd {
   seloVerificado?: boolean;
 }
 
+export type CoffeeScreen =
+  | "17_18_ACIMA"
+  | "16_ACIMA"
+  | "14_15"
+  | "MOCA"
+  | "BICA_CORRIDA";
+
+export interface GrainQualitySpecs {
+  // Soja (MAPA / ANEC)
+  sojaImpurezasPct?: number;
+  sojaAvariadosPct?: number;
+  sojaQuebradosPct?: number;
+
+  // Milho (MAPA / CONAB)
+  milhoImpurezasPct?: number;
+  milhoArdidosPct?: number;
+  milhoQuebradosPct?: number;
+
+  // Café (CECAFÉ / SCA)
+  cafePeneira?: CoffeeScreen;
+  cafeCatacaoDefeitos?: string;
+  cafePontuacaoSca?: number;
+
+  // Trigo (MAPA)
+  trigoPhKgHl?: number;
+  trigoForcaGlutenW?: number;
+  trigoFallingNumberSeg?: number;
+
+  // Outras Culturas
+  outroObservacoesLaudo?: string;
+}
+
+export interface GrainLotAd {
+  id: string;
+  vendedorId: string;
+  vendedorNome: string;
+  vendedorAvatar?: string;
+  farmName: string;
+  titulo: string;
+  descricao?: string;
+  categoria: "GRAOS";
+  cultura: GrainCrop;
+  culturaPersonalizada?: string;
+  subtipo: string;
+  tagPrincipal: string;
+  tagSecundaria: string;
+  safra: string;
+  embalagem: GrainPackaging;
+  umidadePercentual: number;
+  laudoTecnico?: GrainQualitySpecs;
+  quantidadeSacas: number;
+  pesoTotalToneladas: number;
+  pesoTotalKg: number;
+  precoTotal: number;
+  precoPorSaca: number;
+  precoPorTonelada: number;
+  cidade: string;
+  uf: string;
+  imagemUrl: string;
+  criadoEm: string;
+  status: AdStatus;
+  seloVerificado?: boolean;
+}
+
+export type MarketplaceAd = AnimalLotAd | GrainLotAd;
+
 export interface CreateAnimalAdInput {
   titulo: string;
   descricao?: string;
@@ -54,6 +126,25 @@ export interface CreateAnimalAdInput {
   pricingMode: PricingMode;
   precoTotal?: number;
   precoPorCabeca?: number;
+  cidade: string;
+  uf: string;
+}
+
+export interface CreateGrainAdInput {
+  titulo: string;
+  descricao?: string;
+  cultura: GrainCrop;
+  culturaPersonalizada?: string;
+  subtipo: string;
+  safra: string;
+  embalagem: GrainPackaging;
+  umidadePercentual: number;
+  laudoTecnico?: GrainQualitySpecs;
+  quantidadeSacas: number;
+  pesoTotalToneladas: number;
+  pricingMode: GrainPricingMode;
+  precoTotal?: number;
+  precoPorSaca?: number;
   cidade: string;
   uf: string;
 }
@@ -102,3 +193,235 @@ export const BEEF_CATTLE_BREEDS: BreedOption[] = [
 ];
 
 export const COMMON_BREEDS = BEEF_CATTLE_BREEDS.map((b) => b.value);
+
+// ---------------------------------------------------------------------------
+// Catálogo Agronômico — Grãos e Café (US-011)
+// ---------------------------------------------------------------------------
+
+export const GRAIN_CROPS: { value: GrainCrop; label: string }[] = [
+  { value: "CAFE", label: "Café" },
+  { value: "SOJA", label: "Soja" },
+  { value: "MILHO", label: "Milho" },
+  { value: "TRIGO", label: "Trigo" },
+  { value: "OUTRO", label: "Outro Grão / Cereal" },
+];
+
+export const GRAIN_CROP_LABELS: Record<GrainCrop, string> = {
+  CAFE: "Café",
+  SOJA: "Soja",
+  MILHO: "Milho",
+  TRIGO: "Trigo",
+  OUTRO: "Outro",
+};
+
+export interface GrainSubtypeOption {
+  value: string;
+  label: string;
+  shortTag: string;
+}
+
+export const GRAIN_SUBTYPES: Record<Exclude<GrainCrop, "OUTRO">, GrainSubtypeOption[]> = {
+  CAFE: [
+    {
+      value: "Arábica — Tipo 6 / Bebida Dura",
+      label: "Arábica — Tipo 6 / Bebida Dura",
+      shortTag: "Arábica Bebida Dura",
+    },
+    {
+      value: "Arábica — Bebida Mole / Especial",
+      label: "Arábica — Bebida Mole / Especial",
+      shortTag: "Arábica Bebida Mole",
+    },
+    {
+      value: "Arábica — Bebida Riada / Rio",
+      label: "Arábica — Bebida Riada / Rio",
+      shortTag: "Arábica Riada / Rio",
+    },
+    {
+      value: "Conilon / Robusta",
+      label: "Conilon / Robusta",
+      shortTag: "Conilon / Robusta",
+    },
+    {
+      value: "Café em Coco / Natural",
+      label: "Café em Coco / Natural",
+      shortTag: "Café em Coco",
+    },
+    {
+      value: "OUTRO",
+      label: "Outro tipo / classificação...",
+      shortTag: "Outro",
+    },
+  ],
+  SOJA: [
+    {
+      value: "Comercial — Padrão Exportação (Transgênica)",
+      label: "Comercial — Padrão Exportação (Transgênica)",
+      shortTag: "Padrão Exportação",
+    },
+    {
+      value: "Convencional (Não-Transgênica / Livre de OGM)",
+      label: "Convencional (Não-Transgênica / Livre de OGM)",
+      shortTag: "Convencional (Livre OGM)",
+    },
+    {
+      value: "Padrão Indústria (Esmagamento)",
+      label: "Padrão Indústria (Esmagamento)",
+      shortTag: "Padrão Indústria",
+    },
+    {
+      value: "Soja para Semente",
+      label: "Soja para Semente",
+      shortTag: "Soja Semente",
+    },
+    {
+      value: "OUTRO",
+      label: "Outro tipo / classificação...",
+      shortTag: "Outro",
+    },
+  ],
+  MILHO: [
+    {
+      value: "Amarelo Grão Duro (Tipo 1 / Exportação)",
+      label: "Amarelo Grão Duro (Tipo 1 / Exportação)",
+      shortTag: "Amarelo Grão Duro",
+    },
+    {
+      value: "Comercial (Padrão Ração / Consumo Animal)",
+      label: "Comercial (Padrão Ração / Consumo Animal)",
+      shortTag: "Padrão Ração",
+    },
+    {
+      value: "Milho Branco (Canjica / Indústria)",
+      label: "Milho Branco (Canjica / Indústria)",
+      shortTag: "Milho Branco",
+    },
+    {
+      value: "Milho Pipoca",
+      label: "Milho Pipoca",
+      shortTag: "Milho Pipoca",
+    },
+    {
+      value: "Silagem / Grão Úmido",
+      label: "Silagem / Grão Úmido",
+      shortTag: "Silagem / Grão Úmido",
+    },
+    {
+      value: "OUTRO",
+      label: "Outro tipo / classificação...",
+      shortTag: "Outro",
+    },
+  ],
+  TRIGO: [
+    {
+      value: "Trigo Pão (Tipo 1)",
+      label: "Trigo Pão (Tipo 1)",
+      shortTag: "Trigo Pão (Tipo 1)",
+    },
+    {
+      value: "Trigo Melhorador",
+      label: "Trigo Melhorador",
+      shortTag: "Trigo Melhorador",
+    },
+    {
+      value: "Trigo Brando (Biscoito / Confeitaria)",
+      label: "Trigo Brando (Biscoito / Confeitaria)",
+      shortTag: "Trigo Brando",
+    },
+    {
+      value: "Ração Animal / Outros Usos",
+      label: "Ração Animal / Outros Usos",
+      shortTag: "Trigo Ração",
+    },
+    {
+      value: "OUTRO",
+      label: "Outro tipo / classificação...",
+      shortTag: "Outro",
+    },
+  ],
+};
+
+export const GRAIN_HARVEST_SEASONS: string[] = [
+  "2025/2026",
+  "2024/2025",
+  "2023/2024",
+];
+
+export const GRAIN_PACKAGING_OPTIONS: {
+  value: GrainPackaging;
+  label: string;
+  shortLabel: string;
+}[] = [
+  {
+    value: "SACARIA",
+    label: "Sacaria (Sacas de 60 kg)",
+    shortLabel: "Sacaria (60 kg)",
+  },
+  {
+    value: "BIG_BAG",
+    label: "Big Bag (1.000 kg)",
+    shortLabel: "Big Bag (1 t)",
+  },
+  {
+    value: "GRANEL",
+    label: "A Granel (Transporte Graneleiro)",
+    shortLabel: "A Granel",
+  },
+];
+
+export const GRAIN_PACKAGING_LABELS: Record<GrainPackaging, string> = {
+  SACARIA: "Sacaria (60 kg)",
+  BIG_BAG: "Big Bag (1.000 kg)",
+  GRANEL: "A Granel",
+};
+
+export const COFFEE_SCREEN_OPTIONS: {
+  value: CoffeeScreen;
+  label: string;
+  shortLabel: string;
+}[] = [
+  {
+    value: "17_18_ACIMA",
+    label: "Peneira 17/18 Acima (Grãos Graúdos / Nobres)",
+    shortLabel: "Peneira 17/18 Acima",
+  },
+  {
+    value: "16_ACIMA",
+    label: "Peneira 16 Acima (Padrão Exportação)",
+    shortLabel: "Peneira 16 Acima",
+  },
+  {
+    value: "14_15",
+    label: "Peneira 14/15 (Grãos Médios/Miúdos)",
+    shortLabel: "Peneira 14/15",
+  },
+  {
+    value: "MOCA",
+    label: "Grão Moca (Peneira 10/11/12)",
+    shortLabel: "Grão Moca",
+  },
+  {
+    value: "BICA_CORRIDA",
+    label: "Bica Corrida (Lote sem classificação)",
+    shortLabel: "Bica Corrida",
+  },
+];
+
+export const COFFEE_SCREEN_LABELS: Record<CoffeeScreen, string> = {
+  "17_18_ACIMA": "Peneira 17/18 Acima",
+  "16_ACIMA": "Peneira 16 Acima",
+  "14_15": "Peneira 14/15",
+  MOCA: "Grão Moca",
+  BICA_CORRIDA: "Bica Corrida",
+};
+
+export function obterTagsAnuncio(anuncio: MarketplaceAd): [string, string] {
+  if (anuncio.categoria === "GRAOS") {
+    const tag1 = anuncio.tagPrincipal || GRAIN_CROP_LABELS[anuncio.cultura] || "Grãos";
+    const tag2 = anuncio.tagSecundaria || anuncio.subtipo || anuncio.culturaPersonalizada || "Comercial";
+    return [tag1, tag2];
+  }
+  const tag1 = anuncio.especie === "BOVINO" ? "Boi Gordo" : SPECIES_LABELS[anuncio.especie];
+  const tag2 = anuncio.raca || "Nelore";
+  return [tag1, tag2];
+}

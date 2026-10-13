@@ -32,7 +32,7 @@
 }
 
 .ad-create-header {
-  margin-bottom: 2rem;
+  margin-bottom: 1.5rem;
 }
 
 .ad-create-title {
@@ -46,6 +46,205 @@
   font-size: 1.0625rem;
   max-width: 720px;
   line-height: 1.5;
+}
+
+/* Seletor de Modalidade (Boi Gordo vs Grãos e Café) */
+.ad-modality-selector {
+  margin-bottom: 2rem;
+}
+
+.ad-modality-selector__label {
+  display: block;
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: #2c422c;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 0.75rem;
+}
+
+.ad-modality-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1rem;
+}
+
+@media (min-width: 640px) {
+  .ad-modality-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.ad-modality-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  padding: 1.25rem 1.375rem;
+  background: #ffffff;
+  border: 2px solid var(--color-border, #d6ccbe);
+  border-radius: var(--radius-lg, 16px);
+  text-align: left;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 10px rgba(18, 48, 28, 0.04);
+}
+
+.ad-modality-card:hover {
+  border-color: #7ea876;
+  transform: translateY(-2px);
+}
+
+.ad-modality-card--active {
+  border-color: #1e5631;
+  background: #f3f8f1;
+  box-shadow: 0 6px 18px rgba(30, 86, 49, 0.12);
+}
+
+.ad-modality-card__icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: #e6efe3;
+  color: #1e5631;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.ad-modality-card--active .ad-modality-card__icon {
+  background: #1e5631;
+  color: #ffffff;
+}
+
+.ad-modality-card__icon .icon {
+  width: 22px;
+  height: 22px;
+}
+
+.ad-modality-card__body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.ad-modality-card__body strong {
+  font-family: var(--font-family-heading, "Fraunces", Georgia, serif);
+  font-size: 1.125rem;
+  color: #1a2e1a;
+}
+
+.ad-modality-card__body span {
+  font-size: 0.875rem;
+  color: #556b55;
+  line-height: 1.4;
+}
+
+/* Barra de Prévia das 2 Tags */
+.ad-tags-preview-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin: 1rem 0 1.25rem;
+  padding: 0.75rem 1rem;
+  background: #f4f8f2;
+  border: 1px dashed #b9d1b3;
+  border-radius: 10px;
+}
+
+.ad-tags-preview-bar__label {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #355235;
+}
+
+.ad-tags-preview-bar__chips {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.ad-tag-pill {
+  display: inline-block;
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 999px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  max-width: 220px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ad-tag-pill--primary {
+  background: #1e5631;
+  color: #ffffff;
+}
+
+.ad-tag-pill--secondary {
+  background: #bd612b;
+  color: #ffffff;
+}
+
+/* Bloco de Laudo Técnico e Qualidade Física (US-011) */
+.ad-quality-block {
+  background: #fbfdfa;
+  border: 1px solid #d8e5d5;
+  border-radius: var(--radius-md, 12px);
+  padding: 1.5rem;
+  margin: 1.5rem 0;
+}
+
+.ad-quality-block__header {
+  margin-bottom: 1.25rem;
+}
+
+.ad-quality-block__title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-family: var(--font-family-heading, "Fraunces", Georgia, serif);
+  font-size: 1.15rem;
+  color: var(--color-earth-900, #2c1a0e);
+  margin: 0 0 0.35rem;
+}
+
+.ad-quality-block__title .icon {
+  width: 18px;
+  height: 18px;
+  color: #1e5631;
+}
+
+.ad-quality-block__subtitle {
+  font-size: 0.85rem;
+  color: #4f664f;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.ad-quality-notice {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1rem 1.25rem;
+  background: #f4f8f2;
+  border: 1px dashed #b9d1b3;
+  border-radius: 8px;
+  color: #3b503b;
+  font-size: 0.9rem;
+}
+
+.ad-quality-notice .icon {
+  width: 20px;
+  height: 20px;
+  color: #1e5631;
+  flex-shrink: 0;
 }
 
 .ad-form {
@@ -958,23 +1157,42 @@
   object-fit: cover;
 }
 
-.market-card__tag {
+.market-card__tags {
   position: absolute;
   top: 12px;
   left: 12px;
-  max-width: calc(100% - 24px);
+  right: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.my-ad-card__thumb .market-card__tags {
+  max-width: calc(100% - 140px);
+}
+
+.market-card__tag {
+  display: inline-block;
+  max-width: 100%;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   box-sizing: border-box;
-  background: rgba(18, 48, 28, 0.9);
+  background: rgba(18, 48, 28, 0.92);
   color: #ffffff;
-  font-size: 0.75rem;
+  font-size: 0.72rem;
   font-weight: 700;
   padding: 4px 10px;
   border-radius: 12px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18);
+}
+
+.market-card__tag--secondary {
+  background: rgba(167, 78, 31, 0.92);
 }
 
 .market-card__body {
@@ -1220,6 +1438,10 @@
 .ad-spec-card--highlight {
   background: #f0f6ee;
   border-color: #bcd6b8;
+}
+
+.ad-spec-card--wide {
+  grid-column: 1 / -1;
 }
 
 .ad-spec-label {

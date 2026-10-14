@@ -233,3 +233,315 @@
     align-items: flex-start;
   }
 }
+
+/* Customização do Banner da Fazenda (US-012) */
+.seller-banner-uploader {
+  margin-bottom: var(--space-6);
+}
+
+.seller-banner-uploader__label {
+  display: block;
+  font-weight: 600;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-primary);
+  margin-bottom: var(--space-2);
+}
+
+.seller-banner-uploader__preview-wrap {
+  position: relative;
+  width: 100%;
+  height: 160px;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  background: var(--color-background-subtle, #f5f5f0);
+}
+
+.seller-banner-uploader__img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.seller-banner-uploader__btn-trigger {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: rgba(26, 46, 26, 0.85);
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  padding: 0.45rem 0.85rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  cursor: pointer;
+  backdrop-filter: blur(4px);
+  transition: background 0.15s ease, transform 0.15s ease;
+}
+
+.seller-banner-uploader__btn-trigger:hover {
+  background: rgba(26, 46, 26, 0.95);
+  transform: translateY(-1px);
+}
+
+.seller-banner-uploader__presets {
+  margin-top: var(--space-3);
+}
+
+.seller-banner-uploader__presets-title {
+  display: block;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+  margin-bottom: var(--space-2);
+}
+
+.seller-banner-uploader__preset-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.seller-banner-uploader__preset-btn {
+  background: #ffffff;
+  border: 1px solid var(--color-border);
+  border-radius: 20px;
+  padding: 0.35rem 0.75rem;
+  font-size: 0.8125rem;
+  color: var(--color-text-primary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.seller-banner-uploader__preset-btn:hover {
+  border-color: var(--color-primary, #1e5631);
+  background: var(--color-background-subtle, #f8faf7);
+}
+
+.seller-banner-uploader__preset-btn--active {
+  background: #edf3eb;
+  border-color: var(--color-primary, #1e5631);
+  color: var(--color-primary, #1e5631);
+  font-weight: 600;
+}
+
+/* Modal de Enquadramento de Banner com Máscara de Sombra (US-012) */
+.banner-cropper-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(10, 20, 14, 0.75);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  z-index: 9999;
+  backdrop-filter: blur(6px);
+  animation: cropperModalFadeIn 0.2s ease-out;
+}
+
+@keyframes cropperModalFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.banner-cropper-modal {
+  background: #ffffff;
+  border-radius: var(--radius-lg, 16px);
+  max-width: 620px;
+  width: 100%;
+  box-shadow: 0 24px 48px rgba(0, 0, 0, 0.3);
+  animation: cropperModalPop 0.22s ease-out;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  max-height: 92vh;
+}
+
+@keyframes cropperModalPop {
+  from {
+    transform: scale(0.94);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.banner-cropper-modal__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 1.25rem 1.5rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.banner-cropper-modal__title-group h3 {
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: var(--color-text-primary);
+  margin: 0 0 0.25rem 0;
+}
+
+.banner-cropper-modal__title-group p {
+  font-size: 0.8125rem;
+  color: var(--color-text-secondary);
+  margin: 0;
+}
+
+.banner-cropper-modal__close-btn {
+  background: transparent;
+  border: none;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.banner-cropper-modal__close-btn:hover {
+  background: var(--color-background-subtle, #f0f0eb);
+  color: var(--color-text-primary);
+}
+
+.banner-cropper-modal__body {
+  padding: 1.25rem 1.5rem;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+/* Container de Preview com Máscara de Sombra */
+.banner-cropper__preview-container {
+  position: relative;
+  width: 100%;
+  background: #0b120c;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+.banner-cropper__preview {
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  user-select: none;
+  touch-action: none;
+  cursor: grab;
+}
+
+.banner-cropper__preview--dragging {
+  cursor: grabbing;
+}
+
+.banner-cropper__img {
+  width: 100%;
+  height: auto;
+  max-height: 380px;
+  object-fit: contain;
+  display: block;
+  pointer-events: none;
+  user-select: none;
+}
+
+/* Janela útil do banner (proporção ~3.5:1) com sombra semi-transparente nas áreas cortadas */
+.banner-cropper__window {
+  position: absolute;
+  border: 1px dashed #ffffff;
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.65);
+  pointer-events: none;
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-end;
+  padding: 6px 8px;
+  box-sizing: border-box;
+}
+
+.banner-cropper__window-badge {
+  background: rgba(18, 38, 22, 0.85);
+  color: #ffffff;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 4px;
+  letter-spacing: 0.02em;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  backdrop-filter: blur(2px);
+}
+
+/* Controle deslizante de enquadramento vertical */
+.banner-cropper__slider-box {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  background: var(--color-background-subtle, #f7f9f6);
+  padding: 1rem;
+  border-radius: 10px;
+  border: 1px solid var(--color-border);
+}
+
+.banner-cropper__slider-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.banner-cropper__slider-label {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.banner-cropper__slider-value {
+  font-size: 0.8125rem;
+  font-weight: 700;
+  color: var(--color-primary, #1e5631);
+  background: #edf3eb;
+  padding: 2px 8px;
+  border-radius: 12px;
+}
+
+.banner-cropper__range-input {
+  width: 100%;
+  accent-color: var(--color-primary, #1e5631);
+  cursor: pointer;
+  height: 6px;
+}
+
+.banner-cropper__slider-hints {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+}
+
+.banner-cropper__helper-text {
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+  text-align: center;
+  margin: 0;
+}
+
+.banner-cropper-modal__footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  padding: 1rem 1.5rem;
+  border-top: 1px solid var(--color-border);
+  background: var(--color-background-subtle, #fbfbf8);
+}
+

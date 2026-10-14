@@ -37,6 +37,7 @@ export interface UserProfileData {
     publicPhone: string;
     categories: SellerCategory[];
     hasOwnTransport: boolean;
+    bannerUrl?: string;
   };
 }
 
@@ -283,6 +284,7 @@ export const updateUserProfile: UpdateUserProfile = async (data) => {
       publicPhone: data.seller.publicPhone?.trim() || null,
       categories: data.seller.categories ?? [],
       hasOwnTransport: Boolean(data.seller.hasOwnTransport),
+      bannerUrl: data.seller.bannerUrl?.trim() || null,
     };
   }
 

@@ -3,7 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/authContext";
 import { routes } from "../../data/site";
 import { Icon } from "../../components/Icon";
-import { GRAIN_PACKAGING_LABELS, obterTagsAnuncio } from "./ads.types";
+import { GRAIN_PACKAGING_LABELS, obterFotoCapa, obterTagsAnuncio } from "./ads.types";
 import type { MarketplaceAd } from "./ads.types";
 import { listarAnunciosMercado } from "./adsStorage";
 import "./ads.css";
@@ -131,7 +131,12 @@ export function MarketPage() {
                   }}
                 >
                   <div className="market-card__thumb">
-                    <img src={anuncio.imagemUrl} alt={anuncio.titulo} loading="lazy" />
+                    <img src={obterFotoCapa(anuncio)} alt={anuncio.titulo} loading="lazy" />
+                    {anuncio.video?.url && (
+                      <span className="market-card__video-badge" title="Contém vídeo demonstrativo">
+                        <Icon name="play" /> Vídeo
+                      </span>
+                    )}
                     <div className="market-card__tags">
                       <span className="market-card__tag market-card__tag--primary" title={tag1}>
                         {tag1}

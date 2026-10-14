@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/authContext";
@@ -17,8 +17,12 @@ import {
   GRAIN_PACKAGING_LABELS,
   GRAIN_PACKAGING_OPTIONS,
   GRAIN_SUBTYPES,
+  comprimirImagemParaUpload,
+  extrairYoutubeId,
+  obterYoutubeEmbedUrl,
 } from "./ads.types";
 import type {
+  AdVideoItem,
   AnimalPurpose,
   CoffeeScreen,
   CreateAnimalAdInput,
@@ -127,6 +131,130 @@ export function AnimalAdCreatePage({ onOpenDialog }: AnimalAdCreatePageProps) {
     }
     return "";
   });
+
+  // Estados de Mídia (US-012)
+  const [fotos, setFotos] = useState<string[]>([]);
+  const [fotoError, setFotoError] = useState<string | null>(null);
+  const [isDraggingOver, setIsDraggingOver] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const [videoMode, setVideoMode] = useState<"UPLOAD" | "YOUTUBE">("UPLOAD");
+  const [videoFile, setVideoFile] = useState<File | null>(null);
+  const [videoUploadUrl, setVideoUploadUrl] = useState<string>("");
+  const [videoUploadName, setVideoUploadName] = useState<string>("");
+  const [videoYoutubeUrl, setVideoYoutubeUrl] = useState<string>("");
+  const [videoError, setVideoError] = useState<string | null>(null);
+  const videoInputRef = useRef<HTMLInputElement>(null);
+
+  async function processarArquivosFotos(arquivos: FileList | File[]) {
+    setFotoError(null);
+    const lista = Array.from(arquivos);
+    if (lista.length === 0) return;
+
+    const vagasRestantes = 6 - fotos.length;
+    if (vagasRestantes <= 0) {
+      setFotoError("O limite máximo de 6 fotos por anúncio já foi atingido.");
+      return;
+    }
+
+    const arquivosParaProcessar = lista.slice(0, vagasRestantes);
+    if (lista.length > vagasRestantes) {
+      setFotoError(`Apenas ${vagasRestantes} foto(s) pôde(ram) ser adicionada(s). Limite de 6 fotos atingido.`);
+    }
+
+    const fotosValidadas: string[] = [];
+    for (const arquivo of arquivosParaProcessar) {
+      if (!["image/jpeg", "image/png", "image/webp"].includes(arquivo.type)) {
+        setFotoError("Formato de arquivo inválido. Formatos suportados: JPEG, PNG e WebP.");
+        continue;
+      }
+      if (arquivo.size > 10 * 1024 * 1024) {
+        setFotoError("Cada foto deve ter no máximo 10MB.");
+        continue;
+      }
+      try {
+        const fotoComprimida = await comprimirImagemParaUpload(arquivo, 800, 0.7);
+        fotosValidadas.push(fotoComprimida);
+      } catch {
+        setFotoError("Erro ao processar imagem para envio.");
+      }
+    }
+
+    if (fotosValidadas.length > 0) {
+      setFotos((prev) => [...prev, ...fotosValidadas]);
+    }
+  }
+
+  function handleFileChange(event: React.ChangeEvent<HTMLInputElement>) {
+    if (event.target.files) {
+      void processarArquivosFotos(event.target.files);
+    }
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  }
+
+  function handleDragOver(e: React.DragEvent) {
+    e.preventDefault();
+    setIsDraggingOver(true);
+  }
+
+  function handleDragLeave(e: React.DragEvent) {
+    e.preventDefault();
+    setIsDraggingOver(false);
+  }
+
+  function handleDrop(e: React.DragEvent) {
+    e.preventDefault();
+    setIsDraggingOver(false);
+    if (e.dataTransfer.files) {
+      void processarArquivosFotos(e.dataTransfer.files);
+    }
+  }
+
+  function definirComoCapa(index: number) {
+    setFotos((prev) => {
+      if (index === 0 || index >= prev.length) return prev;
+      const escolhida = prev[index];
+      const restantes = prev.filter((_, i) => i !== index);
+      return [escolhida, ...restantes];
+    });
+  }
+
+  function removerFoto(index: number) {
+    setFotos((prev) => prev.filter((_, i) => i !== index));
+  }
+
+  function handleVideoFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setVideoError(null);
+
+    const validVideoTypes = ["video/mp4", "video/quicktime", "video/webm"];
+    if (!validVideoTypes.includes(file.type) && !file.name.match(/\.(mp4|mov|webm)$/i)) {
+      setVideoError("Formato de vídeo inválido. Aceitos: MP4, MOV ou WebM.");
+      return;
+    }
+    if (file.size > 30 * 1024 * 1024) {
+      setVideoError("O arquivo de vídeo excede o tamanho máximo de 30MB.");
+      return;
+    }
+
+    setVideoFile(file);
+    const url = URL.createObjectURL(file);
+    setVideoUploadUrl(url);
+    setVideoUploadName(file.name);
+  }
+
+  function removerVideoArquivo() {
+    setVideoFile(null);
+    setVideoUploadUrl("");
+    setVideoUploadName("");
+    setVideoError(null);
+    if (videoInputRef.current) {
+      videoInputRef.current.value = "";
+    }
+  }
 
   // Estados de controle
   const [erros, setErros] = useState<Record<string, string>>({});
@@ -404,6 +532,21 @@ export function AnimalAdCreatePage({ onOpenDialog }: AnimalAdCreatePageProps) {
 
     setIsSubmitting(true);
     try {
+      let videoPayload: AdVideoItem | undefined = undefined;
+      if (videoMode === "UPLOAD" && videoUploadUrl) {
+        videoPayload = {
+          tipo: "UPLOAD",
+          url: videoUploadUrl,
+          fileBlob: videoFile || undefined,
+          fileName: videoUploadName || undefined,
+        };
+      } else if (videoMode === "YOUTUBE" && videoYoutubeUrl.trim()) {
+        const ytId = extrairYoutubeId(videoYoutubeUrl);
+        if (ytId) {
+          videoPayload = { tipo: "YOUTUBE", url: videoYoutubeUrl.trim() };
+        }
+      }
+
       if (modalidade === "ANIMAL") {
         const input: CreateAnimalAdInput = {
           titulo: titulo.trim(),
@@ -419,6 +562,8 @@ export function AnimalAdCreatePage({ onOpenDialog }: AnimalAdCreatePageProps) {
           precoPorCabeca: pricingMode === "PER_HEAD" ? Number(precoPorCabeca) : valorCabecaFinal,
           cidade: cidade.trim(),
           uf,
+          fotos: fotos.length > 0 ? fotos : undefined,
+          video: videoPayload,
         };
 
         const criado = await criarAnuncioAnimal(input, session);
@@ -476,6 +621,8 @@ export function AnimalAdCreatePage({ onOpenDialog }: AnimalAdCreatePageProps) {
             grainPricingMode === "PER_SACK" ? Number(precoPorSaca) : valorSacaFinal,
           cidade: cidade.trim(),
           uf,
+          fotos: fotos.length > 0 ? fotos : undefined,
+          video: videoPayload,
         };
 
         const criado = await criarAnuncioGraos(inputGraos, session);
@@ -1646,10 +1793,255 @@ export function AnimalAdCreatePage({ onOpenDialog }: AnimalAdCreatePageProps) {
             </section>
           )}
 
-          {/* BLOCO 3: Precificação e Localização */}
+          {/* BLOCO 3: Fotos e Vídeo do Lote (US-012) */}
+          <section className="ad-form-section" aria-labelledby="section-midia">
+            <h2 id="section-midia" className="ad-form-section__title">
+              <Icon name="camera" /> 3. Fotos e Vídeo do Lote
+            </h2>
+            <p className="ad-form-section__desc">
+              Anúncios com fotos reais e vídeo atraem até 4x mais visualizações e facilitam a decisão de compra sem intermediários.
+            </p>
+
+            {/* A. Fotos do Lote */}
+            <div className="ad-media-block">
+              <div className="ad-media-header">
+                <div>
+                  <h3 className="ad-media-heading">Fotos do Lote (Até 6 fotos)</h3>
+                  <span className="ad-media-counter">
+                    Fotos adicionadas: {fotos.length}/6
+                  </span>
+                </div>
+                {fotos.length < 6 && (
+                  <button
+                    type="button"
+                    className="button button--outline button--small"
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    <Icon name="upload" /> Adicionar Fotos
+                  </button>
+                )}
+              </div>
+
+              {/* Dropzone */}
+              <div
+                className={`ad-media-dropzone ${isDraggingOver ? "ad-media-dropzone--active" : ""} ${fotos.length >= 6 ? "ad-media-dropzone--disabled" : ""}`}
+                onClick={() => {
+                  if (fotos.length < 6) fileInputRef.current?.click();
+                }}
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+                role="button"
+                tabIndex={0}
+                aria-label="Área de envio de fotos do anúncio"
+                onKeyDown={(e) => {
+                  if ((e.key === "Enter" || e.key === " ") && fotos.length < 6) {
+                    e.preventDefault();
+                    fileInputRef.current?.click();
+                  }
+                }}
+              >
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  multiple
+                  accept="image/jpeg,image/png,image/webp"
+                  className="sr-only"
+                  onChange={handleFileChange}
+                  disabled={fotos.length >= 6}
+                />
+                <div className="ad-media-dropzone__content">
+                  <div className="ad-media-dropzone__icon">
+                    <Icon name="camera" />
+                  </div>
+                  <strong className="ad-media-dropzone__title">
+                    {fotos.length >= 6
+                      ? "Limite máximo de 6 fotos atingido"
+                      : "Arraste fotos do lote aqui ou clique para selecionar"}
+                  </strong>
+                  <span className="ad-media-dropzone__hint">
+                    Formatos aceitos: JPEG, PNG ou WebP (máximo 10MB por foto).
+                  </span>
+                </div>
+              </div>
+
+              {fotoError && (
+                <p className="ad-field-error" role="alert">
+                  <Icon name="clock" /> {fotoError}
+                </p>
+              )}
+
+              {/* Grade de Miniaturas */}
+              {fotos.length > 0 && (
+                <div className="ad-media-thumbnails" aria-label="Miniaturas das fotos adicionadas">
+                  {fotos.map((foto, index) => (
+                    <div key={index} className="ad-media-thumb">
+                      <img src={foto} alt={`Foto ${index + 1} do lote`} />
+                      {index === 0 ? (
+                        <span className="ad-media-badge-cover">
+                          <Icon name="star" /> Capa
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          className="ad-media-btn-cover"
+                          onClick={() => definirComoCapa(index)}
+                          title="Definir esta foto como capa do anúncio"
+                        >
+                          Definir Capa
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        className="ad-media-btn-remove"
+                        onClick={() => removerFoto(index)}
+                        title="Remover esta foto"
+                        aria-label={`Remover foto ${index + 1}`}
+                      >
+                        <Icon name="trash" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* B. Vídeo Demonstrativo */}
+            <div className="ad-media-block ad-media-block--video">
+              <div className="ad-media-header">
+                <div>
+                  <h3 className="ad-media-heading">Vídeo Demonstrativo (Opcional - 1 vídeo)</h3>
+                  <span className="ad-media-counter">
+                    Mostre a dinâmica do lote, movimentação, pastagem ou padrão dos grãos
+                  </span>
+                </div>
+              </div>
+
+              {/* Abas de Modo de Vídeo */}
+              <div className="ad-media-video-tabs" role="tablist">
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={videoMode === "UPLOAD"}
+                  className={`ad-media-tab ${videoMode === "UPLOAD" ? "ad-media-tab--active" : ""}`}
+                  onClick={() => setVideoMode("UPLOAD")}
+                >
+                  <Icon name="video" /> Arquivo de Vídeo (.mp4, .mov)
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={videoMode === "YOUTUBE"}
+                  className={`ad-media-tab ${videoMode === "YOUTUBE" ? "ad-media-tab--active" : ""}`}
+                  onClick={() => setVideoMode("YOUTUBE")}
+                >
+                  <Icon name="youtube" /> Link do YouTube
+                </button>
+              </div>
+
+              {videoMode === "UPLOAD" ? (
+                <div className="ad-media-video-content">
+                  {videoUploadUrl ? (
+                    <div className="ad-media-video-preview-wrap">
+                      <video
+                        src={videoUploadUrl}
+                        controls
+                        playsInline
+                        className="ad-media-video-player"
+                      />
+                      <div className="ad-media-video-actions">
+                        <span className="ad-media-video-filename">
+                          <Icon name="video" /> {videoUploadName || "Vídeo do lote"}
+                        </span>
+                        <button
+                          type="button"
+                          className="button button--outline button--small button--danger"
+                          onClick={removerVideoArquivo}
+                        >
+                          <Icon name="trash" /> Remover Vídeo
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="ad-media-video-uploader">
+                      <input
+                        ref={videoInputRef}
+                        type="file"
+                        accept="video/mp4,video/quicktime,video/webm,.mp4,.mov,.webm"
+                        className="sr-only"
+                        onChange={handleVideoFileChange}
+                      />
+                      <button
+                        type="button"
+                        className="button button--outline"
+                        onClick={() => videoInputRef.current?.click()}
+                      >
+                        <Icon name="upload" /> Selecionar Arquivo de Vídeo
+                      </button>
+                      <span className="ad-media-dropzone__hint">
+                        Formatos aceitos: MP4, MOV ou WebM (tamanho máximo: 30MB).
+                      </span>
+                    </div>
+                  )}
+                  {videoError && (
+                    <p className="ad-field-error" role="alert">
+                      <Icon name="clock" /> {videoError}
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <div className="ad-media-video-content">
+                  <div className="form-group">
+                    <label htmlFor="ad-video-youtube-url" className="form-label">
+                      URL do Vídeo no YouTube
+                    </label>
+                    <input
+                      id="ad-video-youtube-url"
+                      type="url"
+                      placeholder="https://www.youtube.com/watch?v=... ou https://youtu.be/..."
+                      className="form-input"
+                      value={videoYoutubeUrl}
+                      onChange={(e) => setVideoYoutubeUrl(e.target.value)}
+                    />
+                    <span className="form-hint">
+                      Cole o link de um vídeo público ou não listado do YouTube.
+                    </span>
+                  </div>
+
+                  {/* Preview YouTube */}
+                  {extrairYoutubeId(videoYoutubeUrl) ? (
+                    <div className="ad-media-youtube-preview">
+                      <iframe
+                        src={obterYoutubeEmbedUrl(videoYoutubeUrl)!}
+                        title="Pré-visualização do vídeo do YouTube"
+                        className="ad-media-youtube-iframe"
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                        allowFullScreen
+                      />
+                      <div className="ad-media-video-actions">
+                        <button
+                          type="button"
+                          className="button button--outline button--small button--danger"
+                          onClick={() => setVideoYoutubeUrl("")}
+                        >
+                          <Icon name="trash" /> Limpar Link
+                        </button>
+                      </div>
+                    </div>
+                  ) : videoYoutubeUrl.trim() ? (
+                    <p className="ad-field-warning">
+                      Link do YouTube não reconhecido. Certifique-se de usar um link no formato youtube.com/watch?v=... ou youtu.be/...
+                    </p>
+                  ) : null}
+                </div>
+              )}
+            </div>
+          </section>
+
+          {/* BLOCO 4: Precificação e Localização */}
           <section className="ad-form-section" aria-labelledby="section-preco">
             <h2 id="section-preco" className="ad-form-section__title">
-              <Icon name="location" /> 3. Precificação Comercial e Localização
+              <Icon name="location" /> 4. Precificação Comercial e Localização
             </h2>
 
             {modalidade === "ANIMAL" ? (
@@ -1974,11 +2366,11 @@ export function AnimalAdCreatePage({ onOpenDialog }: AnimalAdCreatePageProps) {
               </div>
             </div>
 
-            {/* Imagem de Capa (Placeholder estruturado para US-012) */}
+            {/* Foto de Capa do Lote */}
             <div className="ad-cover-preview-box">
               <div className="ad-cover-preview-box__thumb">
                 <img
-                  src={modalidade === "ANIMAL" ? defaultFarmImage : harvestSunsetImage}
+                  src={fotos.length > 0 ? fotos[0] : modalidade === "ANIMAL" ? defaultFarmImage : harvestSunsetImage}
                   alt={
                     modalidade === "ANIMAL"
                       ? "Fotografia de pastagem rural da fazenda"
@@ -1994,9 +2386,11 @@ export function AnimalAdCreatePage({ onOpenDialog }: AnimalAdCreatePageProps) {
               <div className="ad-cover-preview-box__info">
                 <strong>Foto de Capa do Lote</strong>
                 <p>
-                  {modalidade === "ANIMAL"
-                    ? "O lote será anunciado com a fotografia campestre padrão da fazenda. Na US-012, será liberado o envio de fotos e vídeos específicos da boiada."
-                    : "O lote agrícola será anunciado com a fotografia de safra padrão. Na US-012, será liberado o envio de fotos e vídeos reais dos grãos e amostras."}
+                  {fotos.length > 0
+                    ? "Esta é a foto definida como capa na Seção 3. Ela será exibida em destaque nos cards do mercado e na abertura do anúncio."
+                    : modalidade === "ANIMAL"
+                    ? "Nenhuma foto personalizada foi enviada na Seção 3. O anúncio utilizará a fotografia campestre padrão da fazenda."
+                    : "Nenhuma foto personalizada foi enviada na Seção 3. O anúncio utilizará a fotografia de colheita padrão da categoria."}
                 </p>
               </div>
             </div>

@@ -5,7 +5,7 @@ import { Icon } from "../../components/Icon";
 import { routes } from "../../data/site";
 import farmImage from "../../assets/images/farm-landscape.jpeg";
 import { formatPhone, phoneDigits } from "../profile/profile";
-import { GRAIN_PACKAGING_LABELS, obterTagsAnuncio } from "./ads.types";
+import { GRAIN_PACKAGING_LABELS, obterFotoCapa, obterTagsAnuncio } from "./ads.types";
 import type { MarketplaceAd } from "./ads.types";
 import { listarMeusAnuncios, obterPerfilProdutorPublico } from "./adsStorage";
 import type { PublicProducerProfile } from "./adsStorage";
@@ -81,7 +81,7 @@ export function PublicProducerProfilePage() {
         {/* Hero Card da Vitrine Pública */}
         <section className="producer-hero-card" aria-label="Vitrine pública do produtor">
           <div className="producer-hero-banner">
-            <img src={farmImage} alt="Paisagem rural da fazenda" />
+            <img src={profile.bannerUrl || farmImage} alt={`Paisagem rural de ${profile.farmName}`} />
             <div className="producer-hero-banner-overlay" />
           </div>
 
@@ -192,7 +192,12 @@ export function PublicProducerProfilePage() {
                     }}
                   >
                     <div className="market-card__thumb">
-                      <img src={anuncio.imagemUrl} alt={anuncio.titulo} />
+                      <img src={obterFotoCapa(anuncio)} alt={anuncio.titulo} />
+                      {anuncio.video?.url && (
+                        <span className="market-card__video-badge" title="Contém vídeo demonstrativo">
+                          <Icon name="play" /> Vídeo
+                        </span>
+                      )}
                       <div className="market-card__tags">
                         <span className="market-card__tag market-card__tag--primary" title={tag1}>
                           {tag1}

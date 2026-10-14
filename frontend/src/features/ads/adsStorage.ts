@@ -10,6 +10,10 @@ import type {
 } from "./ads.types";
 import defaultFarmImage from "../../assets/images/farm-landscape.jpeg";
 import harvestSunsetImage from "../../assets/images/harvest-sunset.jpeg";
+import {
+  obterMidiasDoIndexedDB,
+  salvarMidiasNoIndexedDB,
+} from "./adsMediaStorage";
 
 const STORAGE_KEY = "safradireta_anuncios";
 
@@ -25,6 +29,7 @@ export interface PublicProducerProfile {
   categories: string[];
   hasOwnTransport: boolean;
   seloVerificado: boolean;
+  bannerUrl?: string;
 }
 
 function isDataOrLargeUrl(url?: string): boolean {
@@ -34,11 +39,40 @@ function isDataOrLargeUrl(url?: string): boolean {
 
 function sanitizarAnunciosParaStorage(anuncios: MarketplaceAd[]): MarketplaceAd[] {
   return anuncios.map((anuncio) => {
-    if (isDataOrLargeUrl(anuncio.vendedorAvatar)) {
-      const { vendedorAvatar: _avatar, ...resto } = anuncio;
-      return resto as MarketplaceAd;
+    // 1. Vendedor avatar: nunca salvar data URL pesado no localStorage
+    let vendedorAvatar = anuncio.vendedorAvatar;
+    if (isDataOrLargeUrl(vendedorAvatar)) {
+      vendedorAvatar = undefined;
     }
-    return anuncio;
+
+    // 2. Fotos: no localStorage não guardamos arrays pesados de base64.
+    // Todas as fotos completas ficam salvas e indexadas no IndexedDB (safradireta_media_db).
+    // No localStorage mantemos apenas URLs externas ou assets estáticos leves.
+    let fotosLimpas: string[] | undefined = undefined;
+    if (anuncio.fotos && anuncio.fotos.length > 0) {
+      fotosLimpas = anuncio.fotos.filter((f) => !isDataOrLargeUrl(f));
+    }
+
+    // 3. ImagemUrl: se for data URL longa (> 500 chars), substituímos pelo asset padrão no localStorage.
+    // A foto real será re-hidratada pelo IndexedDB na leitura.
+    let imagemUrlLimpa = anuncio.imagemUrl;
+    if (isDataOrLargeUrl(imagemUrlLimpa)) {
+      imagemUrlLimpa = anuncio.categoria === "GRAOS" ? harvestSunsetImage : defaultFarmImage;
+    }
+
+    // 4. Video: se for upload local, remove a URL blob transitória do localStorage
+    let videoLimpo = anuncio.video;
+    if (videoLimpo?.tipo === "UPLOAD" && videoLimpo.url?.startsWith("blob:")) {
+      videoLimpo = { ...videoLimpo, url: "" };
+    }
+
+    return {
+      ...anuncio,
+      vendedorAvatar,
+      fotos: fotosLimpas && fotosLimpas.length > 0 ? fotosLimpas : undefined,
+      imagemUrl: imagemUrlLimpa,
+      video: videoLimpo,
+    };
   });
 }
 
@@ -69,7 +103,15 @@ function carregarDoStorage(): MarketplaceAd[] {
       if (isDataOrLargeUrl(item.vendedorAvatar)) {
         precisaLimpeza = true;
         const { vendedorAvatar: _avatar, ...resto } = item;
-        return resto as MarketplaceAd;
+        item = resto as MarketplaceAd;
+      }
+      // Se houver fotos pesadas em base64 salvas no localStorage de versões anteriores, migra para o IndexedDB
+      if (item.fotos && item.fotos.some((f) => isDataOrLargeUrl(f))) {
+        precisaLimpeza = true;
+        void salvarMidiasNoIndexedDB(item.id, item.fotos, item.video);
+      }
+      if (isDataOrLargeUrl(item.imagemUrl)) {
+        precisaLimpeza = true;
       }
       return item;
     });
@@ -89,14 +131,30 @@ function salvarNoStorage(anuncios: MarketplaceAd[]): boolean {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(limpos));
     return true;
   } catch (err) {
-    console.warn("Aviso ao salvar anúncios no localStorage:", err);
+    console.warn("Aviso ao salvar anúncios no localStorage, acionando fallback de quota:", err);
     try {
-      const limpos = sanitizarAnunciosParaStorage(anuncios);
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(limpos));
+      // Fallback 1: remove fotos e descrições longas no localStorage para economizar quota
+      const enxutos = sanitizarAnunciosParaStorage(anuncios).map((a) => ({
+        ...a,
+        fotos: undefined,
+        descricao: a.descricao ? a.descricao.slice(0, 100) : undefined,
+      }));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(enxutos));
       return true;
-    } catch (e) {
-      console.error("Falha crítica ao persistir anúncios no localStorage:", e);
-      return false;
+    } catch (e1) {
+      console.warn("Tentativa de fallback 1 falhou, acionando fallback 2:", e1);
+      try {
+        // Fallback 2: salva os 15 anúncios mais recentes
+        const maisRecentes = sanitizarAnunciosParaStorage(anuncios.slice(0, 15)).map((a) => ({
+          ...a,
+          fotos: undefined,
+        }));
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(maisRecentes));
+        return true;
+      } catch (e2) {
+        console.error("Falha crítica ao persistir anúncios no localStorage:", e2);
+        return false;
+      }
     }
   }
 }
@@ -168,26 +226,90 @@ export function sincronizarProdutorNosAnuncios(
 export async function listarAnunciosMercado(): Promise<MarketplaceAd[]> {
   await new Promise((resolve) => setTimeout(resolve, 80));
   const anuncios = carregarDoStorage();
-  return anuncios
+  const hidratados = anuncios
     .filter((a) => a.status === "ATIVO")
     .map((a) => hidratarAnuncioComPerfil(a))
     .sort((a, b) => new Date(b.criadoEm).getTime() - new Date(a.criadoEm).getTime());
+
+  const resultado = await Promise.all(
+    hidratados.map(async (anuncio) => {
+      try {
+        const midias = await obterMidiasDoIndexedDB(anuncio.id);
+        if (midias) {
+          const fotos = midias.fotos && midias.fotos.length > 0 ? midias.fotos : anuncio.fotos;
+          const imagemCapa = (fotos && fotos[0]) || anuncio.imagemUrl;
+          return {
+            ...anuncio,
+            fotos,
+            imagemUrl: imagemCapa,
+            video: midias.video || anuncio.video,
+          };
+        }
+      } catch {
+        /* fallback seguro */
+      }
+      return anuncio;
+    })
+  );
+
+  return resultado;
 }
 
 export async function listarMeusAnuncios(vendedorId: string): Promise<MarketplaceAd[]> {
   await new Promise((resolve) => setTimeout(resolve, 80));
   const anuncios = carregarDoStorage();
-  return anuncios
+  const hidratados = anuncios
     .filter((a) => a.vendedorId === vendedorId && a.status === "ATIVO")
     .map((a) => hidratarAnuncioComPerfil(a))
     .sort((a, b) => new Date(b.criadoEm).getTime() - new Date(a.criadoEm).getTime());
+
+  const resultado = await Promise.all(
+    hidratados.map(async (anuncio) => {
+      try {
+        const midias = await obterMidiasDoIndexedDB(anuncio.id);
+        if (midias) {
+          const fotos = midias.fotos && midias.fotos.length > 0 ? midias.fotos : anuncio.fotos;
+          const imagemCapa = (fotos && fotos[0]) || anuncio.imagemUrl;
+          return {
+            ...anuncio,
+            fotos,
+            imagemUrl: imagemCapa,
+            video: midias.video || anuncio.video,
+          };
+        }
+      } catch {
+        /* fallback seguro */
+      }
+      return anuncio;
+    })
+  );
+
+  return resultado;
 }
 
 export async function obterAnuncioPorId(id: string): Promise<MarketplaceAd | null> {
   await new Promise((resolve) => setTimeout(resolve, 60));
   const anuncios = carregarDoStorage();
   const encontrado = anuncios.find((a) => a.id === id);
-  return encontrado ? hidratarAnuncioComPerfil(encontrado) : null;
+  if (!encontrado) return null;
+  const hidratado = hidratarAnuncioComPerfil(encontrado);
+
+  try {
+    const midias = await obterMidiasDoIndexedDB(id);
+    if (midias) {
+      if (midias.fotos && midias.fotos.length > 0) {
+        hidratado.fotos = midias.fotos;
+        hidratado.imagemUrl = midias.fotos[0];
+      }
+      if (midias.video) {
+        hidratado.video = midias.video;
+      }
+    }
+  } catch {
+    /* fallback seguro */
+  }
+
+  return hidratado;
 }
 
 export async function obterPerfilProdutorPublico(vendedorId: string): Promise<PublicProducerProfile | null> {
@@ -253,10 +375,17 @@ export async function obterPerfilProdutorPublico(vendedorId: string): Promise<Pu
         anuncioVendedor?.uf ||
         "MG";
 
+      const bannerUrl =
+        parsed?.seller?.bannerUrl ||
+        localStorage.getItem(`safradireta_farm_banner_${vendedorId}`) ||
+        (isCurrentUser ? localStorage.getItem("safradireta_farm_banner") ?? undefined : undefined) ||
+        undefined;
+
       return {
         id: vendedorId,
         nome,
         avatarUrl,
+        bannerUrl,
         farmName,
         bio,
         city,
@@ -284,10 +413,16 @@ export async function obterPerfilProdutorPublico(vendedorId: string): Promise<Pu
       (isCurrentUser ? localStorage.getItem("safradireta_avatar") ?? undefined : undefined) ||
       undefined;
 
+    const bannerUrl =
+      localStorage.getItem(`safradireta_farm_banner_${vendedorId}`) ||
+      (isCurrentUser ? localStorage.getItem("safradireta_farm_banner") ?? undefined : undefined) ||
+      undefined;
+
     return {
       id: vendedorId,
       nome: anuncioVendedor.vendedorNome,
       avatarUrl,
+      bannerUrl,
       farmName: anuncioVendedor.farmName,
       bio: "Produtor rural habilitado no SafraDireta, dedicado à produção agropecuária de alta qualidade com procedência garantida.",
       city: anuncioVendedor.cidade,
@@ -366,6 +501,12 @@ export async function criarAnuncioAnimal(
   const { resolvedFarmName, avatarPersistivel } = resolverDadosProdutorSessao(session, farmNameParam);
   const novoId = `lote-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`;
 
+  const fotos = input.fotos && input.fotos.length > 0 ? input.fotos : [defaultFarmImage];
+  const imagemCapa = fotos[0] || defaultFarmImage;
+
+  // Persiste fotos completas e mídias no IndexedDB
+  await salvarMidiasNoIndexedDB(novoId, fotos, input.video);
+
   const novoAnuncio: AnimalLotAd = {
     id: novoId,
     vendedorId: session.conta.id,
@@ -389,7 +530,9 @@ export async function criarAnuncioAnimal(
     precoPorArroba,
     cidade: input.cidade.trim(),
     uf: input.uf.trim().toUpperCase(),
-    imagemUrl: defaultFarmImage,
+    fotos,
+    video: input.video,
+    imagemUrl: imagemCapa,
     criadoEm: new Date().toISOString(),
     status: "ATIVO",
     seloVerificado: true,
@@ -445,6 +588,12 @@ export async function criarAnuncioGraos(
   const { resolvedFarmName, avatarPersistivel } = resolverDadosProdutorSessao(session, farmNameParam);
   const novoId = `safra-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`;
 
+  const fotos = input.fotos && input.fotos.length > 0 ? input.fotos : [harvestSunsetImage];
+  const imagemCapa = fotos[0] || harvestSunsetImage;
+
+  // Persiste fotos completas e mídias no IndexedDB
+  await salvarMidiasNoIndexedDB(novoId, fotos, input.video);
+
   const novoAnuncio: GrainLotAd = {
     id: novoId,
     vendedorId: session.conta.id,
@@ -474,7 +623,9 @@ export async function criarAnuncioGraos(
     precoPorTonelada,
     cidade: input.cidade.trim(),
     uf: input.uf.trim().toUpperCase(),
-    imagemUrl: harvestSunsetImage,
+    fotos,
+    video: input.video,
+    imagemUrl: imagemCapa,
     criadoEm: new Date().toISOString(),
     status: "ATIVO",
     seloVerificado: true,

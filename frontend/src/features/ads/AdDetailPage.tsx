@@ -13,6 +13,7 @@ import {
   PURPOSE_LABELS,
   SPECIES_LABELS,
   obterTagsAnuncio,
+  obterYoutubeEmbedUrl,
 } from "./ads.types";
 import type { MarketplaceAd } from "./ads.types";
 import { obterAnuncioPorId, obterPerfilProdutorPublico } from "./adsStorage";
@@ -27,6 +28,36 @@ export function AdDetailPage() {
   const [producerProfile, setProducerProfile] = useState<PublicProducerProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [contactSuccess, setContactSuccess] = useState(false);
+  const [selectedMedia, setSelectedMedia] = useState<number | "video">(0);
+  const [isLightboxOpen, setIsLightboxOpen] = useState(false);
+  const [lightboxIndex, setLightboxIndex] = useState(0);
+
+  const fotos = anuncio?.fotos && anuncio.fotos.length > 0 ? anuncio.fotos : [anuncio?.imagemUrl || ""];
+
+  useEffect(() => {
+    if (!isLightboxOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setIsLightboxOpen(false);
+      } else if (e.key === "ArrowLeft") {
+        setLightboxIndex((prev) => (prev > 0 ? prev - 1 : fotos.length - 1));
+      } else if (e.key === "ArrowRight") {
+        setLightboxIndex((prev) => (prev < fotos.length - 1 ? prev + 1 : 0));
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      document.body.style.overflow = originalOverflow;
+    };
+  }, [isLightboxOpen, fotos.length]);
+
+  const openLightbox = (index: number) => {
+    setLightboxIndex(index);
+    setIsLightboxOpen(true);
+  };
 
   useEffect(() => {
     if (!id) return;
@@ -82,6 +113,8 @@ export function AdDetailPage() {
   const isOwner = session && session.conta.id === anuncio.vendedorId;
   const [tag1, tag2] = obterTagsAnuncio(anuncio);
 
+  const hasVideo = Boolean(anuncio.video?.url);
+
   return (
     <div className="ad-detail-page">
       <div className="container">
@@ -98,13 +131,114 @@ export function AdDetailPage() {
         <div className="ad-detail-layout">
           {/* Coluna Esquerda: Fotos e Dados Técnicos */}
           <div className="ad-detail-main">
-            {/* Banner Fotográfico */}
-            <div className="ad-detail-banner">
-              <img src={anuncio.imagemUrl} alt={anuncio.titulo} />
-              <div className="ad-detail-banner__overlay">
-                <span className="ad-badge ad-badge--category">{tag1}</span>
-                <span className="ad-badge ad-badge--category">{tag2}</span>
+            {/* Galeria de Mídia Interativa (US-012) */}
+            <div className="ad-gallery-container">
+              <div className="ad-gallery-stage">
+                {selectedMedia === "video" && anuncio.video ? (
+                  anuncio.video.tipo === "YOUTUBE" ? (
+                    obterYoutubeEmbedUrl(anuncio.video.url) ? (
+                      <iframe
+                        src={obterYoutubeEmbedUrl(anuncio.video.url)!}
+                        title={`Vídeo demonstrativo - ${anuncio.titulo}`}
+                        className="ad-gallery-stage__video-iframe"
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                        allowFullScreen
+                      />
+                    ) : (
+                      <div className="ad-gallery-stage__fallback">
+                        <Icon name="video" />
+                        <p>URL de vídeo do YouTube inválida ou não suportada.</p>
+                      </div>
+                    )
+                  ) : (
+                    <video
+                      src={anuncio.video.url}
+                      controls
+                      playsInline
+                      className="ad-gallery-stage__video-player"
+                    >
+                      Seu navegador não suporta a reprodução deste vídeo.
+                    </video>
+                  )
+                ) : (
+                  <>
+                    <img
+                      src={fotos[typeof selectedMedia === "number" ? selectedMedia : 0] || anuncio.imagemUrl}
+                      alt={anuncio.titulo}
+                      className="ad-gallery-stage__img"
+                      onClick={() => openLightbox(typeof selectedMedia === "number" ? selectedMedia : 0)}
+                      role="button"
+                      tabIndex={0}
+                      title="Clique para ampliar a foto em tela cheia"
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          openLightbox(typeof selectedMedia === "number" ? selectedMedia : 0);
+                        }
+                      }}
+                    />
+                    <button
+                      type="button"
+                      className="ad-gallery-stage__btn-zoom"
+                      onClick={() => openLightbox(typeof selectedMedia === "number" ? selectedMedia : 0)}
+                      title="Ampliar foto em tela cheia"
+                      aria-label="Ampliar foto em tela cheia"
+                    >
+                      <Icon name="search" />
+                      <span>Ampliar</span>
+                    </button>
+                  </>
+                )}
+
+                <div className="ad-detail-banner__overlay">
+                  <span className="ad-badge ad-badge--category">{tag1}</span>
+                  <span className="ad-badge ad-badge--category">{tag2}</span>
+                </div>
+
+                <div className="ad-gallery-stage__counter">
+                  {selectedMedia === "video" ? (
+                    <>
+                      <Icon name="play" /> Vídeo do Lote
+                    </>
+                  ) : (
+                    <>
+                      <Icon name="camera" /> {(typeof selectedMedia === "number" ? selectedMedia : 0) + 1} / {fotos.length}
+                    </>
+                  )}
+                </div>
               </div>
+
+              {/* Faixa de Miniaturas (se houver mais de 1 foto ou houver vídeo) */}
+              {(fotos.length > 1 || hasVideo) && (
+                <div className="ad-gallery-strip" aria-label="Miniaturas de mídia do anúncio">
+                  {fotos.map((foto, idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      className={`ad-gallery-strip__item ${selectedMedia === idx ? "ad-gallery-strip__item--active" : ""}`}
+                      onClick={() => setSelectedMedia(idx)}
+                      aria-label={`Ver foto ${idx + 1}`}
+                    >
+                      <img src={foto} alt="" />
+                      {idx === 0 && <span className="ad-gallery-strip__badge">Capa</span>}
+                    </button>
+                  ))}
+
+                  {hasVideo && (
+                    <button
+                      type="button"
+                      className={`ad-gallery-strip__item ad-gallery-strip__item--video ${selectedMedia === "video" ? "ad-gallery-strip__item--active" : ""}`}
+                      onClick={() => setSelectedMedia("video")}
+                      aria-label="Assistir ao vídeo demonstrativo"
+                    >
+                      <div className="ad-gallery-strip__video-thumb">
+                        <Icon name="play" />
+                        <span>Vídeo</span>
+                      </div>
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Cabeçalho da Oferta */}
@@ -480,7 +614,7 @@ export function AdDetailPage() {
               aria-label={`Ver perfil público e vitrine de ${producerProfile?.farmName || anuncio.farmName}`}
             >
               <div className="ad-producer-preview-banner">
-                <img src={farmImage} alt="" width="380" height="120" />
+                <img src={producerProfile?.bannerUrl || farmImage} alt="" width="380" height="120" />
               </div>
 
               <div className="ad-producer-preview-body">
@@ -522,6 +656,102 @@ export function AdDetailPage() {
           </aside>
         </div>
       </div>
+
+      {/* Visualizador Ampliado de Imagem / Lightbox (US-012) */}
+      {isLightboxOpen && (
+        <div
+          className="ad-lightbox"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Visualizador ampliado de imagens"
+        >
+          {/* Cabeçalho do Lightbox */}
+          <div className="ad-lightbox__header">
+            <div className="ad-lightbox__info">
+              <h3 className="ad-lightbox__title">{anuncio.titulo}</h3>
+              <span className="ad-lightbox__counter">
+                Foto {lightboxIndex + 1} de {fotos.length}
+              </span>
+            </div>
+            <button
+              type="button"
+              className="ad-lightbox__close"
+              onClick={() => setIsLightboxOpen(false)}
+              title="Fechar visualizador (Esc)"
+              aria-label="Fechar visualizador"
+            >
+              <Icon name="close" />
+            </button>
+          </div>
+
+          {/* Palco Central do Lightbox */}
+          <div
+            className="ad-lightbox__body"
+            onClick={(e) => {
+              if (e.target === e.currentTarget) {
+                setIsLightboxOpen(false);
+              }
+            }}
+          >
+            {fotos.length > 1 && (
+              <button
+                type="button"
+                className="ad-lightbox__nav ad-lightbox__nav--prev"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setLightboxIndex((prev) => (prev > 0 ? prev - 1 : fotos.length - 1));
+                }}
+                title="Foto anterior (Seta para a esquerda)"
+                aria-label="Foto anterior"
+              >
+                <Icon name="back" />
+              </button>
+            )}
+
+            <div className="ad-lightbox__image-container">
+              <img
+                src={fotos[lightboxIndex]}
+                alt={`${anuncio.titulo} — Foto ${lightboxIndex + 1} de ${fotos.length}`}
+                className="ad-lightbox__image"
+              />
+            </div>
+
+            {fotos.length > 1 && (
+              <button
+                type="button"
+                className="ad-lightbox__nav ad-lightbox__nav--next"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setLightboxIndex((prev) => (prev < fotos.length - 1 ? prev + 1 : 0));
+                }}
+                title="Próxima foto (Seta para a direita)"
+                aria-label="Próxima foto"
+              >
+                <Icon name="arrow" />
+              </button>
+            )}
+          </div>
+
+          {/* Faixa de Miniaturas no Rodapé do Lightbox */}
+          {fotos.length > 1 && (
+            <div className="ad-lightbox__footer">
+              <div className="ad-lightbox__thumbs">
+                {fotos.map((foto, idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    className={`ad-lightbox__thumb ${idx === lightboxIndex ? "ad-lightbox__thumb--active" : ""}`}
+                    onClick={() => setLightboxIndex(idx)}
+                    aria-label={`Ver foto ${idx + 1}`}
+                  >
+                    <img src={foto} alt="" />
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

@@ -5,7 +5,7 @@ import { routes } from "../../data/site";
 import type { OpenDevelopmentDialog } from "../../data/site";
 import { AccessRestricted } from "../../components/AccessRestricted";
 import { Icon } from "../../components/Icon";
-import { GRAIN_PACKAGING_LABELS, obterTagsAnuncio } from "./ads.types";
+import { GRAIN_PACKAGING_LABELS, obterFotoCapa, obterTagsAnuncio } from "./ads.types";
 import type { MarketplaceAd } from "./ads.types";
 import { listarMeusAnuncios } from "./adsStorage";
 import "./ads.css";
@@ -106,7 +106,12 @@ export function MyAdsPage({ onOpenDialog }: MyAdsPageProps) {
                   }}
                 >
                   <div className="my-ad-card__thumb">
-                    <img src={anuncio.imagemUrl} alt={anuncio.titulo} loading="lazy" />
+                    <img src={obterFotoCapa(anuncio)} alt={anuncio.titulo} loading="lazy" />
+                    {anuncio.video?.url && (
+                      <span className="market-card__video-badge" title="Contém vídeo demonstrativo">
+                        <Icon name="play" /> Vídeo
+                      </span>
+                    )}
                     <div className="market-card__tags">
                       <span className="market-card__tag market-card__tag--primary" title={tag1}>
                         {tag1}

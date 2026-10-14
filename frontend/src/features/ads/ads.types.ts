@@ -19,6 +19,13 @@ export type GrainCrop = "CAFE" | "SOJA" | "MILHO" | "TRIGO" | "OUTRO";
 
 export type GrainPackaging = "SACARIA" | "BIG_BAG" | "GRANEL";
 
+export interface AdVideoItem {
+  tipo: "UPLOAD" | "YOUTUBE";
+  url: string; // URL do blob local ou URL do YouTube
+  fileBlob?: Blob;
+  fileName?: string;
+}
+
 export interface AnimalLotAd {
   id: string;
   vendedorId: string;
@@ -42,6 +49,8 @@ export interface AnimalLotAd {
   precoPorArroba: number;
   cidade: string;
   uf: string;
+  fotos?: string[];
+  video?: AdVideoItem;
   imagemUrl: string;
   criadoEm: string;
   status: AdStatus;
@@ -106,6 +115,8 @@ export interface GrainLotAd {
   precoPorTonelada: number;
   cidade: string;
   uf: string;
+  fotos?: string[];
+  video?: AdVideoItem;
   imagemUrl: string;
   criadoEm: string;
   status: AdStatus;
@@ -128,6 +139,8 @@ export interface CreateAnimalAdInput {
   precoPorCabeca?: number;
   cidade: string;
   uf: string;
+  fotos?: string[];
+  video?: AdVideoItem;
 }
 
 export interface CreateGrainAdInput {
@@ -147,6 +160,8 @@ export interface CreateGrainAdInput {
   precoPorSaca?: number;
   cidade: string;
   uf: string;
+  fotos?: string[];
+  video?: AdVideoItem;
 }
 
 export const SPECIES_LABELS: Record<AnimalSpecies, string> = {
@@ -424,4 +439,65 @@ export function obterTagsAnuncio(anuncio: MarketplaceAd): [string, string] {
   const tag1 = anuncio.especie === "BOVINO" ? "Boi Gordo" : SPECIES_LABELS[anuncio.especie];
   const tag2 = anuncio.raca || "Nelore";
   return [tag1, tag2];
+}
+
+export function obterFotoCapa(anuncio: MarketplaceAd): string {
+  if (anuncio.fotos && anuncio.fotos.length > 0 && anuncio.fotos[0]) {
+    return anuncio.fotos[0];
+  }
+  return anuncio.imagemUrl;
+}
+
+export function extrairYoutubeId(url?: string): string | null {
+  if (!url) return null;
+  const trimmed = url.trim();
+  const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=|shorts\/)([^#&?]*).*/;
+  const match = trimmed.match(regExp);
+  return match && match[2].length === 11 ? match[2] : null;
+}
+
+export function obterYoutubeEmbedUrl(url?: string): string | null {
+  const id = extrairYoutubeId(url);
+  return id ? `https://www.youtube-nocookie.com/embed/${id}` : null;
+}
+
+export function comprimirImagemParaUpload(
+  file: File,
+  maxDim = 800,
+  quality = 0.7
+): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (readerEvent) => {
+      const img = new Image();
+      img.onload = () => {
+        let width = img.width;
+        let height = img.height;
+        if (width > maxDim || height > maxDim) {
+          if (width > height) {
+            height = Math.round((height * maxDim) / width);
+            width = maxDim;
+          } else {
+            width = Math.round((width * maxDim) / height);
+            height = maxDim;
+          }
+        }
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+          resolve(readerEvent.target?.result as string);
+          return;
+        }
+        ctx.drawImage(img, 0, 0, width, height);
+        const dataUrl = canvas.toDataURL("image/jpeg", quality);
+        resolve(dataUrl);
+      };
+      img.onerror = () => reject(new Error("Erro ao carregar a imagem."));
+      img.src = readerEvent.target?.result as string;
+    };
+    reader.onerror = () => reject(new Error("Erro ao ler o arquivo."));
+    reader.readAsDataURL(file);
+  });
 }

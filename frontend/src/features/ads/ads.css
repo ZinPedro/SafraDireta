@@ -2755,3 +2755,134 @@
   color: #0e9f6e;
 }
 
+/* ==========================================================================
+   Estilos de Edição de Anúncio (US-014)
+   ========================================================================== */
+
+.ad-modality-selector__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.ad-modality-selector__header .ad-modality-selector__label {
+  margin-bottom: 0;
+}
+
+.ad-locked-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.25rem 0.625rem;
+  background-color: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: 9999px;
+  color: #166534;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.ad-locked-badge .icon {
+  width: 13px;
+  height: 13px;
+}
+
+.ad-edit-notice-banner {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  padding: 0.75rem 1rem;
+  background: #fbfbf9;
+  border: 1px dashed #d1c7b7;
+  border-radius: 8px;
+  margin-bottom: 1rem;
+  font-size: 0.8125rem;
+  color: #5c5549;
+}
+
+.ad-edit-notice-banner .icon {
+  width: 18px;
+  height: 18px;
+  color: #8b8070;
+  flex-shrink: 0;
+}
+
+.ad-modality-card--disabled {
+  cursor: not-allowed !important;
+  opacity: 0.85;
+}
+
+.ad-modality-card--disabled:hover {
+  transform: none !important;
+}
+
+.form-select--disabled,
+.form-input--disabled {
+  background-color: #f7f6f2 !important;
+  color: #6a6459 !important;
+  cursor: not-allowed !important;
+  border-color: #ded7cb !important;
+}
+
+.form-hint--locked {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  color: #71695b;
+  font-weight: 500;
+  margin-top: 0.375rem;
+}
+
+.ad-alert--toast {
+  border-left: 4px solid #059669;
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.12);
+  margin-bottom: 1.5rem;
+}
+
+.ad-detail-date-updated {
+  color: #6b7280;
+  font-style: italic;
+  font-weight: 500;
+  margin-left: 0.25rem;
+}
+
+.ad-owner-edit-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  font-weight: 600;
+}
+
+.my-ad-card__actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.my-ad-card__btn-edit {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-size: 0.8125rem;
+  padding: 0.375rem 0.75rem;
+  border-radius: 6px;
+  font-weight: 600;
+  border: 1px solid #c2d6be;
+  color: #1e5631;
+  background-color: #ffffff;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.my-ad-card__btn-edit:hover {
+  background-color: #f0f7ee;
+  border-color: #2e7d32;
+  color: #1b5e20;
+}
+
+

@@ -53,6 +53,7 @@ export interface AnimalLotAd {
   video?: AdVideoItem;
   imagemUrl: string;
   criadoEm: string;
+  atualizadoEm?: string;
   status: AdStatus;
   seloVerificado?: boolean;
 }
@@ -119,6 +120,7 @@ export interface GrainLotAd {
   video?: AdVideoItem;
   imagemUrl: string;
   criadoEm: string;
+  atualizadoEm?: string;
   status: AdStatus;
   seloVerificado?: boolean;
 }
@@ -163,6 +165,10 @@ export interface CreateGrainAdInput {
   fotos?: string[];
   video?: AdVideoItem;
 }
+
+export type UpdateAdInput =
+  | (Partial<Omit<CreateAnimalAdInput, "pricingMode">> & { pricingMode?: PricingMode })
+  | (Partial<Omit<CreateGrainAdInput, "pricingMode">> & { pricingMode?: GrainPricingMode });
 
 export const SPECIES_LABELS: Record<AnimalSpecies, string> = {
   BOVINO: "Bovino (Boi Gordo)",

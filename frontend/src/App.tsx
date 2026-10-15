@@ -16,6 +16,7 @@ import { MarketPage } from "./features/ads/MarketPage";
 import { AnimalAdCreatePage } from "./features/ads/AnimalAdCreatePage";
 import { MyAdsPage } from "./features/ads/MyAdsPage";
 import { AdDetailPage } from "./features/ads/AdDetailPage";
+import { AdEditPage } from "./features/ads/AdEditPage";
 import { PublicProducerProfilePage } from "./features/ads/PublicProducerProfilePage";
 import { routes } from "./data/site";
 import type { DevelopmentFeature } from "./data/site";
@@ -58,8 +59,16 @@ function Site() {
   const previousLocationKey = useRef(location.key);
 
   useEffect(() => {
-    document.title =
-      pageTitles[location.pathname] ?? "Página não encontrada | SafraDireta";
+    if (location.pathname.startsWith("/anuncios/") && location.pathname.endsWith("/editar")) {
+      document.title = "Editar Anúncio | SafraDireta";
+    } else if (location.pathname.startsWith("/anuncios/")) {
+      document.title = "Ficha Técnica do Lote | SafraDireta";
+    } else if (location.pathname.startsWith("/produtor/")) {
+      document.title = "Vitrine do Produtor | SafraDireta";
+    } else {
+      document.title =
+        pageTitles[location.pathname] ?? "Página não encontrada | SafraDireta";
+    }
     if (previousLocationKey.current !== location.key) {
       window.scrollTo({ top: 0, behavior: "instant" });
       mainRef.current?.focus({ preventScroll: true });
@@ -86,6 +95,7 @@ function Site() {
           <Route path={routes.market} element={<MarketPage />} />
           <Route path={routes.createAd} element={<AnimalAdCreatePage onOpenDialog={openFeature} />} />
           <Route path={routes.myAds} element={<MyAdsPage onOpenDialog={openFeature} />} />
+          <Route path={routes.adEdit} element={<AdEditPage onOpenDialog={openFeature} />} />
           <Route path="/anuncios/:id" element={<AdDetailPage />} />
           <Route path="/produtor/:id" element={<PublicProducerProfilePage />} />
           <Route

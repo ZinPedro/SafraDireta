@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "../../context/authContext";
 import { routes } from "../../data/site";
 import { Icon } from "../../components/Icon";
@@ -23,6 +23,8 @@ import "./ads.css";
 export function AdDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
+  const toastMessage = (location.state as { toastMessage?: string } | null)?.toastMessage;
   const { session } = useAuth();
   const [anuncio, setAnuncio] = useState<MarketplaceAd | null>(null);
   const [producerProfile, setProducerProfile] = useState<PublicProducerProfile | null>(null);
@@ -126,6 +128,12 @@ export function AdDetailPage() {
           <span aria-hidden="true">/</span>
           <span aria-current="page">{anuncio.titulo}</span>
         </nav>
+
+        {toastMessage && (
+          <div className="ad-alert ad-alert--success ad-alert--toast" role="status">
+            <Icon name="leaf" /> {toastMessage}
+          </div>
+        )}
 
         {/* Layout Principal da Ficha Técnica */}
         <div className="ad-detail-layout">
@@ -246,6 +254,11 @@ export function AdDetailPage() {
               <div className="ad-detail-meta">
                 <span className="ad-detail-date">
                   Publicado em {new Date(anuncio.criadoEm).toLocaleDateString("pt-BR")}
+                  {anuncio.atualizadoEm && (
+                    <span className="ad-detail-date-updated">
+                      {" "}(Atualizado em {new Date(anuncio.atualizadoEm).toLocaleDateString("pt-BR")})
+                    </span>
+                  )}
                 </span>
                 <span className="ad-detail-location">
                   <Icon name="location" /> {anuncio.cidade}, {anuncio.uf}
@@ -569,9 +582,15 @@ export function AdDetailPage() {
                   <div className="ad-owner-badge">
                     <Icon name="user" /> Seu anúncio publicado
                   </div>
+                  <Link
+                    to={`/anuncios/${anuncio.id}/editar`}
+                    className="button button--primary button--full ad-owner-edit-btn"
+                  >
+                    <Icon name="edit" /> Editar Informações do Lote
+                  </Link>
                   <button
                     type="button"
-                    className="button button--primary button--full"
+                    className="button button--outline button--full"
                     onClick={() => navigate(routes.myAds)}
                   >
                     Gerenciar em Meus Anúncios

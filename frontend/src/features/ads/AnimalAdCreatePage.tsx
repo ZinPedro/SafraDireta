@@ -1,6 +1,6 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "../../context/authContext";
 import { routes } from "../../data/site";
 import type { OpenDevelopmentDialog } from "../../data/site";
@@ -31,18 +31,25 @@ import type {
   GrainPackaging,
   GrainPricingMode,
   GrainQualitySpecs,
+  MarketplaceAd,
   PricingMode,
 } from "./ads.types";
-import { criarAnuncioAnimal, criarAnuncioGraos } from "./adsStorage";
+import {
+  atualizarAnuncio,
+  criarAnuncioAnimal,
+  criarAnuncioGraos,
+  obterAnuncioPorId,
+} from "./adsStorage";
 import defaultFarmImage from "../../assets/images/farm-landscape.jpeg";
 import harvestSunsetImage from "../../assets/images/harvest-sunset.jpeg";
 import "./ads.css";
 
 interface AnimalAdCreatePageProps {
   onOpenDialog?: OpenDevelopmentDialog;
+  mode?: "create" | "edit";
 }
 
-export function AnimalAdCreatePage({ onOpenDialog }: AnimalAdCreatePageProps) {
+export function AnimalAdCreatePage({ onOpenDialog, mode = "create" }: AnimalAdCreatePageProps) {
   const { session } = useAuth();
   const navigate = useNavigate();
 
@@ -262,6 +269,145 @@ export function AnimalAdCreatePage({ onOpenDialog }: AnimalAdCreatePageProps) {
   const [createdAdId, setCreatedAdId] = useState<string | null>(null);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
 
+  const { id } = useParams<{ id: string }>();
+  const isEditMode = mode === "edit";
+
+  const [isLoadingAd, setIsLoadingAd] = useState(isEditMode);
+  const [adNotFound, setAdNotFound] = useState(false);
+  const [loadedAd, setLoadedAd] = useState<MarketplaceAd | null>(null);
+  const [unauthorized, setUnauthorized] = useState(false);
+
+  useEffect(() => {
+    if (!isEditMode || !id) return;
+    let isMounted = true;
+
+    obterAnuncioPorId(id)
+      .then((ad) => {
+        if (!isMounted) return;
+        if (!ad) {
+          setAdNotFound(true);
+          return;
+        }
+
+        if (session && ad.vendedorId !== session.conta.id) {
+          setUnauthorized(true);
+          return;
+        }
+
+        setLoadedAd(ad);
+        setModalidade(ad.categoria);
+        setTitulo(ad.titulo);
+        setDescricao(ad.descricao || "");
+        setCidade(ad.cidade);
+        setUf(ad.uf);
+
+        if (ad.fotos && ad.fotos.length > 0) {
+          setFotos(ad.fotos);
+        } else if (ad.imagemUrl) {
+          setFotos([ad.imagemUrl]);
+        }
+
+        if (ad.video) {
+          if (ad.video.tipo === "UPLOAD") {
+            setVideoMode("UPLOAD");
+            setVideoUploadUrl(ad.video.url);
+            setVideoUploadName(ad.video.fileName || "Vídeo demonstrativo");
+          } else {
+            setVideoMode("YOUTUBE");
+            setVideoYoutubeUrl(ad.video.url);
+          }
+        }
+
+        if (ad.categoria === "ANIMAL") {
+          const matchBreed = BEEF_CATTLE_BREEDS.find((b) => b.value === ad.raca);
+          if (matchBreed && matchBreed.value !== "OUTRA") {
+            setRacaSelect(ad.raca);
+            setRacaCustom("");
+          } else {
+            setRacaSelect("OUTRA");
+            setRacaCustom(ad.raca);
+          }
+
+          setQuantidadeCabecas(ad.quantidadeCabecas);
+          setFinalidade(ad.finalidade);
+          if (ad.idadeMeses) setIdadeMeses(ad.idadeMeses);
+          setPesoUnitMode("KG");
+          setPesoInputValue(ad.pesoMedioKg);
+          setPrecoTotal(ad.precoTotal);
+          setPrecoPorCabeca(ad.precoPorCabeca);
+          if (ad.precoPorCabeca > 0 && Math.round(ad.precoPorCabeca * ad.quantidadeCabecas) === Math.round(ad.precoTotal)) {
+            setPricingMode("PER_HEAD");
+          } else {
+            setPricingMode("TOTAL");
+          }
+        } else {
+          // GRAOS
+          setCultura(ad.cultura);
+          if (ad.culturaPersonalizada) setCulturaPersonalizada(ad.culturaPersonalizada);
+
+          if (ad.cultura !== "OUTRO") {
+            const listaSubtipos = GRAIN_SUBTYPES[ad.cultura];
+            const matchSubtipo = listaSubtipos ? listaSubtipos.find((s) => s.value === ad.subtipo) : null;
+            if (matchSubtipo && matchSubtipo.value !== "OUTRO") {
+              setSubtipoSelect(ad.subtipo);
+              setSubtipoCustom("");
+            } else {
+              setSubtipoSelect("OUTRO");
+              setSubtipoCustom(ad.subtipo);
+            }
+          } else {
+            setSubtipoCustom(ad.subtipo);
+          }
+
+          setSafra(ad.safra);
+          setEmbalagem(ad.embalagem);
+          setUmidadePercentual(ad.umidadePercentual);
+          setVolumeUnitMode("SACAS");
+          setVolumeInputValue(ad.quantidadeSacas);
+          setPrecoTotalGraos(ad.precoTotal);
+          setPrecoPorSaca(ad.precoPorSaca);
+
+          if (ad.precoPorSaca > 0 && Math.round(ad.precoPorSaca * ad.quantidadeSacas) === Math.round(ad.precoTotal)) {
+            setGrainPricingMode("PER_SACK");
+          } else {
+            setGrainPricingMode("TOTAL");
+          }
+
+          if (ad.laudoTecnico) {
+            const spec = ad.laudoTecnico;
+            if (spec.sojaImpurezasPct !== undefined) setSojaImpurezasPct(spec.sojaImpurezasPct);
+            if (spec.sojaAvariadosPct !== undefined) setSojaAvariadosPct(spec.sojaAvariadosPct);
+            if (spec.sojaQuebradosPct !== undefined) setSojaQuebradosPct(spec.sojaQuebradosPct);
+
+            if (spec.milhoImpurezasPct !== undefined) setMilhoImpurezasPct(spec.milhoImpurezasPct);
+            if (spec.milhoArdidosPct !== undefined) setMilhoArdidosPct(spec.milhoArdidosPct);
+            if (spec.milhoQuebradosPct !== undefined) setMilhoQuebradosPct(spec.milhoQuebradosPct);
+
+            if (spec.cafePeneira) setCafePeneira(spec.cafePeneira);
+            if (spec.cafeCatacaoDefeitos) setCafeCatacaoDefeitos(spec.cafeCatacaoDefeitos);
+            if (spec.cafePontuacaoSca !== undefined) setCafePontuacaoSca(spec.cafePontuacaoSca);
+
+            if (spec.trigoPhKgHl !== undefined) setTrigoPhKgHl(spec.trigoPhKgHl);
+            if (spec.trigoForcaGlutenW !== undefined) setTrigoForcaGlutenW(spec.trigoForcaGlutenW);
+            if (spec.trigoFallingNumberSeg !== undefined) setTrigoFallingNumberSeg(spec.trigoFallingNumberSeg);
+
+            if (spec.outroObservacoesLaudo) setOutroObservacoesLaudo(spec.outroObservacoesLaudo);
+          }
+        }
+      })
+      .catch((err) => {
+        console.error("Erro ao carregar anúncio para edição:", err);
+        if (isMounted) setAdNotFound(true);
+      })
+      .finally(() => {
+        if (isMounted) setIsLoadingAd(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [isEditMode, id, session]);
+
   // Guarda de rota: Vendedor precisa estar habilitado
   if (!session || session.vendedorEstado !== "HABILITADO") {
     return (
@@ -270,6 +416,49 @@ export function AnimalAdCreatePage({ onOpenDialog }: AnimalAdCreatePageProps) {
         description="Para anunciar lotes de gado, grãos ou café e comercializar com compradores de todo o país, complete sua habilitação de vendedor na sua conta."
         onOpenLogin={() => onOpenDialog?.("login")}
         onOpenRegister={() => onOpenDialog?.("registration")}
+      />
+    );
+  }
+
+  if (isEditMode && isLoadingAd) {
+    return (
+      <div className="ad-create-page">
+        <div className="container">
+          <div className="ad-loading-box">
+            <Icon name="clock" className="ad-loading-spinner" />
+            <p>Carregando dados do lote para edição...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (isEditMode && adNotFound) {
+    return (
+      <div className="ad-create-page">
+        <div className="container">
+          <div className="ad-not-found">
+            <h2>Lote não encontrado</h2>
+            <p>O anúncio solicitado para edição não foi localizado ou já foi encerrado.</p>
+            <Link to={routes.myAds} className="button button--primary">
+              Voltar aos Meus Anúncios
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (isEditMode && (unauthorized || (loadedAd && session && loadedAd.vendedorId !== session.conta.id))) {
+    return (
+      <AccessRestricted
+        title="Acesso não autorizado"
+        description="Acesso não autorizado. Você só possui permissão para editar anúncios criados pela sua conta."
+        customAction={
+          <Link to={routes.myAds} className="button button--primary">
+            Voltar aos Meus Anúncios
+          </Link>
+        }
       />
     );
   }
@@ -552,7 +741,10 @@ export function AnimalAdCreatePage({ onOpenDialog }: AnimalAdCreatePageProps) {
           titulo: titulo.trim(),
           descricao: descricao.trim() || undefined,
           especie: "BOVINO",
-          raca: racaFinal.slice(0, 30),
+          raca:
+            isEditMode && loadedAd && loadedAd.categoria === "ANIMAL"
+              ? loadedAd.raca
+              : racaFinal.slice(0, 30),
           quantidadeCabecas: Number(quantidadeCabecas),
           finalidade,
           idadeMeses: idadeMeses ? Number(idadeMeses) : undefined,
@@ -565,6 +757,14 @@ export function AnimalAdCreatePage({ onOpenDialog }: AnimalAdCreatePageProps) {
           fotos: fotos.length > 0 ? fotos : undefined,
           video: videoPayload,
         };
+
+        if (isEditMode && id) {
+          await atualizarAnuncio(id, input, session);
+          navigate(`/anuncios/${id}`, {
+            state: { toastMessage: "Anúncio atualizado com sucesso!" },
+          });
+          return;
+        }
 
         const criado = await criarAnuncioAnimal(input, session);
         setCreatedAdId(criado.id);
@@ -604,11 +804,20 @@ export function AnimalAdCreatePage({ onOpenDialog }: AnimalAdCreatePageProps) {
         const inputGraos: CreateGrainAdInput = {
           titulo: titulo.trim(),
           descricao: descricao.trim() || undefined,
-          cultura: cultura as GrainCrop,
+          cultura: (isEditMode && loadedAd && loadedAd.categoria === "GRAOS"
+            ? loadedAd.cultura
+            : cultura) as GrainCrop,
           culturaPersonalizada:
-            cultura === "OUTRO" ? culturaPersonalizada.trim().slice(0, 30) : undefined,
-          subtipo: subtipoGraoFinal.slice(0, 60),
-          safra,
+            isEditMode && loadedAd && loadedAd.categoria === "GRAOS"
+              ? loadedAd.culturaPersonalizada
+              : cultura === "OUTRO"
+              ? culturaPersonalizada.trim().slice(0, 30)
+              : undefined,
+          subtipo:
+            isEditMode && loadedAd && loadedAd.categoria === "GRAOS"
+              ? loadedAd.subtipo
+              : subtipoGraoFinal.slice(0, 60),
+          safra: isEditMode && loadedAd && loadedAd.categoria === "GRAOS" ? loadedAd.safra : safra,
           embalagem,
           umidadePercentual: Number(umidadePercentual),
           laudoTecnico,
@@ -625,16 +834,26 @@ export function AnimalAdCreatePage({ onOpenDialog }: AnimalAdCreatePageProps) {
           video: videoPayload,
         };
 
+        if (isEditMode && id) {
+          await atualizarAnuncio(id, inputGraos, session);
+          navigate(`/anuncios/${id}`, {
+            state: { toastMessage: "Anúncio atualizado com sucesso!" },
+          });
+          return;
+        }
+
         const criado = await criarAnuncioGraos(inputGraos, session);
         setCreatedAdId(criado.id);
       }
 
       setShowSuccessModal(true);
     } catch (err) {
-      console.error("Erro ao publicar anúncio de lote:", err);
+      console.error("Erro ao salvar anúncio de lote:", err);
       const mensagem =
         err instanceof Error
           ? err.message
+          : isEditMode
+          ? "Ocorreu um erro ao atualizar o lote. Verifique o armazenamento do navegador e tente novamente."
           : "Ocorreu um erro ao publicar o lote. Verifique o armazenamento do navegador e tente novamente.";
       setErros({ geral: mensagem });
       window.scrollTo({ top: 0, behavior: "smooth" });
@@ -652,24 +871,42 @@ export function AnimalAdCreatePage({ onOpenDialog }: AnimalAdCreatePageProps) {
           <span aria-hidden="true">/</span>
           <Link to={routes.myAds}>Meus Anúncios</Link>
           <span aria-hidden="true">/</span>
-          <span aria-current="page">
-            {modalidade === "ANIMAL" ? "Novo Lote de Boi Gordo" : "Novo Lote de Grãos ou Café"}
-          </span>
+          {isEditMode && loadedAd ? (
+            <>
+              <Link to={routes.adDetail(loadedAd.id)}>
+                {loadedAd.titulo.length > 28 ? `${loadedAd.titulo.slice(0, 28)}...` : loadedAd.titulo}
+              </Link>
+              <span aria-hidden="true">/</span>
+              <span aria-current="page">Editar Anúncio</span>
+            </>
+          ) : (
+            <span aria-current="page">
+              {modalidade === "ANIMAL" ? "Novo Lote de Boi Gordo" : "Novo Lote de Grãos ou Café"}
+            </span>
+          )}
         </nav>
 
         <header className="ad-create-header">
           <p className="eyebrow">
-            {modalidade === "ANIMAL"
+            {isEditMode
+              ? modalidade === "ANIMAL"
+                ? "Edição de Anúncio · Pecuária de Corte"
+                : "Edição de Anúncio · Grãos e Café"
+              : modalidade === "ANIMAL"
               ? "Pecuária de Corte · Boi Gordo"
               : "Produção Agrícola · Grãos e Café"}
           </p>
           <h1 className="ad-create-title">
-            {modalidade === "ANIMAL"
+            {isEditMode
+              ? `Editar Lote: ${loadedAd?.titulo || "Anúncio"}`
+              : modalidade === "ANIMAL"
               ? "Cadastro de Lote de Boi Gordo"
               : "Cadastro de Lote de Grãos ou Café"}
           </h1>
           <p className="ad-create-subtitle">
-            {modalidade === "ANIMAL"
+            {isEditMode
+              ? "Atualize as informações técnicas, comerciais, valores ou fotos do lote. As alterações refletirão imediatamente no mercado."
+              : modalidade === "ANIMAL"
               ? "Publique as especificações zootécnicas e comerciais da sua boiada. O lote ficará ativo imediatamente no mercado."
               : "Publique as especificações agronômicas, safra, volume e condições comerciais da sua produção agrícola no mercado."}
           </p>
@@ -677,14 +914,28 @@ export function AnimalAdCreatePage({ onOpenDialog }: AnimalAdCreatePageProps) {
 
         {/* Seletor de Modalidade (Boi Gordo vs Grãos e Café) */}
         <section className="ad-modality-selector" aria-label="Selecione a categoria do lote">
-          <span className="ad-modality-selector__label">Qual categoria de produção deseja anunciar?</span>
+          <div className="ad-modality-selector__header">
+            <span className="ad-modality-selector__label">Qual categoria de produção deseja anunciar?</span>
+            {isEditMode && (
+              <span className="ad-locked-badge">
+                <Icon name="lock" /> Modalidade Fixada
+              </span>
+            )}
+          </div>
+          {isEditMode && (
+            <div className="ad-edit-notice-banner" role="status">
+              <Icon name="box" />
+              <span>A modalidade do anúncio não pode ser alterada após a publicação.</span>
+            </div>
+          )}
           <div className="ad-modality-grid" role="radiogroup" aria-label="Modalidade do anúncio">
             <button
               type="button"
               role="radio"
               aria-checked={modalidade === "ANIMAL"}
-              className={`ad-modality-card ${modalidade === "ANIMAL" ? "ad-modality-card--active" : ""}`}
-              onClick={() => handleSelectModalidade("ANIMAL")}
+              disabled={isEditMode}
+              className={`ad-modality-card ${modalidade === "ANIMAL" ? "ad-modality-card--active" : ""} ${isEditMode ? "ad-modality-card--disabled" : ""}`}
+              onClick={() => !isEditMode && handleSelectModalidade("ANIMAL")}
             >
               <div className="ad-modality-card__icon">
                 <Icon name="box" />
@@ -699,8 +950,9 @@ export function AnimalAdCreatePage({ onOpenDialog }: AnimalAdCreatePageProps) {
               type="button"
               role="radio"
               aria-checked={modalidade === "GRAOS"}
-              className={`ad-modality-card ${modalidade === "GRAOS" ? "ad-modality-card--active" : ""}`}
-              onClick={() => handleSelectModalidade("GRAOS")}
+              disabled={isEditMode}
+              className={`ad-modality-card ${modalidade === "GRAOS" ? "ad-modality-card--active" : ""} ${isEditMode ? "ad-modality-card--disabled" : ""}`}
+              onClick={() => !isEditMode && handleSelectModalidade("GRAOS")}
             >
               <div className="ad-modality-card__icon">
                 <Icon name="leaf" />
@@ -796,9 +1048,11 @@ export function AnimalAdCreatePage({ onOpenDialog }: AnimalAdCreatePageProps) {
                   </label>
                   <select
                     id="ad-raca"
-                    className={`form-select ${erros.raca ? "form-select--error" : ""}`}
+                    className={`form-select ${erros.raca ? "form-select--error" : ""} ${isEditMode ? "form-select--disabled" : ""}`}
+                    disabled={isEditMode}
                     value={racaSelect}
                     onChange={(e) => {
+                      if (isEditMode) return;
                       setRacaSelect(e.target.value);
                       if (erros.raca) {
                         setErros((prev) => ({ ...prev, raca: "" }));
@@ -820,9 +1074,11 @@ export function AnimalAdCreatePage({ onOpenDialog }: AnimalAdCreatePageProps) {
                       {erros.raca}
                     </span>
                   )}
-                  <span id="ad-raca-hint" className="form-hint">
-                    Informe apenas a raça ou linhagem zootécnica. Detalhes de nutrição, cocho e manejo devem ser descritos no campo Descrição.
-                  </span>
+                  {!isEditMode && (
+                    <span id="ad-raca-hint" className="form-hint">
+                      Informe apenas a raça ou linhagem zootécnica. Detalhes de nutrição, cocho e manejo devem ser descritos no campo Descrição.
+                    </span>
+                  )}
 
                   {racaSelect === "OUTRA" && (
                     <div className="ad-raca-custom-box">
@@ -837,10 +1093,12 @@ export function AnimalAdCreatePage({ onOpenDialog }: AnimalAdCreatePageProps) {
                       <input
                         id="ad-raca-custom"
                         type="text"
-                        className={`form-input ${erros.racaCustom ? "form-input--error" : ""}`}
+                        className={`form-input ${erros.racaCustom ? "form-input--error" : ""} ${isEditMode ? "form-input--disabled" : ""}`}
+                        disabled={isEditMode}
                         placeholder="Ex: Senepol x Nelore F2"
                         value={racaCustom}
                         onChange={(e) => {
+                          if (isEditMode) return;
                           setRacaCustom(e.target.value);
                           if (erros.racaCustom) {
                             setErros((prev) => ({ ...prev, racaCustom: "" }));
@@ -857,6 +1115,12 @@ export function AnimalAdCreatePage({ onOpenDialog }: AnimalAdCreatePageProps) {
                         </span>
                       )}
                     </div>
+                  )}
+
+                  {isEditMode && (
+                    <span className="form-hint form-hint--locked">
+                      🔒 A raça predominante do lote não pode ser alterada após a publicação.
+                    </span>
                   )}
                 </div>
 
@@ -1042,9 +1306,11 @@ export function AnimalAdCreatePage({ onOpenDialog }: AnimalAdCreatePageProps) {
                   </label>
                   <select
                     id="ad-cultura"
-                    className={`form-select ${erros.cultura ? "form-select--error" : ""}`}
+                    className={`form-select ${erros.cultura ? "form-select--error" : ""} ${isEditMode ? "form-select--disabled" : ""}`}
                     value={cultura}
+                    disabled={isEditMode}
                     onChange={(e) => {
+                      if (isEditMode) return;
                       const novaCultura = e.target.value as GrainCrop | "";
                       setCultura(novaCultura);
                       setSubtipoSelect("");
@@ -1094,9 +1360,15 @@ export function AnimalAdCreatePage({ onOpenDialog }: AnimalAdCreatePageProps) {
                       {erros.cultura}
                     </span>
                   )}
-                  <span id="ad-cultura-hint" className="form-hint">
-                    Escolha entre Café, Soja, Milho, Trigo ou selecione Outro para culturas diversas.
-                  </span>
+                  {isEditMode ? (
+                    <span id="ad-cultura-hint" className="form-hint form-hint--locked">
+                      🔒 A cultura principal do lote não pode ser alterada após a publicação.
+                    </span>
+                  ) : (
+                    <span id="ad-cultura-hint" className="form-hint">
+                      Escolha entre Café, Soja, Milho, Trigo ou selecione Outro para culturas diversas.
+                    </span>
+                  )}
                 </div>
 
                 {cultura === "OUTRO" ? (
@@ -1112,10 +1384,12 @@ export function AnimalAdCreatePage({ onOpenDialog }: AnimalAdCreatePageProps) {
                     <input
                       id="ad-cultura-custom"
                       type="text"
-                      className={`form-input ${erros.culturaPersonalizada ? "form-input--error" : ""}`}
+                      className={`form-input ${erros.culturaPersonalizada ? "form-input--error" : ""} ${isEditMode ? "form-input--disabled" : ""}`}
                       placeholder="Ex: Sorgo Granífero, Feijão Carioca, Aveia"
                       value={culturaPersonalizada}
+                      disabled={isEditMode}
                       onChange={(e) => {
+                        if (isEditMode) return;
                         setCulturaPersonalizada(e.target.value);
                         if (erros.culturaPersonalizada) {
                           setErros((prev) => ({ ...prev, culturaPersonalizada: "" }));
@@ -1142,10 +1416,11 @@ export function AnimalAdCreatePage({ onOpenDialog }: AnimalAdCreatePageProps) {
                     </label>
                     <select
                       id="ad-subtipo"
-                      className={`form-select ${erros.subtipo ? "form-select--error" : ""}`}
+                      className={`form-select ${erros.subtipo ? "form-select--error" : ""} ${isEditMode ? "form-select--disabled" : ""}`}
                       value={subtipoSelect}
-                      disabled={!cultura}
+                      disabled={isEditMode || !cultura}
                       onChange={(e) => {
+                        if (isEditMode) return;
                         setSubtipoSelect(e.target.value);
                         if (erros.subtipo) {
                           setErros((prev) => ({ ...prev, subtipo: "" }));
@@ -1186,10 +1461,12 @@ export function AnimalAdCreatePage({ onOpenDialog }: AnimalAdCreatePageProps) {
                         <input
                           id="ad-subtipo-custom"
                           type="text"
-                          className={`form-input ${erros.subtipoCustom ? "form-input--error" : ""}`}
+                          className={`form-input ${erros.subtipoCustom ? "form-input--error" : ""} ${isEditMode ? "form-input--disabled" : ""}`}
+                          disabled={isEditMode}
                           placeholder="Ex: Peneira 17/18 Cereja Descascado"
                           value={subtipoCustom}
                           onChange={(e) => {
+                            if (isEditMode) return;
                             setSubtipoCustom(e.target.value);
                             if (erros.subtipoCustom) {
                               setErros((prev) => ({ ...prev, subtipoCustom: "" }));
@@ -1206,6 +1483,12 @@ export function AnimalAdCreatePage({ onOpenDialog }: AnimalAdCreatePageProps) {
                           </span>
                         )}
                       </div>
+                    )}
+
+                    {isEditMode && (
+                      <span className="form-hint form-hint--locked">
+                        🔒 O tipo e classificação comercial do lote não podem ser alterados após a publicação.
+                      </span>
                     )}
                   </div>
                 )}
@@ -1230,9 +1513,13 @@ export function AnimalAdCreatePage({ onOpenDialog }: AnimalAdCreatePageProps) {
                   </label>
                   <select
                     id="ad-safra"
-                    className={`form-select ${erros.safra ? "form-select--error" : ""}`}
+                    className={`form-select ${erros.safra ? "form-select--error" : ""} ${isEditMode ? "form-select--disabled" : ""}`}
+                    disabled={isEditMode}
                     value={safra}
-                    onChange={(e) => setSafra(e.target.value)}
+                    onChange={(e) => {
+                      if (isEditMode) return;
+                      setSafra(e.target.value);
+                    }}
                     required
                   >
                     {GRAIN_HARVEST_SEASONS.map((season) => (
@@ -1244,6 +1531,11 @@ export function AnimalAdCreatePage({ onOpenDialog }: AnimalAdCreatePageProps) {
                   {erros.safra && (
                     <span id="ad-safra-error" className="form-error">
                       {erros.safra}
+                    </span>
+                  )}
+                  {isEditMode && (
+                    <span className="form-hint form-hint--locked">
+                      🔒 A safra de colheita não pode ser alterada após a publicação. Para outra colheita, publique um novo lote.
                     </span>
                   )}
                 </div>
@@ -2403,12 +2695,19 @@ export function AnimalAdCreatePage({ onOpenDialog }: AnimalAdCreatePageProps) {
           )}
 
           <div className="ad-form-actions">
-            <Link to={routes.myAds} className="button button--outline">
+            <Link
+              to={isEditMode && loadedAd ? routes.adDetail(loadedAd.id) : routes.myAds}
+              className="button button--outline"
+            >
               Cancelar
             </Link>
             <button type="submit" className="button button--primary button--large" disabled={isSubmitting}>
               {isSubmitting
-                ? "Publicando Lote..."
+                ? isEditMode
+                  ? "Salvando Alterações..."
+                  : "Publicando Lote..."
+                : isEditMode
+                ? "Salvar Alterações"
                 : modalidade === "ANIMAL"
                 ? "Publicar Lote de Boi Gordo"
                 : "Publicar Lote Agrícola"}

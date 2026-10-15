@@ -189,9 +189,21 @@ export function MyAdsPage({ onOpenDialog }: MyAdsPageProps) {
                         </span>
                       </div>
 
-                      <span className="market-card__btn-view">
-                        Ver Ficha Técnica <Icon name="arrow" />
-                      </span>
+                      <div className="my-ad-card__actions">
+                        <button
+                          type="button"
+                          className="button button--outline button--small my-ad-card__btn-edit"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            navigate(`/anuncios/${anuncio.id}/editar`);
+                          }}
+                        >
+                          <Icon name="edit" /> Editar
+                        </button>
+                        <span className="market-card__btn-view">
+                          Ver Ficha Técnica <Icon name="arrow" />
+                        </span>
+                      </div>
                     </div>
                   </div>
                 </article>

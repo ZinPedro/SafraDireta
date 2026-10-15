@@ -9,6 +9,7 @@ interface AccessRestrictedProps {
   description?: string;
   onOpenLogin?: () => void;
   onOpenRegister?: () => void;
+  customAction?: React.ReactNode;
 }
 
 export function AccessRestricted({
@@ -16,6 +17,7 @@ export function AccessRestricted({
   description = "Para anunciar lotes de animais e gerenciar sua produção no SafraDireta, você precisa ter uma conta com habilitação de vendedor aprovada.",
   onOpenLogin,
   onOpenRegister,
+  customAction,
 }: AccessRestrictedProps) {
   const { session } = useAuth();
 
@@ -32,7 +34,9 @@ export function AccessRestricted({
           <p className="access-restricted-card__description">{description}</p>
 
           <div className="access-restricted-card__actions">
-            {session ? (
+            {customAction ? (
+              customAction
+            ) : session ? (
               <>
                 <Link to={routes.sellerUpgrade} className="button button--primary">
                   <Icon name="leaf" /> Habilitar cadastro de vendedor

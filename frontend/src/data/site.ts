@@ -9,7 +9,9 @@ export const routes = {
   guide: "/guia",
   myAds: "/meus-anuncios",
   createAd: "/anunciar",
-  adDetail: "/anuncios/:id",
+  adDetail: (id: string) => `/anuncios/${id}`,
+  adEdit: "/anuncios/:id/editar",
+  editAd: (id: string) => `/anuncios/${id}/editar`,
   producerProfile: (id: string) => `/produtor/${id}`,
 } as const;
 

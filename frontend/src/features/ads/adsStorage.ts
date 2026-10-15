@@ -7,6 +7,7 @@ import type {
   CreateGrainAdInput,
   GrainLotAd,
   MarketplaceAd,
+  UpdateAdInput,
 } from "./ads.types";
 import defaultFarmImage from "../../assets/images/farm-landscape.jpeg";
 import harvestSunsetImage from "../../assets/images/harvest-sunset.jpeg";
@@ -638,4 +639,176 @@ export async function criarAnuncioGraos(
   }
 
   return hidratarAnuncioComPerfil(novoAnuncio);
+}
+
+export async function atualizarAnuncio(
+  id: string,
+  input: UpdateAdInput,
+  session: Session
+): Promise<MarketplaceAd> {
+  await new Promise((resolve) => setTimeout(resolve, 150));
+  const anuncios = carregarDoStorage();
+  const index = anuncios.findIndex((a) => a.id === id);
+  if (index === -1) {
+    throw new Error("Anúncio não localizado no sistema.");
+  }
+
+  const existente = anuncios[index];
+  if (existente.vendedorId !== session.conta.id) {
+    throw new Error("Acesso não autorizado para editar este anúncio.");
+  }
+
+  const agora = new Date().toISOString();
+
+  if (existente.categoria === "ANIMAL") {
+    const inputAnimal = input as Partial<CreateAnimalAdInput>;
+    const cabecas =
+      typeof inputAnimal.quantidadeCabecas === "number" && inputAnimal.quantidadeCabecas > 0
+        ? Math.floor(inputAnimal.quantidadeCabecas)
+        : existente.quantidadeCabecas;
+
+    const pesoVivoPorCabeca =
+      typeof inputAnimal.pesoMedioKg === "number" && inputAnimal.pesoMedioKg > 0
+        ? inputAnimal.pesoMedioKg
+        : existente.pesoMedioKg;
+
+    const pesoArrobaPorCabeca = Number((pesoVivoPorCabeca / 30).toFixed(2));
+    const pesoTotalKg = Number((pesoVivoPorCabeca * cabecas).toFixed(2));
+    const pesoTotalArroba = Number((pesoTotalKg / 30).toFixed(2));
+
+    let precoTotal = existente.precoTotal;
+    if (inputAnimal.pricingMode === "PER_HEAD" && typeof inputAnimal.precoPorCabeca === "number" && inputAnimal.precoPorCabeca > 0) {
+      precoTotal = Number((inputAnimal.precoPorCabeca * cabecas).toFixed(2));
+    } else if (typeof inputAnimal.precoTotal === "number" && inputAnimal.precoTotal > 0) {
+      precoTotal = Number(inputAnimal.precoTotal.toFixed(2));
+    }
+
+    const precoPorCabeca = Number((precoTotal / cabecas).toFixed(2));
+    const precoPorArroba = pesoTotalArroba > 0 ? Number((precoTotal / pesoTotalArroba).toFixed(2)) : 0;
+
+    const fotos =
+      inputAnimal.fotos !== undefined
+        ? inputAnimal.fotos.length > 0
+          ? inputAnimal.fotos
+          : [defaultFarmImage]
+        : existente.fotos || [defaultFarmImage];
+    const imagemCapa = fotos[0] || defaultFarmImage;
+    const video = inputAnimal.video !== undefined ? inputAnimal.video : existente.video;
+
+    await salvarMidiasNoIndexedDB(id, fotos, video);
+
+    const anuncioAtualizado: AnimalLotAd = {
+      ...existente,
+      titulo: inputAnimal.titulo ? inputAnimal.titulo.trim() : existente.titulo,
+      descricao:
+        inputAnimal.descricao !== undefined
+          ? inputAnimal.descricao?.trim() || undefined
+          : existente.descricao,
+      raca: existente.raca,
+      quantidadeCabecas: cabecas,
+      finalidade: inputAnimal.finalidade ?? existente.finalidade,
+      idadeMeses:
+        inputAnimal.idadeMeses !== undefined
+          ? inputAnimal.idadeMeses
+            ? Number(inputAnimal.idadeMeses)
+            : undefined
+          : existente.idadeMeses,
+      pesoMedioKg: pesoVivoPorCabeca,
+      pesoMedioArroba: pesoArrobaPorCabeca,
+      pesoTotalKg,
+      pesoTotalArroba,
+      precoTotal,
+      precoPorCabeca,
+      precoPorArroba,
+      cidade: inputAnimal.cidade ? inputAnimal.cidade.trim() : existente.cidade,
+      uf: inputAnimal.uf ? inputAnimal.uf.trim().toUpperCase() : existente.uf,
+      fotos,
+      video,
+      imagemUrl: imagemCapa,
+      atualizadoEm: agora,
+    };
+
+    anuncios[index] = anuncioAtualizado;
+    const salvou = salvarNoStorage(anuncios);
+    if (!salvou) {
+      throw new Error("Não foi possível persistir o anúncio atualizado no armazenamento local.");
+    }
+
+    return hidratarAnuncioComPerfil(anuncioAtualizado);
+  } else {
+    // GRAOS
+    const inputGraos = input as Partial<CreateGrainAdInput>;
+    const quantidadeSacas =
+      typeof inputGraos.quantidadeSacas === "number" && inputGraos.quantidadeSacas > 0
+        ? Math.floor(inputGraos.quantidadeSacas)
+        : existente.quantidadeSacas;
+
+    const pesoTotalKg = Number((quantidadeSacas * 60).toFixed(2));
+    const pesoTotalToneladas = Number((pesoTotalKg / 1000).toFixed(2));
+
+    let precoTotal = existente.precoTotal;
+    if (inputGraos.pricingMode === "PER_SACK" && typeof inputGraos.precoPorSaca === "number" && inputGraos.precoPorSaca > 0) {
+      precoTotal = Number((inputGraos.precoPorSaca * quantidadeSacas).toFixed(2));
+    } else if (typeof inputGraos.precoTotal === "number" && inputGraos.precoTotal > 0) {
+      precoTotal = Number(inputGraos.precoTotal.toFixed(2));
+    }
+
+    const precoPorSaca = Number((precoTotal / quantidadeSacas).toFixed(2));
+    const precoPorTonelada =
+      pesoTotalToneladas > 0 ? Number((precoTotal / pesoTotalToneladas).toFixed(2)) : 0;
+
+    const subtipo = existente.subtipo;
+    const tagSecundaria = existente.tagSecundaria;
+
+    const fotos =
+      inputGraos.fotos !== undefined
+        ? inputGraos.fotos.length > 0
+          ? inputGraos.fotos
+          : [harvestSunsetImage]
+        : existente.fotos || [harvestSunsetImage];
+    const imagemCapa = fotos[0] || harvestSunsetImage;
+    const video = inputGraos.video !== undefined ? inputGraos.video : existente.video;
+
+    await salvarMidiasNoIndexedDB(id, fotos, video);
+
+    const anuncioAtualizado: GrainLotAd = {
+      ...existente,
+      titulo: inputGraos.titulo ? inputGraos.titulo.trim() : existente.titulo,
+      descricao:
+        inputGraos.descricao !== undefined
+          ? inputGraos.descricao?.trim() || undefined
+          : existente.descricao,
+      culturaPersonalizada: existente.culturaPersonalizada,
+      subtipo,
+      tagSecundaria,
+      safra: existente.safra,
+      embalagem: inputGraos.embalagem ?? existente.embalagem,
+      umidadePercentual:
+        typeof inputGraos.umidadePercentual === "number" && inputGraos.umidadePercentual > 0
+          ? Number(inputGraos.umidadePercentual.toFixed(1))
+          : existente.umidadePercentual,
+      laudoTecnico:
+        inputGraos.laudoTecnico !== undefined ? inputGraos.laudoTecnico : existente.laudoTecnico,
+      quantidadeSacas,
+      pesoTotalToneladas,
+      pesoTotalKg,
+      precoTotal,
+      precoPorSaca,
+      precoPorTonelada,
+      cidade: inputGraos.cidade ? inputGraos.cidade.trim() : existente.cidade,
+      uf: inputGraos.uf ? inputGraos.uf.trim().toUpperCase() : existente.uf,
+      fotos,
+      video,
+      imagemUrl: imagemCapa,
+      atualizadoEm: agora,
+    };
+
+    anuncios[index] = anuncioAtualizado;
+    const salvou = salvarNoStorage(anuncios);
+    if (!salvou) {
+      throw new Error("Não foi possível persistir o anúncio atualizado no armazenamento local.");
+    }
+
+    return hidratarAnuncioComPerfil(anuncioAtualizado);
+  }
 }

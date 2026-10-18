@@ -8,7 +8,7 @@ from psycopg_pool import ConnectionPool, PoolTimeout
 from app.config import get_settings
 from app.database import create_pool, get_pool
 from app.errors import registrar_handlers
-from app.routers import auth, termos, vendedores
+from app.routers import auth, categorias, termos, vendedores
 
 
 @asynccontextmanager
@@ -42,6 +42,7 @@ registrar_handlers(app)
 app.include_router(auth.router)
 app.include_router(termos.router)
 app.include_router(vendedores.router)
+app.include_router(categorias.router)
 app.include_router(auth.perfil_router)
 
 

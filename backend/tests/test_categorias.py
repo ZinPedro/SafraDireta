@@ -22,13 +22,25 @@ def test_rota_e_publica_e_lista_as_categorias_com_produtos(client):
 def test_cada_grupo_traz_seus_campos_obrigatorios(client):
     por_nome = {c["nome"]: c for c in _listar(client)["categorias"]}
 
-    assert "loteAnimal.quantidadeAnimais" in por_nome["Boi gordo"]["camposObrigatorios"]
-    assert "loteAgricola.quantidade" not in por_nome["Boi gordo"]["camposObrigatorios"]
+    animais = por_nome["Boi gordo"]
+    assert animais["formulario"] == "ANIMAL"
+    assert {"raca", "finalidade", "quantidadeCabecas", "pesoMedioKg", "precoTotal"} <= set(animais["camposObrigatorios"])
+    assert "quantidadeSacas" not in animais["camposObrigatorios"]
     for nome in ("Soja", "Milho", "Cafe"):
+        assert por_nome[nome]["formulario"] == "GRAOS"
         campos = por_nome[nome]["camposObrigatorios"]
-        assert "loteAgricola.unidadeId" in campos
-        assert "loteAnimal.quantidadeAnimais" not in campos
-        assert {"produtoId", "titulo", "precoLote"} <= set(campos)
+        assert {"cultura", "subtipo", "safra", "embalagem", "quantidadeSacas"} <= set(campos)
+        assert "quantidadeCabecas" not in campos
+
+
+def test_traz_as_opcoes_do_formulario(client):
+    opcoes = _listar(client)["opcoes"]
+
+    assert "Nelore" in opcoes["racas"] and "OUTRA" in opcoes["racas"]
+    assert set(opcoes["culturas"]) == {"SOJA", "MILHO", "CAFE", "TRIGO", "OUTRO"}
+    assert "CONILON_ROBUSTA" in {s["codigo"] for s in opcoes["subtipos"]["CAFE"]}
+    assert "ENGORDA_ABATE" in opcoes["finalidades"]
+    assert "GRANEL" in opcoes["embalagens"]
 
 
 def test_traz_as_unidades(client):

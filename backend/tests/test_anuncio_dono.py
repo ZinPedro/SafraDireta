@@ -6,8 +6,6 @@ import pytest
 from app.deps import anuncio_do_dono
 from app.errors import ErroApp
 
-OUTRO_CPF = "11144477735"
-
 
 def _atual(conta_id):
     """Simula o que a autenticacao entrega: o conta_id como UUID."""
@@ -15,17 +13,10 @@ def _atual(conta_id):
 
 
 @pytest.fixture()
-def anuncio(client, criar_vendedor):
+def anuncio(client, criar_vendedor, criar_anuncio):
     dono = criar_vendedor()
-    produto = client.db.execute(
-        "SELECT id FROM safradireta.produto WHERE nome = 'Boi gordo'"
-    ).fetchone()["id"]
-    r = client.post("/api/vendedor/anuncios", headers=dono["headers"], json={
-        "produtoId": str(produto), "titulo": "Lote teste", "precoLote": 1000,
-        "loteAnimal": {"quantidadeAnimais": 5},
-    })
-    assert r.status_code == 201, r.text
-    return {"id": r.json()["id"], "dono_id": dono["id"]}
+    criado = criar_anuncio(dono)
+    return {"id": criado["id"], "dono_id": dono["id"]}
 
 
 def test_dono_recebe_o_anuncio(client, anuncio):
@@ -36,7 +27,7 @@ def test_dono_recebe_o_anuncio(client, anuncio):
 
 
 def test_outro_vendedor_recebe_403(client, anuncio, criar_vendedor):
-    outro = criar_vendedor(OUTRO_CPF)
+    outro = criar_vendedor()
 
     with pytest.raises(ErroApp) as erro:
         anuncio_do_dono(anuncio_id=anuncio["id"], atual=_atual(outro["id"]), conn=client.db)

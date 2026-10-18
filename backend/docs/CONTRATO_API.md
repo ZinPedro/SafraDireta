@@ -1,6 +1,6 @@
-# Contrato da API SafraDireta, Sprint 1
+# Contrato da API SafraDireta, Sprints 1 e 2
 
-Versao: rascunho 0.4 (atualizada em 18/10/2026). Status: PROPOSTA para alinhar com Pedro (front) e Felipe (banco).
+Versao: rascunho 0.6 (atualizada em 18/10/2026). Status: PROPOSTA para alinhar com Pedro (front) e Felipe (banco).
 Itens marcados com [DECIDIR] dependem de resposta de alguem e podem mudar.
 Itens marcados com [IMPLEMENTADO] ja existem na branch `back`. Os itens de perfil, vendedor e cadastro PJ foram validados na mao (`/docs`); ainda faltam testes automaticos de integracao para eles.
 
@@ -239,7 +239,58 @@ Exige login. `multipart/form-data` com os campos `verificacaoId`, `tipoDocumento
 ### Guarda para funcoes de vendedor
 Qualquer rota futura de venda usa a dependencia `exige_vendedor_habilitado`: responde 403 `PROIBIDO` se a conta nao tiver `habilitacao_vendedor.estado = HABILITADO` com decisao APROVADA do tipo habilitacao.
 
-## 6. Resumo por historia
+## 6. Anuncios   (Sprint 2: US010, US011 e US014)   [IMPLEMENTADO]
+
+Formato do formulario do front (Pedro). O front nao manda ids: o backend escolhe o produto pelo tipo.
+Rotas do vendedor ficam em `/api/vendedor/anuncios` e exigem vendedor habilitado (sem token: 401; sem habilitacao: 403).
+Banco: rode `sql/06_seed_anuncios.sql` e `sql/07_anuncios_formulario.sql`.
+
+### GET /api/categorias   (publica)
+
+Devolve categorias com produtos, o `formulario` de cada uma (`ANIMAL` ou `GRAOS`), `camposObrigatorios`, as `unidades` e o bloco `opcoes`:
+`racas`, `finalidades`, `culturas`, `embalagens`, `peneirasCafe` e `subtipos` (por cultura, lista de `{codigo, rotulo}`). O front envia o `codigo`.
+
+### POST /api/vendedor/anuncios   (US010 e US011)
+
+Cria o anuncio ja publicado (`estadoComercial: ATIVO`), ligado ao vendedor do token. Sem rascunho. Resposta 201 com o anuncio.
+O campo `categoria` define o formulario. Fotos e video NAO vao aqui: usar a rota de midias (US012). Enviar `fotos` ou `video` da 422.
+
+Comuns: `titulo` (5 a 150), `descricao` (opcional, ate 2000), `cidade`, `uf`, `pricingMode`, `precoTotal` (maior que zero, 2 casas).
+
+`categoria: "ANIMAL"`:
+* `especie` (BOVINO), `raca` (da lista; `OUTRA` exige `racaPersonalizada` ate 30), `finalidade` (ENGORDA_ABATE, RECRIA_GARROTES, CRIA_DESMAMA, REPRODUCAO_TOUROS)
+* `quantidadeCabecas` (1 a 100000), `pesoMedioKg` (maior que zero), `idadeMeses` (opcional, 0 a 600)
+* `pricingMode`: `TOTAL` ou `PER_HEAD` (com `precoPorCabeca` que deve bater com o total)
+
+`categoria: "GRAOS"`:
+* `cultura` (SOJA, MILHO, CAFE, TRIGO, OUTRO; OUTRO exige `culturaPersonalizada`), `subtipo` (codigo da cultura; `OUTRO` pode ter `subtipoPersonalizado`)
+* `safra` (`AAAA/AAAA+1`, ex 2025/2026), `embalagem` (SACARIA, BIG_BAG, GRANEL), `umidadePercentual` (1 a 50)
+* `quantidadeSacas` (sacas de 60 kg), `pesoTotalToneladas` (opcional, deve bater com sacas x 60 / 1000)
+* `pricingMode`: `TOTAL` ou `PER_SACK` (com `precoPorSaca` que deve bater com o total)
+* `laudoTecnico` (objeto, campos por cultura): cafe exige `cafePeneira` (`cafeCatacaoDefeitos` texto ate 30, `cafePontuacaoSca` 80 a 100); soja `sojaImpurezasPct`, `sojaAvariadosPct`, `sojaQuebradosPct`; milho `milhoImpurezasPct`, `milhoArdidosPct`, `milhoQuebradosPct`; trigo exige `trigoPhKgHl` (`trigoForcaGlutenW`, `trigoFallingNumberSeg`); outro `outroObservacoesLaudo` ate 60. Campos de 0 a 100 nos percentuais. Campo desconhecido: 422.
+
+Erros 422 trazem a chave do campo (ex `laudoTecnico.cafePeneira`, `racaPersonalizada`).
+
+### GET /api/vendedor/anuncios/{id}   (US014)
+
+So o dono (outro vendedor: 403; id inexistente: 404). Devolve os mesmos nomes do formulario para preencher a edicao.
+
+### PATCH /api/vendedor/anuncios/{id}   (US014)
+
+So o dono. Aceita so os campos alterados ou o formulario inteiro (o que veio do GET pode ser reenviado). Tudo e revalidado com as regras da criacao.
+* `categoria`, `especie` e `cultura` nao mudam (422). Corpo vazio: 422.
+* Trocar o subtipo de cafe (arabica x conilon) troca o produto automaticamente.
+* Anuncio `VENDIDO` nao edita (409). `ATIVO` e `PAUSADO` editam. Cada edicao soma 1 em `versao`.
+
+### Resposta do anuncio
+
+Campos do formulario (mesmos nomes) mais `id`, `vendedorId`, `produto {id, nome}`, `estadoComercial`, `versao`, `criadoEm`, `atualizadoEm`, `publicadoEm`, `midias` (`{id, tipo, ordem, capa}`, vazia ate a US012). Animais trazem `precoPorCabeca`; graos trazem `precoPorSaca` e `pesoTotalToneladas`, calculados.
+
+### Midias e estado (Elo)
+
+US012: `POST /api/vendedor/anuncios/{id}/midias` (usar `anuncio_do_dono`). US015: `POST /api/vendedor/anuncios/{id}/pausar` e `/reativar`.
+
+## 7. Resumo por historia
 
 * US001 (executar de ponta a ponta): `/health`, `/health/db`, CORS, formato de erro, rodar front e back juntos.
 * US002 (areas publicas): `GET /api/termos/vigente`, 404 padronizado, rotas publicas sem token.
@@ -247,8 +298,9 @@ Qualquer rota futura de venda usa a dependencia `exige_vendedor_habilitado`: res
 * US004 (cadastrar-se como vendedor): `POST` e `GET /api/vendedor/habilitacao`, `POST /api/arquivos`, estados da verificacao e da habilitacao.
 * US005 (autenticar e proteger): `login`, `logout`, `me`, dependencia `conta_autenticada`, limite de tentativas.
 * US008 (editar perfil): `GET` e `PATCH /api/perfil`, `PATCH /api/perfil/email`.
+* Sprint 2: US010 e US011 (`POST /api/vendedor/anuncios`, `GET /api/categorias`) e US014 (`GET` e `PATCH /api/vendedor/anuncios/{id}`).
 
-## 7. Decisoes em aberto
+## 8. Decisoes em aberto
 
 1. Registro devolve sessao ou manda para o login? (decidido: devolve)
 2. Upload de documentos PJ: dois passos, como proposto? Onde guardar os arquivos?
@@ -257,3 +309,5 @@ Qualquer rota futura de venda usa a dependencia `exige_vendedor_habilitado`: res
 5. Regra PJ de compra e venda (cliente).
 6. Alteracao de CPF e CNPJ: direta ou via `alteracao_cadastral`?
 7. Todo cadastro PJ ja nasce com habilitacao de vendedor PENDENTE. Confirmar com o cliente.
+8. Campos de cada lote (animais e graos/cafe), unidades e produtos iniciais (front e cliente).
+9. Anuncio nasce publicado, sem rascunho, nesta sprint. Confirmar com o cliente.

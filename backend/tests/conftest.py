@@ -81,3 +81,15 @@ def criar_pj(enviar_pj):
         return {"email": email, "senha": SENHA, "token": token,
                 "headers": _auth(token), "resposta": r.json()}
     return _criar
+
+
+@pytest.fixture()
+def criar_vendedor(client, criar_pf):
+    """Cria uma conta PF ja habilitada como vendedora. Devolve o mesmo dict do criar_pf mais "id"."""
+    def _criar(cpf="52998224725"):
+        pf = criar_pf()
+        r = client.post("/api/vendedor/habilitacao", headers=pf["headers"], json={"cpf": cpf})
+        assert r.status_code == 201, r.text
+        pf["id"] = client.get("/api/auth/me", headers=pf["headers"]).json()["conta"]["id"]
+        return pf
+    return _criar

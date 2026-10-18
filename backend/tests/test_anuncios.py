@@ -1,17 +1,10 @@
 """Anuncios do vendedor (US010: lote de animais), com banco real."""
 import pytest
 
-CPF = "52998224725"
-
 
 @pytest.fixture()
-def vendedor(client, criar_pf):
-    """Conta PF ja habilitada como vendedora."""
-    pf = criar_pf()
-    r = client.post("/api/vendedor/habilitacao", headers=pf["headers"], json={"cpf": CPF})
-    assert r.status_code == 201, r.text
-    pf["id"] = client.get("/api/auth/me", headers=pf["headers"]).json()["conta"]["id"]
-    return pf
+def vendedor(criar_vendedor):
+    return criar_vendedor()
 
 
 def _produto(client, nome):

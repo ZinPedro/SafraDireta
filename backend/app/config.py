@@ -1,6 +1,7 @@
 """Configuracoes da aplicacao, lidas do ambiente (.env)."""
 import os
 from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
 
 from dotenv import load_dotenv # carrega o .env aqui para as configuracoes do back
@@ -19,7 +20,9 @@ class Settings:
     sessao_horas: int
 
 
+@lru_cache(maxsize=1)
 def get_settings() -> Settings:
+    # Com o cache, o .env e lido uma unica vez, e nao a cada login ou cadastro.
     _carregar_env()
     origens = os.environ.get("CORS_ORIGINS", "http://localhost:5173")
     return Settings(

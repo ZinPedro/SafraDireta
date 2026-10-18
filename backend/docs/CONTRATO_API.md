@@ -1,6 +1,6 @@
 # Contrato da API SafraDireta, Sprint 1
 
-Versao: rascunho 0.3 (atualizada em 08/10/2026). Status: PROPOSTA para alinhar com Pedro (front) e Felipe (banco).
+Versao: rascunho 0.4 (atualizada em 18/10/2026). Status: PROPOSTA para alinhar com Pedro (front) e Felipe (banco).
 Itens marcados com [DECIDIR] dependem de resposta de alguem e podem mudar.
 Itens marcados com [IMPLEMENTADO] ja existem na branch `back`. Os itens de perfil, vendedor e cadastro PJ foram validados na mao (`/docs`); ainda faltam testes automaticos de integracao para eles.
 
@@ -36,9 +36,10 @@ Codigos usados:
 * 403 `PROIBIDO`: logado, mas sem permissao (ex: nao e vendedor habilitado) ou conta suspensa/encerrada.
 * 404 `NAO_ENCONTRADO`: recurso ou rota inexistente.
 * 405 `METODO_NAO_PERMITIDO`: a rota existe, mas nao aceita aquele metodo HTTP (a resposta traz o cabecalho `Allow`).
-* 409 `CONFLITO`: duplicado (email, CNPJ, CPF) ou transicao de estado invalida.
+* 409 `CONFLITO`: duplicado (email, CNPJ, CPF), inclusive quando duas requisicoes simultaneas disputam o mesmo valor, ou transicao de estado invalida.
 * 422 `DADOS_INVALIDOS`: validacao falhou.
-* 429 `MUITAS_TENTATIVAS`: limite de login excedido.
+* 429 `MUITAS_TENTATIVAS`: limite de login excedido, ou limite de senhas atuais erradas na troca de email.
+* 500 `ERRO_INTERNO`: falha inesperada do servidor. A resposta nunca traz detalhes tecnicos; eles ficam so no log.
 * 503: banco indisponivel (rotas `/health`, formato do FastAPI: `{"detail": "..."}`).
 * 503 `TERMO_INDISPONIVEL`: cadastro sem termo de uso vigente no banco.
 
@@ -197,13 +198,19 @@ Exige login. 200: `id`, `tipo`, `nome`, `email`, `telefone`, `estado` e a lista 
 * PJ: acrescenta `razaoSocial`, `nomeFantasia`, `cnpj` e a lista `representantes` (`id`, `nome`, `cpf`, `vinculo`, `inicioVigencia`, `fimVigencia`).
 
 ### PATCH /api/perfil
-Exige login. Corpo com `name` e/ou `phone` (so o que for enviado muda; nenhum pode ser `null`; corpo vazio da 422). Telefone no formato `+55DDDNUMERO`. O `contaId` vem sempre do token. Gera evento de auditoria.
-Resposta 200: `{ "message": "...", "conta": { "id", "tipo", "nome", "email" } }`.
+Exige login. Corpo com qualquer combinacao de `name`, `phone`, `cpf`, `avatarUrl`, `address` e `seller` (so o que for enviado muda; nenhum campo de topo pode ser `null`; corpo vazio da 422). Tambem aceita `account` com `nome`, `telefone`, `cpfCnpj` e `avatarUrl`. Telefone no formato `+55DDDNUMERO`. O `contaId` vem sempre do token. Gera evento de auditoria.
+* `avatarUrl`: so aceita link `http` ou `https` (maximo 500 caracteres). Outros formatos, como `javascript:` e `data:`, dao 422.
+* `address`: se a conta ja tem endereco principal, so os campos enviados mudam. Se ainda nao tem, e preciso enviar `cep`, `logradouro`, `numero`, `bairro`, `cidade` e `uf`; faltando algum, 422 com `campos` indicando quais, e nada e gravado.
+* `cpf`: so pode ser gravado se a conta ainda nao tiver CPF; depois disso, tentar trocar da 422 `DOCUMENTO_PROTEGIDO`.
+* Para PJ, `name` altera a razao social diretamente nesta versao. [DECIDIR] se passara por `alteracao_cadastral`.
+Resposta 200: o perfil atualizado, com `message` e `conta` (`id`, `tipo`, `nome`, `email`).
 
 ### PATCH /api/perfil/email
 Exige login. Corpo: `{ "novoEmail": "novo@exemplo.com", "senhaAtual": "..." }`.
 * 422 com `campos.senhaAtual` se a senha atual estiver errada (nao e 401, para o front nao deslogar o usuario); 409 se o email ja pertence a outra conta; 422 se o email for invalido.
 * Se o email enviado ja for o da conta, responde 200 sem alterar nada.
+* Depois de 5 senhas atuais erradas em 15 minutos, responde 429 `MUITAS_TENTATIVAS` ate a janela passar. Senha certa zera a contagem.
+* Ao trocar o email, todas as outras sessoes da conta sao revogadas; a sessao que fez a troca continua valida.
 Resposta 200: `{ "message": "Email atualizado com sucesso.", "email": "novo@exemplo.com" }`.
 Observacao: o contrato antigo previa a troca de email dentro do `PATCH /api/perfil`; ficou em rota separada. [DECIDIR] com Pedro.
 
@@ -219,11 +226,12 @@ Entrada:
 { "cpf": "52998224725", "possuiTransportadora": false, "observacaoTransportadora": null }
 ```
 `observacaoTransportadora` e opcional (maximo 500 caracteres). Tambem aceita os mesmos nomes em snake_case.
-Regras: valida CPF; 409 se o CPF cadastrado na conta for diferente, se o CPF pertencer a outra conta (`campos.cpf`) ou se ja existe habilitacao ativa; cria `habilitacao_vendedor` em PENDENTE e uma verificacao do tipo HABILITACAO_VENDEDOR em RASCUNHO.
-Resposta 201: `{ "message": "...", "estado": "PENDENTE", "protocol": "<uuid>" }`.
+Regras: valida CPF; 409 se o CPF cadastrado na conta for diferente, se o CPF pertencer a outra conta (`campos.cpf`) ou se ja existe habilitacao ativa; grava o CPF, cria a verificacao do tipo HABILITACAO_VENDEDOR e a `habilitacao_vendedor`.
+Decisao do grupo (18/10/2026): na Sprint 1 a habilitacao e imediata, sem analise de operador. A conta ja sai `HABILITADO`. A analise por operador fica para uma sprint futura.
+Resposta 201: `{ "ok": true, "message": "...", "estado": "HABILITADO", "status": "habilitado", "protocol": "<uuid>" }`.
 
 ### GET /api/vendedor/habilitacao
-Exige login. 200: `{ "possuiHabilitacao": true, "estado": "PENDENTE", "possuiTransportadora": false, "observacaoTransportadora": null }`. 404 `NAO_ENCONTRADO` se nunca solicitou.
+Exige login. 200: `{ "possuiHabilitacao": true, "estado": "HABILITADO", "possuiTransportadora": false, "observacaoTransportadora": null }`. 404 `NAO_ENCONTRADO` se nunca solicitou.
 
 ### POST /api/arquivos   (upload de documento) [DECIDIR]
 Exige login. `multipart/form-data` com os campos `verificacaoId`, `tipoDocumento` e `arquivo`. Aceita PDF, JPG e PNG ate 10 MB, valida tipo pelo conteudo e nao pelo nome. Resposta 201: `{ "id": "3b7e1d52-6a0c-4f9e-9d14-72c8a5e0b6f1", "nome": "contrato.pdf", "tamanho": 120394 }`. Define onde guardar (disco local ou storage) antes de implementar.

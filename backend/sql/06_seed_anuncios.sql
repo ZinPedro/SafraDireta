@@ -10,7 +10,9 @@ INSERT INTO safradireta.categoria (nome, grupo) VALUES
     ('Boi gordo', 'ANIMAIS'),
     ('Soja', 'GRAOS'),
     ('Milho', 'GRAOS'),
-    ('Cafe', 'CAFE')
+    ('Cafe', 'CAFE'),
+    ('Trigo', 'GRAOS'),
+    ('Outros graos', 'GRAOS')
 ON CONFLICT (nome) DO NOTHING;
 
 INSERT INTO safradireta.produto (categoria_id, nome)
@@ -20,7 +22,9 @@ FROM (VALUES
     ('Soja', 'Soja em grao'),
     ('Milho', 'Milho em grao'),
     ('Cafe', 'Cafe arabica'),
-    ('Cafe', 'Cafe conilon')
+    ('Cafe', 'Cafe conilon'),
+    ('Trigo', 'Trigo em grao'),
+    ('Outros graos', 'Outro grao')
 ) AS p(categoria, nome)
 JOIN safradireta.categoria c ON c.nome = p.categoria
 ON CONFLICT (categoria_id, nome) DO NOTHING;

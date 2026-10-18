@@ -92,6 +92,9 @@ _UNICIDADES = {
 }
 
 
+_TIPOS_DE_FORMULARIO = {"ANIMAL", "GRAOS"}
+
+
 def _nome_do_campo(caminho: list[str]) -> str:
     if len(caminho) == 2:
         if tuple(caminho) in _CAMPOS_PJ:
@@ -111,6 +114,8 @@ def registrar_handlers(app: FastAPI) -> None:
         campos = {}
         for erro in exc.errors():
             caminho = [str(p) for p in erro["loc"] if p not in ("body", "query", "path")]
+            if caminho and caminho[0] in _TIPOS_DE_FORMULARIO:  # etiqueta da uniao, nao e um campo
+                caminho = caminho[1:]
             campos[_nome_do_campo(caminho)] = _mensagem_pt(erro)
         return _resposta(422, "DADOS_INVALIDOS", "Dados inválidos.", campos)
 

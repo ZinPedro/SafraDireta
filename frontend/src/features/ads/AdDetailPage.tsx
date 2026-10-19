@@ -16,7 +16,7 @@ import {
   obterYoutubeEmbedUrl,
 } from "./ads.types";
 import type { MarketplaceAd } from "./ads.types";
-import { obterAnuncioPorId, obterPerfilProdutorPublico } from "./adsStorage";
+import { alternarStatusAnuncio, obterAnuncioPorId, obterPerfilProdutorPublico } from "./adsStorage";
 import type { PublicProducerProfile } from "./adsStorage";
 import "./ads.css";
 
@@ -33,6 +33,8 @@ export function AdDetailPage() {
   const [selectedMedia, setSelectedMedia] = useState<number | "video">(0);
   const [isLightboxOpen, setIsLightboxOpen] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState(0);
+  const [isReactivating, setIsReactivating] = useState(false);
+  const [activeToast, setActiveToast] = useState<string | null>(toastMessage || null);
 
   const fotos = anuncio?.fotos && anuncio.fotos.length > 0 ? anuncio.fotos : [anuncio?.imagemUrl || ""];
 
@@ -83,6 +85,21 @@ export function AdDetailPage() {
     };
   }, [id]);
 
+  async function handleReativarAnuncio() {
+    if (!anuncio || !session) return;
+    try {
+      setIsReactivating(true);
+      const atualizado = await alternarStatusAnuncio(anuncio.id, "ATIVO", session);
+      setAnuncio(atualizado);
+      setActiveToast("Anúncio reativado com sucesso! O lote já está visível novamente no Mercado.");
+    } catch (err) {
+      console.error("Erro ao reativar anúncio:", err);
+      alert("Não foi possível reativar o anúncio. Tente novamente.");
+    } finally {
+      setIsReactivating(false);
+    }
+  }
+
   if (isLoading) {
     return (
       <div className="ad-detail-page">
@@ -129,10 +146,55 @@ export function AdDetailPage() {
           <span aria-current="page">{anuncio.titulo}</span>
         </nav>
 
-        {toastMessage && (
+        {activeToast && (
           <div className="ad-alert ad-alert--success ad-alert--toast" role="status">
-            <Icon name="leaf" /> {toastMessage}
+            <Icon name="leaf" />
+            <span>{activeToast}</span>
+            <button
+              type="button"
+              className="ad-alert__close"
+              onClick={() => setActiveToast(null)}
+              aria-label="Fechar notificação"
+            >
+              <Icon name="close" />
+            </button>
           </div>
+        )}
+
+        {/* Banner de Aviso de Anúncio Pausado (US-015) */}
+        {anuncio.status === "PAUSADO" && (
+          isOwner ? (
+            <div className="ad-alert ad-alert--paused" role="status">
+              <div className="ad-alert__content">
+                <Icon name="pause" />
+                <div>
+                  <strong>Este anúncio está pausado</strong>
+                  <p>O lote está temporariamente oculto do catálogo do Mercado e da sua vitrine pública.</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                className="button button--primary button--small"
+                onClick={handleReativarAnuncio}
+                disabled={isReactivating}
+              >
+                <Icon name="play" /> {isReactivating ? "Reativando..." : "Reativar Anúncio Agora"}
+              </button>
+            </div>
+          ) : (
+            <div className="ad-alert ad-alert--paused" role="status">
+              <div className="ad-alert__content">
+                <Icon name="pause" />
+                <div>
+                  <strong>Lote Temporariamente Indisponível</strong>
+                  <p>Este lote está temporariamente indisponível ou em fase de negociação pelo produtor.</p>
+                </div>
+              </div>
+              <Link to={routes.market} className="button button--outline button--small">
+                Ver Mercado
+              </Link>
+            </div>
+          )
         )}
 
         {/* Layout Principal da Ficha Técnica */}
@@ -580,11 +642,21 @@ export function AdDetailPage() {
               {isOwner ? (
                 <div className="ad-owner-box">
                   <div className="ad-owner-badge">
-                    <Icon name="user" /> Seu anúncio publicado
+                    <Icon name="user" /> {anuncio.status === "PAUSADO" ? "Seu anúncio (Pausado)" : "Seu anúncio publicado"}
                   </div>
+                  {anuncio.status === "PAUSADO" && (
+                    <button
+                      type="button"
+                      className="button button--primary button--full"
+                      onClick={handleReativarAnuncio}
+                      disabled={isReactivating}
+                    >
+                      <Icon name="play" /> {isReactivating ? "Reativando..." : "Reativar Anúncio Agora"}
+                    </button>
+                  )}
                   <Link
                     to={`/anuncios/${anuncio.id}/editar`}
-                    className="button button--primary button--full ad-owner-edit-btn"
+                    className={`button ${anuncio.status === "PAUSADO" ? "button--outline" : "button--primary"} button--full ad-owner-edit-btn`}
                   >
                     <Icon name="edit" /> Editar Informações do Lote
                   </Link>
@@ -595,6 +667,17 @@ export function AdDetailPage() {
                   >
                     Gerenciar em Meus Anúncios
                   </button>
+                </div>
+              ) : anuncio.status === "PAUSADO" ? (
+                <div className="ad-buyer-paused-box">
+                  <div className="ad-buyer-paused-icon" aria-hidden="true">
+                    <Icon name="pause" />
+                  </div>
+                  <h3>Lote Temporariamente Indisponível</h3>
+                  <p>Este lote está temporariamente indisponível ou em fase de negociação pelo produtor.</p>
+                  <Link to={routes.market} className="button button--primary button--full">
+                    Explorar outros lotes no Mercado
+                  </Link>
                 </div>
               ) : (
                 <div className="ad-buyer-actions">

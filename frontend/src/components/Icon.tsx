@@ -16,6 +16,7 @@ type IconName =
   | "chevron"
   | "camera"
   | "play"
+  | "pause"
   | "trash"
   | "video"
   | "star"
@@ -44,6 +45,8 @@ const paths: Record<IconName, string> = {
   camera:
     "M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z M12 17a4 4 0 1 0 0-8 4 4 0 0 0 0 8z",
   play: "M5 3l14 9-14 9V3z",
+  pause:
+    "M6 5a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V5zm8 0a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1h-2a1 1 0 0 1-1-1V5z",
   trash:
     "M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2",
   video:

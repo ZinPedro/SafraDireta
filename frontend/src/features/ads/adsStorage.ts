@@ -260,6 +260,38 @@ export async function listarMeusAnuncios(vendedorId: string): Promise<Marketplac
   await new Promise((resolve) => setTimeout(resolve, 80));
   const anuncios = carregarDoStorage();
   const hidratados = anuncios
+    .filter((a) => a.vendedorId === vendedorId && (a.status === "ATIVO" || a.status === "PAUSADO"))
+    .map((a) => hidratarAnuncioComPerfil(a))
+    .sort((a, b) => new Date(b.criadoEm).getTime() - new Date(a.criadoEm).getTime());
+
+  const resultado = await Promise.all(
+    hidratados.map(async (anuncio) => {
+      try {
+        const midias = await obterMidiasDoIndexedDB(anuncio.id);
+        if (midias) {
+          const fotos = midias.fotos && midias.fotos.length > 0 ? midias.fotos : anuncio.fotos;
+          const imagemCapa = (fotos && fotos[0]) || anuncio.imagemUrl;
+          return {
+            ...anuncio,
+            fotos,
+            imagemUrl: imagemCapa,
+            video: midias.video || anuncio.video,
+          };
+        }
+      } catch {
+        /* fallback seguro */
+      }
+      return anuncio;
+    })
+  );
+
+  return resultado;
+}
+
+export async function listarAnunciosPublicosProdutor(vendedorId: string): Promise<MarketplaceAd[]> {
+  await new Promise((resolve) => setTimeout(resolve, 80));
+  const anuncios = carregarDoStorage();
+  const hidratados = anuncios
     .filter((a) => a.vendedorId === vendedorId && a.status === "ATIVO")
     .map((a) => hidratarAnuncioComPerfil(a))
     .sort((a, b) => new Date(b.criadoEm).getTime() - new Date(a.criadoEm).getTime());
@@ -812,3 +844,53 @@ export async function atualizarAnuncio(
     return hidratarAnuncioComPerfil(anuncioAtualizado);
   }
 }
+
+export async function alternarStatusAnuncio(
+  id: string,
+  novoStatus: "ATIVO" | "PAUSADO",
+  session: Session
+): Promise<MarketplaceAd> {
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  const anuncios = carregarDoStorage();
+  const index = anuncios.findIndex((a) => a.id === id);
+  if (index === -1) {
+    throw new Error("Anúncio não localizado no sistema.");
+  }
+
+  const existente = anuncios[index];
+  if (existente.vendedorId !== session.conta.id) {
+    throw new Error("Acesso não autorizado para alterar o status deste anúncio.");
+  }
+
+  const agora = new Date().toISOString();
+  const anuncioAtualizado: MarketplaceAd = {
+    ...existente,
+    status: novoStatus,
+    atualizadoEm: agora,
+  };
+
+  anuncios[index] = anuncioAtualizado;
+  const salvou = salvarNoStorage(anuncios);
+  if (!salvou) {
+    throw new Error("Não foi possível atualizar o status do anúncio no armazenamento local.");
+  }
+
+  const hidratado = hidratarAnuncioComPerfil(anuncioAtualizado);
+  try {
+    const midias = await obterMidiasDoIndexedDB(id);
+    if (midias) {
+      if (midias.fotos && midias.fotos.length > 0) {
+        hidratado.fotos = midias.fotos;
+        hidratado.imagemUrl = midias.fotos[0];
+      }
+      if (midias.video) {
+        hidratado.video = midias.video;
+      }
+    }
+  } catch {
+    /* fallback seguro */
+  }
+
+  return hidratado;
+}
+

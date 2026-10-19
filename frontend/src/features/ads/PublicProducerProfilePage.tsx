@@ -7,7 +7,7 @@ import farmImage from "../../assets/images/farm-landscape.jpeg";
 import { formatPhone, phoneDigits } from "../profile/profile";
 import { GRAIN_PACKAGING_LABELS, obterFotoCapa, obterTagsAnuncio } from "./ads.types";
 import type { MarketplaceAd } from "./ads.types";
-import { listarMeusAnuncios, obterPerfilProdutorPublico } from "./adsStorage";
+import { listarAnunciosPublicosProdutor, obterPerfilProdutorPublico } from "./adsStorage";
 import type { PublicProducerProfile } from "./adsStorage";
 import "./ads.css";
 
@@ -22,7 +22,7 @@ export function PublicProducerProfilePage() {
     if (!id) return;
     let isMounted = true;
 
-    Promise.all([obterPerfilProdutorPublico(id), listarMeusAnuncios(id)])
+    Promise.all([obterPerfilProdutorPublico(id), listarAnunciosPublicosProdutor(id)])
       .then(([perfilRes, anunciosRes]) => {
         if (!isMounted) return;
         setProfile(perfilRes);

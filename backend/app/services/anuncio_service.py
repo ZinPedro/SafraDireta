@@ -275,3 +275,77 @@ def editar_anuncio(conn: Connection, anuncio: dict, corpo: dict) -> dict:
             (*colunas.values(), anuncio["id"]),
         )
     return obter_anuncio(conn, anuncio["id"])
+
+
+def alterar_estado_anuncio(
+    conn: Connection,
+    anuncio: dict,
+    atual: dict,
+    estado_atual: str,
+    novo_estado: str,
+    acao: str,
+) -> dict:
+    """Altera o estado do anúncio e registra a auditoria."""
+
+    with conn.transaction():
+        resultado = conn.execute(
+            """
+            UPDATE safradireta.anuncio
+            SET estado_comercial = %s,
+                versao = versao + 1,
+                atualizado_em = now()
+            WHERE id = %s
+              AND estado_comercial = %s
+            """,
+            (novo_estado, anuncio["id"], estado_atual),
+        )
+
+        if resultado.rowcount != 1:
+            raise conflito(
+                f"Não é possível alterar este anúncio para {novo_estado}."
+            )
+
+        conn.execute(
+            """
+            INSERT INTO safradireta.evento_auditoria
+                (conta_ator_id, sessao_id, origem,
+                 acao, entidade, entidade_id, resumo)
+            VALUES (%s, %s, 'API', %s, 'anuncio', %s, %s)
+            """,
+            (
+                atual["conta_id"],
+                atual["sessao_id"],
+                acao,
+                anuncio["id"],
+                Jsonb({
+                    "estadoAnterior": estado_atual,
+                    "estadoNovo": novo_estado,
+                }),
+            ),
+        )
+
+    return obter_anuncio(conn, anuncio["id"])
+
+
+def pausar_anuncio(
+    conn: Connection,
+    anuncio: dict,
+    atual: dict,
+) -> dict:
+    """Pausa um anúncio ATIVO."""
+    return alterar_estado_anuncio(
+        conn, anuncio, atual,
+        "ATIVO", "PAUSADO", "ANUNCIO_PAUSADO",
+    )
+
+
+def reativar_anuncio(
+    conn: Connection,
+    anuncio: dict,
+    atual: dict,
+) -> dict:
+    """Reativa um anúncio PAUSADO."""
+    return alterar_estado_anuncio(
+        conn, anuncio, atual,
+        "PAUSADO", "ATIVO", "ANUNCIO_REATIVADO",
+    )

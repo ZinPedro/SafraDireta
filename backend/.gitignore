@@ -26,3 +26,6 @@ htmlcov/
 # Banco local temporário
 *.sqlite3
 *.db
+
+# Arquivos enviados pelos usuarios
+/uploads/

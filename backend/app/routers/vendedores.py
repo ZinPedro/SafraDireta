@@ -1,18 +1,15 @@
-
 """Rotas relacionadas a vendedores."""
 
 from fastapi import APIRouter, Depends
 from psycopg import Connection
+from psycopg.types.json import Jsonb
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic.alias_generators import to_camel
 
 from app.database import get_connection
 from app.deps import conta_autenticada
-from pydantic import BaseModel, ConfigDict, Field
-from pydantic.alias_generators import to_camel
-from app.errors import conflito, proibido
-from pydantic import field_validator
-from app.validators import normalizar_cpf, validar_cpf
-from psycopg.types.json import Jsonb
-from app.errors import conflito, proibido, nao_encontrado
+from app.errors import conflito, nao_encontrado, proibido
+from app.validators import normalizar_cpf, normalizar_uf, validar_cpf, validar_uf
 
 router = APIRouter(
     prefix="/api/vendedor",

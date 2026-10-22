@@ -97,7 +97,9 @@ def atualizar_perfil(
 )
 def atualizar_email(
     dados: AlterarEmail,
+    request: Request,
     atual: dict = Depends(conta_autenticada),
     conn: Connection = Depends(get_connection),
 ):
-    return auth_service.alterar_email(conn, atual, dados)
+    ip = request.client.host if request.client else "desconhecido"
+    return auth_service.alterar_email(conn, atual, dados, ip)

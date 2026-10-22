@@ -1,14 +1,14 @@
 from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI, HTTPException
-from fastapi.middleware.cors import CORSMiddleware  # novo
+from fastapi.middleware.cors import CORSMiddleware
 from psycopg import Error
 from psycopg_pool import ConnectionPool, PoolTimeout
 
-from app.config import get_settings  # novo
+from app.config import get_settings
 from app.database import create_pool, get_pool
-from app.errors import registrar_handlers  # novo
-from app.routers import auth, termos, vendedores
+from app.errors import registrar_handlers
+from app.routers import anuncios, auth, catalogo, categorias, termos, vendedores
 
 
 @asynccontextmanager
@@ -24,9 +24,9 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="SafraDireta - base da Sprint 1",
-    description="Conexao PostgreSQL pronta. Fluxos de cadastro, login e vendedor serao implementados pela equipe.",
-    version="0.1.0",
+    title="SafraDireta API",
+    description="API do marketplace SafraDireta: cadastro PF e PJ, autenticacao, perfil e habilitacao de vendedor.",
+    version="0.2.0",
     lifespan=lifespan,
 )
 
@@ -39,9 +39,12 @@ app.add_middleware(
     allow_headers=["Authorization", "Content-Type"],
 )
 registrar_handlers(app)
-app.include_router(auth.router)  # novo
-app.include_router(termos.router)  # novo
+app.include_router(auth.router)
+app.include_router(termos.router)
 app.include_router(vendedores.router)
+app.include_router(categorias.router)
+app.include_router(anuncios.router)
+app.include_router(catalogo.router)
 app.include_router(auth.perfil_router)
 
 

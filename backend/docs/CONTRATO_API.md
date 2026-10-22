@@ -1,6 +1,6 @@
 # Contrato da API SafraDireta, Sprints 1 e 2
 
-Versao: rascunho 0.6 (atualizada em 18/10/2026). Status: PROPOSTA para alinhar com Pedro (front) e Felipe (banco).
+Versao: rascunho 0.7 (atualizada em 18/10/2026). Status: PROPOSTA para alinhar com Pedro (front) e Felipe (banco).
 Itens marcados com [DECIDIR] dependem de resposta de alguem e podem mudar.
 Itens marcados com [IMPLEMENTADO] ja existem na branch `back`. Os itens de perfil, vendedor e cadastro PJ foram validados na mao (`/docs`); ainda faltam testes automaticos de integracao para eles.
 
@@ -239,7 +239,7 @@ Exige login. `multipart/form-data` com os campos `verificacaoId`, `tipoDocumento
 ### Guarda para funcoes de vendedor
 Qualquer rota futura de venda usa a dependencia `exige_vendedor_habilitado`: responde 403 `PROIBIDO` se a conta nao tiver `habilitacao_vendedor.estado = HABILITADO` com decisao APROVADA do tipo habilitacao.
 
-## 6. Anuncios   (Sprint 2: US010, US011 e US014)   [IMPLEMENTADO]
+## 6. Anuncios   (Sprint 2: US010, US011, US012, US014, US015, US018 e US019)   [IMPLEMENTADO]
 
 Formato do formulario do front (Pedro). O front nao manda ids: o backend escolhe o produto pelo tipo.
 Rotas do vendedor ficam em `/api/vendedor/anuncios` e exigem vendedor habilitado (sem token: 401; sem habilitacao: 403).
@@ -286,9 +286,26 @@ So o dono. Aceita so os campos alterados ou o formulario inteiro (o que veio do 
 
 Campos do formulario (mesmos nomes) mais `id`, `vendedorId`, `produto {id, nome}`, `estadoComercial`, `versao`, `criadoEm`, `atualizadoEm`, `publicadoEm`, `midias` (`{id, tipo, ordem, capa}`, vazia ate a US012). Animais trazem `precoPorCabeca`; graos trazem `precoPorSaca` e `pesoTotalToneladas`, calculados.
 
-### Midias e estado (Elo)
+### Fotos e video (US012, Elo)   [IMPLEMENTADO]
 
-US012: `POST /api/vendedor/anuncios/{id}/midias` (usar `anuncio_do_dono`). US015: `POST /api/vendedor/anuncios/{id}/pausar` e `/reativar`.
+`POST /api/vendedor/anuncios/{id}/midias`, multipart, campo `arquivo`. So o dono. Ate 6 fotos (10 MB, jpeg, png, webp) e 1 video (30 MB, mp4, quicktime, webm). A primeira foto vira a capa. O video precisa do `ffprobe` (FFmpeg) instalado no servidor. Excesso de midias: 409. Arquivo invalido: 422.
+
+### Pausar e reativar (US015, Elo)   [IMPLEMENTADO]
+
+`POST /api/vendedor/anuncios/{id}/pausar` (ATIVO para PAUSADO) e `/reativar` (PAUSADO para ATIVO). So o dono. Estado errado: 409. Cada mudanca soma 1 em `versao` e grava auditoria.
+
+### Catalogo publico (US018)   [IMPLEMENTADO]
+
+`GET /api/anuncios`, sem login. So anuncios ATIVOS. Parametros opcionais: `categoria` (ANIMAL ou GRAOS), `cultura`, `uf`, `precoMin`, `precoMax`, `busca` (no titulo), `ordem` (recentes, menor_preco, maior_preco), `pagina` (1 em diante) e `tamanho` (1 a 50, padrao 12).
+Resposta: `{itens, pagina, tamanho, total}`. Cada item: `id`, `titulo`, `categoria`, `produto`, `cidade`, `uf`, `precoTotal`, `pricingMode`, `publicadoEm`, `capa` (`{id, url}` ou `null`) e, por tipo, `quantidadeCabecas` e `precoPorCabeca` (animais) ou `cultura`, `quantidadeSacas` e `precoPorSaca` (graos).
+
+### Detalhe publico (US019)   [IMPLEMENTADO]
+
+`GET /api/anuncios/{id}`, sem login. Mesmos campos do anuncio do vendedor, sem `vendedorId`, mais `vendedor {nome}` e `url` em cada midia. Anuncio pausado, vendido ou inexistente: 404.
+
+### Arquivo da midia   [IMPLEMENTADO]
+
+`GET /api/midias/{id}`, sem login. Devolve a foto ou o video (com o tipo correto) so se o anuncio estiver ATIVO. O front usa a `url` que vem na capa e nas midias.
 
 ## 7. Resumo por historia
 
@@ -298,7 +315,7 @@ US012: `POST /api/vendedor/anuncios/{id}/midias` (usar `anuncio_do_dono`). US015
 * US004 (cadastrar-se como vendedor): `POST` e `GET /api/vendedor/habilitacao`, `POST /api/arquivos`, estados da verificacao e da habilitacao.
 * US005 (autenticar e proteger): `login`, `logout`, `me`, dependencia `conta_autenticada`, limite de tentativas.
 * US008 (editar perfil): `GET` e `PATCH /api/perfil`, `PATCH /api/perfil/email`.
-* Sprint 2: US010 e US011 (`POST /api/vendedor/anuncios`, `GET /api/categorias`) e US014 (`GET` e `PATCH /api/vendedor/anuncios/{id}`).
+* Sprint 2: US010 e US011 (`POST /api/vendedor/anuncios`, `GET /api/categorias`), US012 (`/midias`), US014 (`GET` e `PATCH /api/vendedor/anuncios/{id}`), US015 (`/pausar` e `/reativar`), US018 (`GET /api/anuncios`) e US019 (`GET /api/anuncios/{id}`).
 
 ## 8. Decisoes em aberto
 

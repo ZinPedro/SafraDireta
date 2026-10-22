@@ -1,4 +1,4 @@
-"""Roteiro automatico da Sprint 2 (US010, US011 e US014, formato do front) contra a API rodando.
+"""Roteiro automatico da Sprint 2 (US010, US011, US012, US014, US015, US018 e US019) contra a API rodando.
 
 Uso (com a API ligada em outro terminal: uvicorn app.main:app --reload):
     python scripts/teste_manual_sprint2.py
@@ -8,10 +8,13 @@ Cria contas e anuncios novos a cada rodada (email e CPF unicos). Usa so a biblio
 """
 import json
 import random
+import struct
 import sys
 import time
 import urllib.error
 import urllib.request
+import uuid
+import zlib
 
 BASE = (sys.argv[1] if len(sys.argv) > 1 else "http://127.0.0.1:8000").rstrip("/")
 SEM_ID = "00000000-0000-0000-0000-000000000000"
@@ -33,6 +36,39 @@ def chamar(metodo, caminho, corpo=None, token=None):
             return e.code, json.loads(texto)
         except ValueError:
             return e.code, {"texto": texto.decode(errors="replace")}
+
+
+def png_minimo():
+    """PNG 8x8 valido, gerado na hora (sem arquivo e sem biblioteca extra)."""
+    def bloco(tipo, dados):
+        return struct.pack(">I", len(dados)) + tipo + dados + struct.pack(">I", zlib.crc32(tipo + dados))
+    linhas = b"".join(b"\x00" + b"\x20\xa0\x40" * 8 for _ in range(8))
+    return (b"\x89PNG\r\n\x1a\n" + bloco(b"IHDR", struct.pack(">IIBBBBB", 8, 8, 8, 2, 0, 0, 0))
+            + bloco(b"IDAT", zlib.compress(linhas)) + bloco(b"IEND", b""))
+
+
+def enviar_arquivo(caminho, token, nome, conteudo, mime):
+    """POST multipart com o campo 'arquivo' (como o front faz no upload)."""
+    limite = uuid.uuid4().hex
+    corpo = (f"--{limite}\r\nContent-Disposition: form-data; name=\"arquivo\"; filename=\"{nome}\"\r\n"
+             f"Content-Type: {mime}\r\n\r\n").encode() + conteudo + f"\r\n--{limite}--\r\n".encode()
+    req = urllib.request.Request(BASE + caminho, data=corpo, method="POST")
+    req.add_header("Content-Type", f"multipart/form-data; boundary={limite}")
+    req.add_header("Authorization", f"Bearer {token}")
+    try:
+        with urllib.request.urlopen(req) as r:
+            return r.status, json.loads(r.read())
+    except urllib.error.HTTPError as e:
+        return e.code, json.loads(e.read() or "null")
+
+
+def baixar(caminho):
+    """GET que devolve (status, tipo do conteudo, bytes), para arquivos."""
+    try:
+        with urllib.request.urlopen(BASE + caminho) as r:
+            return r.status, r.headers.get("Content-Type"), r.read()
+    except urllib.error.HTTPError as e:
+        return e.code, None, b""
 
 
 def conferir(nome, condicao, detalhe=""):
@@ -202,6 +238,89 @@ s, _ = chamar("GET", url)
 conferir("sem token: 401", s == 401, s)
 s, _ = chamar("GET", f"{URL}/{SEM_ID}", token=tok_a)
 conferir("anuncio inexistente: 404", s == 404, s)
+
+# ---------------------------------------------------------------- US012
+secao("US012: fotos do anuncio")
+s, a = chamar("POST", URL, {**boi, "titulo": "Lote com fotos"}, tok_a)
+id_m, png = a["id"], png_minimo()
+s, m1 = enviar_arquivo(f"{URL}/{id_m}/midias", tok_a, "foto1.png", png, "image/png")
+conferir("envia a primeira foto (201)", s == 201 and m1.get("tipo") == "FOTO", f"{s} {m1}")
+conferir("primeira foto vira a capa, ordem 0", m1.get("capa") is True and m1.get("ordem") == 0, m1)
+s, m2 = enviar_arquivo(f"{URL}/{id_m}/midias", tok_a, "foto2.png", png, "image/png")
+conferir("segunda foto: ordem 1 e sem capa", s == 201 and m2.get("ordem") == 1 and m2.get("capa") is False, f"{s} {m2}")
+s, a = chamar("GET", f"{URL}/{id_m}", token=tok_a)
+conferir("o anuncio lista as 2 fotos", len(a.get("midias", [])) == 2, a.get("midias"))
+s, _ = enviar_arquivo(f"{URL}/{id_m}/midias", tok_b, "x.png", png, "image/png")
+conferir("outro vendedor enviando: 403", s == 403, s)
+s, _ = enviar_arquivo(f"{URL}/{id_m}/midias", tok_a, "x.txt", b"isto nao e uma imagem", "text/plain")
+conferir("arquivo que nao e foto nem video: 422", s == 422, s)
+s, _ = enviar_arquivo(f"{URL}/{id_m}/midias", tok_a, "x.png", b"", "image/png")
+conferir("arquivo vazio: 422", s == 422, s)
+for n in range(3, 7):
+    enviar_arquivo(f"{URL}/{id_m}/midias", tok_a, f"foto{n}.png", png, "image/png")
+s, _ = enviar_arquivo(f"{URL}/{id_m}/midias", tok_a, "foto7.png", png, "image/png")
+conferir("7a foto (limite e 6): 409", s == 409, s)
+
+# ---------------------------------------------------------------- US015
+secao("US015: pausar e reativar")
+s, a = chamar("POST", f"{URL}/{id_m}/pausar", token=tok_a)
+conferir("dono pausa o anuncio", s == 200 and a.get("estadoComercial") == "PAUSADO", f"{s} {a}")
+versao_pausado = a.get("versao")
+s, _ = chamar("POST", f"{URL}/{id_m}/pausar", token=tok_a)
+conferir("pausar de novo: 409", s == 409, s)
+s, _ = chamar("POST", f"{URL}/{id_m}/reativar", token=tok_b)
+conferir("outro vendedor reativando: 403", s == 403, s)
+s, _ = chamar("POST", f"{URL}/{id_m}/reativar")
+conferir("sem token: 401", s == 401, s)
+s, a = chamar("POST", f"{URL}/{id_m}/reativar", token=tok_a)
+conferir("dono reativa o anuncio", s == 200 and a.get("estadoComercial") == "ATIVO", f"{s} {a}")
+conferir("a versao sobe a cada mudanca de estado", a.get("versao") == versao_pausado + 1, a.get("versao"))
+s, _ = chamar("POST", f"{URL}/{id_m}/reativar", token=tok_a)
+conferir("reativar anuncio ativo: 409", s == 409, s)
+s, _ = chamar("POST", f"{URL}/{SEM_ID}/pausar", token=tok_a)
+conferir("anuncio inexistente: 404", s == 404, s)
+
+# ---------------------------------------------------------------- US018
+secao("US018: catalogo publico (sem login)")
+s, c = chamar("GET", "/api/anuncios?tamanho=50")
+conferir("catalogo abre sem token (200)", s == 200 and {"itens", "pagina", "tamanho", "total"} <= set(c), f"{s} {c}")
+item = next((i for i in c.get("itens", []) if i["id"] == id_m), None)
+conferir("o anuncio novo aparece com preco e local", item and item["precoTotal"] == 150000 and item["uf"] == "SP", item)
+conferir("traz a capa com o endereco da foto", item and item["capa"] and item["capa"]["url"].startswith("/api/midias/"), item)
+s, c = chamar("GET", "/api/anuncios?categoria=GRAOS&tamanho=50")
+conferir("filtro categoria=GRAOS so traz graos", s == 200 and c["itens"] and all(i["categoria"] == "GRAOS" for i in c["itens"]), c)
+s, c = chamar("GET", "/api/anuncios?cultura=CAFE&tamanho=50")
+conferir("filtro cultura=CAFE so traz cafe", s == 200 and c["itens"] and all(i["cultura"] == "CAFE" for i in c["itens"]), c)
+s, c = chamar("GET", "/api/anuncios?uf=SP&precoMin=1&precoMax=999999999&ordem=menor_preco&tamanho=50")
+precos = [i["precoTotal"] for i in c.get("itens", [])]
+conferir("filtros de UF e preco, ordenado do mais barato", s == 200 and precos == sorted(precos) and precos, precos[:5])
+s, c = chamar("GET", "/api/anuncios?tamanho=2&pagina=1")
+conferir("paginacao: 2 itens por pagina", s == 200 and len(c["itens"]) == 2 and c["total"] >= 2, c)
+s, _ = chamar("GET", "/api/anuncios?categoria=PEIXE")
+conferir("filtro invalido: 422", s == 422, s)
+s, _ = chamar("POST", f"{URL}/{id_m}/pausar", token=tok_a)
+s, c = chamar("GET", "/api/anuncios?tamanho=50")
+conferir("anuncio pausado some do catalogo", all(i["id"] != id_m for i in c["itens"]), "ainda aparece")
+
+# ---------------------------------------------------------------- US019
+secao("US019: detalhe publico do anuncio")
+s, _ = chamar("POST", f"{URL}/{id_m}/reativar", token=tok_a)
+s, d = chamar("GET", f"/api/anuncios/{id_m}")
+conferir("detalhe abre sem token (200)", s == 200 and d.get("id") == id_m, f"{s} {d}")
+conferir("mostra o nome do vendedor", bool((d.get("vendedor") or {}).get("nome")), d.get("vendedor"))
+conferir("nao mostra o id do vendedor", "vendedorId" not in d and id_a not in json.dumps(d), "vazou")
+conferir("traz as 6 fotos com endereco", len(d.get("midias", [])) == 6 and all(m.get("url") for m in d["midias"]), d.get("midias"))
+s, tipo, conteudo = baixar(d["midias"][0]["url"])
+conferir("a foto pode ser baixada (image/png)", s == 200 and tipo == "image/png" and conteudo == png, f"{s} {tipo}")
+s, d = chamar("GET", f"/api/anuncios/{id_soja}")
+conferir("detalhe de graos traz preco por saca", s == 200 and d.get("precoPorSaca") is not None, d)
+s, _ = chamar("GET", f"/api/anuncios/{SEM_ID}")
+conferir("anuncio inexistente: 404", s == 404, s)
+s, _ = chamar("POST", f"{URL}/{id_m}/pausar", token=tok_a)
+s, _ = chamar("GET", f"/api/anuncios/{id_m}")
+conferir("anuncio pausado: 404", s == 404, s)
+s, _, _ = baixar(f"/api/midias/{SEM_ID}")
+conferir("midia inexistente: 404", s == 404, s)
 
 total, ok = len(resultados), sum(resultados)
 print(f"\nResultado: {ok} de {total} conferencias OK")

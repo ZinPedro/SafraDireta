@@ -2,6 +2,7 @@ import { clearSession, getSession, updateSession } from "../../context/session";
 import { MOCK_API } from "../../dev/mockApi";
 import { isValidCpf, ufs } from "../corporate-registration/corporateRegistration";
 import { sincronizarProdutorNosAnuncios } from "../ads/adsStorage";
+import { registrarProdutorParaGovernanca } from "../admin/adminStorage";
 
 export { formatCpf, formatFileSize, validateFile, ufs, ACCEPTED_FILE_TYPES } from "../corporate-registration/corporateRegistration";
 
@@ -47,7 +48,8 @@ export const defaultUpgradeToSeller: UpgradeToSeller = async (data: SellerUpgrad
       const stored = raw ? (JSON.parse(raw) as Record<string, unknown>) : {};
       const account = (stored.account && typeof stored.account === "object" ? stored.account : {}) as Record<string, unknown>;
       const existingCpf = typeof account.cpfCnpj === "string" ? account.cpfCnpj.trim() : "";
-      stored.account = { ...account, nome: session.conta.nome, cpfCnpj: existingCpf || data.cpf };
+      const docFinal = existingCpf || data.cpf;
+      stored.account = { ...account, nome: session.conta.nome, email: session.conta.email, cpfCnpj: docFinal };
       stored.seller = {
         isHabilitado: true,
         farmName: data.farmName,
@@ -58,11 +60,59 @@ export const defaultUpgradeToSeller: UpgradeToSeller = async (data: SellerUpgrad
         categories: data.categories,
         hasOwnTransport: data.hasOwnTransport,
       };
+      const agoraIso = new Date().toISOString();
+      const docStatus = {
+        rgFrente: data.documents.cpfFrontFileName
+          ? {
+              nome: data.documents.cpfFrontFileName,
+              status: "EM_REANALISE" as const,
+              atualizadoEm: agoraIso,
+              tamanhoFormatado: "Arquivo digital",
+            }
+          : undefined,
+        rgVerso: data.documents.cpfBackFileName
+          ? {
+              nome: data.documents.cpfBackFileName,
+              status: "EM_REANALISE" as const,
+              atualizadoEm: agoraIso,
+              tamanhoFormatado: "Arquivo digital",
+            }
+          : undefined,
+        car: data.documents.carFileName
+          ? {
+              nome: data.documents.carFileName,
+              status: "EM_REANALISE" as const,
+              atualizadoEm: agoraIso,
+              tamanhoFormatado: "Arquivo digital",
+            }
+          : undefined,
+      };
+
+      stored.documents = {
+        hasCpfDocument: data.documents.hasCpfDocument,
+        cpfFrontFileName: data.documents.cpfFrontFileName,
+        cpfBackFileName: data.documents.cpfBackFileName,
+        hasCarDocument: data.documents.hasCarDocument,
+        carFileName: data.documents.carFileName,
+      };
       localStorage.setItem(key, JSON.stringify(stored));
       sincronizarProdutorNosAnuncios(session.conta.id, {
         farmName: data.farmName,
         vendedorNome: session.conta.nome,
         avatarUrl: session.avatarUrl,
+      });
+      registrarProdutorParaGovernanca({
+        id: session.conta.id,
+        nome: session.conta.nome,
+        farmName: data.farmName,
+        documento: docFinal,
+        tipoDocumento: session.conta.tipo === "PJ" ? "CNPJ" : "CPF",
+        email: session.conta.email,
+        cidade: data.city,
+        uf: data.state,
+        dataEntrada: agoraIso,
+        estado: "HABILITADO",
+        documentosStatus: docStatus,
       });
     } catch {
       /* no-op */
@@ -97,6 +147,46 @@ async function requestSellerHabilitation(data: SellerUpgradeData): Promise<Selle
       if (body.estado === "HABILITADO") {
         updateSession({ vendedorEstado: "HABILITADO" });
       }
+      const agoraIso = new Date().toISOString();
+      const docStatus = {
+        rgFrente: data.documents.cpfFrontFileName
+          ? {
+              nome: data.documents.cpfFrontFileName,
+              status: "EM_REANALISE" as const,
+              atualizadoEm: agoraIso,
+              tamanhoFormatado: "Arquivo digital",
+            }
+          : undefined,
+        rgVerso: data.documents.cpfBackFileName
+          ? {
+              nome: data.documents.cpfBackFileName,
+              status: "EM_REANALISE" as const,
+              atualizadoEm: agoraIso,
+              tamanhoFormatado: "Arquivo digital",
+            }
+          : undefined,
+        car: data.documents.carFileName
+          ? {
+              nome: data.documents.carFileName,
+              status: "EM_REANALISE" as const,
+              atualizadoEm: agoraIso,
+              tamanhoFormatado: "Arquivo digital",
+            }
+          : undefined,
+      };
+      registrarProdutorParaGovernanca({
+        id: session.conta.id,
+        nome: session.conta.nome,
+        farmName: data.farmName,
+        documento: data.cpf,
+        tipoDocumento: session.conta.tipo === "PJ" ? "CNPJ" : "CPF",
+        email: session.conta.email,
+        cidade: data.city,
+        uf: data.state,
+        dataEntrada: agoraIso,
+        estado: "HABILITADO",
+        documentosStatus: docStatus,
+      });
       return {
         ok: true,
         status: body.estado === "HABILITADO" ? "habilitado" : "pendente",

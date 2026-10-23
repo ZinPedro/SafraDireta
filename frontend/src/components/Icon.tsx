@@ -23,7 +23,12 @@ type IconName =
   | "upload"
   | "youtube"
   | "edit"
-  | "search";
+  | "search"
+  | "shield"
+  | "check"
+  | "alert"
+  | "ban"
+  | "file";
 
 const paths: Record<IconName, string> = {
   back: "M19 12H5m6-6-6 6 6 6",
@@ -59,6 +64,16 @@ const paths: Record<IconName, string> = {
   edit: "M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z",
   search:
     "m21 21-4.35-4.35M19 11a8 8 0 1 1-16 0 8 8 0 0 1 16 0z",
+  shield:
+    "M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z",
+  check:
+    "M20 6 9 17l-5-5",
+  alert:
+    "M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0zM12 9v4M12 17h.01",
+  ban:
+    "M18.36 5.64a9 9 0 1 1-12.73 0 9 9 0 0 1 12.73 0zM5.64 5.64l12.72 12.72",
+  file:
+    "M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M16 13H8M16 17H8M10 9H8",
 };
 
 export function Icon({

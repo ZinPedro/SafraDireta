@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/authContext";
 import { routes } from "../../data/site";
 import type { OpenDevelopmentDialog } from "../../data/site";
 import { AccessRestricted } from "../../components/AccessRestricted";
 import { Icon } from "../../components/Icon";
+import { SellerBlockedView } from "../admin/SellerBlockedView";
+import { obterStatusGovernancaProdutor } from "../admin/adminStorage";
 import { GRAIN_PACKAGING_LABELS, obterFotoCapa, obterTagsAnuncio } from "./ads.types";
 import type { MarketplaceAd } from "./ads.types";
 import { alternarStatusAnuncio, listarMeusAnuncios } from "./adsStorage";
@@ -17,15 +19,26 @@ interface MyAdsPageProps {
 export function MyAdsPage({ onOpenDialog }: MyAdsPageProps) {
   const { session } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [anuncios, setAnuncios] = useState<MarketplaceAd[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [filtroStatus, setFiltroStatus] = useState<"TODOS" | "ATIVO" | "PAUSADO">("TODOS");
   const [adToPause, setAdToPause] = useState<MarketplaceAd | null>(null);
   const [isTogglingStatus, setIsTogglingStatus] = useState(false);
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [toastMessage, setToastMessage] = useState<string | null>(() => {
+    const state = location.state as { toastMessage?: string } | null;
+    return state?.toastMessage || null;
+  });
+
+  const govStatus = session ? obterStatusGovernancaProdutor(session.conta.id) : null;
+  const isBlockedSeller =
+    session?.vendedorEstado === "SUSPENSO" ||
+    session?.vendedorEstado === "BANIDO" ||
+    govStatus?.estado === "SUSPENSO" ||
+    govStatus?.estado === "BANIDO";
 
   useEffect(() => {
-    if (!session || session.vendedorEstado !== "HABILITADO") return;
+    if (!session || session.vendedorEstado !== "HABILITADO" || isBlockedSeller) return;
 
     let isMounted = true;
     listarMeusAnuncios(session.conta.id)
@@ -39,7 +52,7 @@ export function MyAdsPage({ onOpenDialog }: MyAdsPageProps) {
     return () => {
       isMounted = false;
     };
-  }, [session]);
+  }, [session, isBlockedSeller]);
 
   // Efeito para fechar o modal com tecla ESC
   useEffect(() => {
@@ -92,6 +105,20 @@ export function MyAdsPage({ onOpenDialog }: MyAdsPageProps) {
     }
   }
 
+  if (session && isBlockedSeller) {
+    const estadoBloqueio =
+      session.vendedorEstado === "BANIDO" || govStatus?.estado === "BANIDO"
+        ? "BANIDO"
+        : "SUSPENSO";
+    return (
+      <SellerBlockedView
+        produtorId={session.conta.id}
+        estadoSessao={estadoBloqueio}
+        nomeProdutor={session.conta.nome}
+      />
+    );
+  }
+
   if (!session || session.vendedorEstado !== "HABILITADO") {
     return (
       <AccessRestricted
@@ -105,11 +132,11 @@ export function MyAdsPage({ onOpenDialog }: MyAdsPageProps) {
 
   const total = anuncios.length;
   const totalAtivos = anuncios.filter((a) => a.status === "ATIVO").length;
-  const totalPausados = anuncios.filter((a) => a.status === "PAUSADO").length;
+  const totalPausados = anuncios.filter((a) => a.status !== "ATIVO").length;
 
   const anunciosFiltrados = anuncios.filter((anuncio) => {
     if (filtroStatus === "ATIVO") return anuncio.status === "ATIVO";
-    if (filtroStatus === "PAUSADO") return anuncio.status === "PAUSADO";
+    if (filtroStatus === "PAUSADO") return anuncio.status !== "ATIVO";
     return true;
   });
 
@@ -224,12 +251,16 @@ export function MyAdsPage({ onOpenDialog }: MyAdsPageProps) {
           <div className="my-ads-grid">
             {anunciosFiltrados.map((anuncio) => {
               const [tag1, tag2] = obterTagsAnuncio(anuncio);
-              const isPaused = anuncio.status === "PAUSADO";
+              const isPausedVoluntary = anuncio.status === "PAUSADO";
+              const isPausedModeration = anuncio.status === "PAUSADO_MODERACAO";
+              const isInReview = anuncio.status === "EM_REVISAO";
+              const isBlockedModeration = anuncio.status === "BLOQUEADO_MODERACAO";
+              const isInactive = anuncio.status !== "ATIVO";
 
               return (
                 <article
                   key={anuncio.id}
-                  className={`my-ad-card ${isPaused ? "my-ad-card--paused" : ""}`}
+                  className={`my-ad-card ${isInactive ? "my-ad-card--paused" : ""}`}
                   onClick={() => navigate(`/anuncios/${anuncio.id}`)}
                   tabIndex={0}
                   role="button"
@@ -253,30 +284,86 @@ export function MyAdsPage({ onOpenDialog }: MyAdsPageProps) {
                       </span>
                     </div>
 
-                    {/* Coluna vertical de status e vídeo (Topo Direito) */}
-                    <div className="my-ad-card__top-badges">
-                      {isPaused ? (
-                        <span className="my-ad-card__status-badge my-ad-card__status-badge--paused">
-                          <Icon name="pause" /> Pausado
-                        </span>
-                      ) : (
-                        <span className="my-ad-card__status-badge my-ad-card__status-badge--active">
-                          <span className="status-dot"></span> Ativo
-                        </span>
-                      )}
+                    {/* Selo de Vídeo (Topo Direito) */}
+                    {anuncio.video?.url && (
+                      <span className="market-card__video-badge" title="Contém vídeo demonstrativo">
+                        <Icon name="play" /> Vídeo
+                      </span>
+                    )}
 
-                      {anuncio.video?.url && (
-                        <span className="market-card__video-badge" title="Contém vídeo demonstrativo">
-                          <Icon name="play" /> Vídeo
-                        </span>
-                      )}
-                    </div>
+                    {/* Status do Anúncio (Canto Inferior Direito) */}
+                    {isPausedModeration ? (
+                      <span className="my-ad-card__status-badge my-ad-card__status-badge--moderation">
+                        <Icon name="pause" /> Pausado pela Moderação
+                      </span>
+                    ) : isInReview ? (
+                      <span className="my-ad-card__status-badge my-ad-card__status-badge--review">
+                        <Icon name="clock" /> Em Revisão
+                      </span>
+                    ) : isBlockedModeration ? (
+                      <span className="my-ad-card__status-badge my-ad-card__status-badge--blocked">
+                        <Icon name="ban" /> Bloqueado
+                      </span>
+                    ) : isPausedVoluntary ? (
+                      <span className="my-ad-card__status-badge my-ad-card__status-badge--paused">
+                        <Icon name="pause" /> Pausado
+                      </span>
+                    ) : (
+                      <span className="my-ad-card__status-badge my-ad-card__status-badge--active">
+                        <span className="status-dot"></span> Ativo
+                      </span>
+                    )}
                   </div>
                   <div className="my-ad-card__content">
                     <div className="my-ad-card__category-tag">
                       {tag1} · {tag2}
                     </div>
                     <h3 className="my-ad-card__title">{anuncio.titulo}</h3>
+
+                    {/* Banner Contextual de Moderação / Revisão */}
+                    {isPausedModeration && (
+                      <div
+                        className="admin-ad-row__reason"
+                        style={{ marginBottom: "0.75rem" }}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <strong>⏸ Pausado pela Moderação:</strong>{" "}
+                        {anuncio.motivoModeracao ||
+                          "Ajuste as informações técnicas do lote para solicitar nova liberação."}
+                      </div>
+                    )}
+
+                    {isInReview && (
+                      <div
+                        className="admin-ad-row__reason"
+                        style={{
+                          marginBottom: "0.75rem",
+                          background: "#eff6ff",
+                          borderLeftColor: "#2563eb",
+                          color: "#1e40af",
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <strong>⏳ Em Revisão pela Governança:</strong> Suas correções foram salvas e
+                        aguardam liberação administrativa para retornar ao Mercado.
+                      </div>
+                    )}
+
+                    {isBlockedModeration && (
+                      <div
+                        className="admin-ad-row__reason"
+                        style={{
+                          marginBottom: "0.75rem",
+                          background: "#fef2f2",
+                          borderLeftColor: "#dc2626",
+                          color: "#991b1b",
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <strong>🚫 Lote Bloqueado pela Moderação:</strong>{" "}
+                        {anuncio.motivoModeracao || "Anúncio retido por violação das diretrizes."}
+                      </div>
+                    )}
 
                     {anuncio.categoria === "GRAOS" ? (
                       <div className="my-ad-card__metrics">
@@ -340,6 +427,7 @@ export function MyAdsPage({ onOpenDialog }: MyAdsPageProps) {
                       <button
                         type="button"
                         className="button button--outline button--small my-ad-card__btn-edit"
+                        disabled={isBlockedModeration}
                         onClick={(e) => {
                           e.stopPropagation();
                           navigate(`/anuncios/${anuncio.id}/editar`);
@@ -348,8 +436,18 @@ export function MyAdsPage({ onOpenDialog }: MyAdsPageProps) {
                         <Icon name="edit" /> Editar
                       </button>
 
-                      {/* Ação de Pausar / Reativar (US-015) */}
-                      {isPaused ? (
+                      {/* Ação de Pausar / Reativar (US-015 + Governança) */}
+                      {isPausedModeration || isInReview || isBlockedModeration ? (
+                        <button
+                          type="button"
+                          className="button button--primary button--small my-ad-card__btn-resume"
+                          onClick={(e) => e.stopPropagation()}
+                          disabled
+                          title="Anúncios sob moderação não podem ser reativados diretamente pelo vendedor. Edite o lote para enviar para revisão."
+                        >
+                          <Icon name="play" /> Reativar
+                        </button>
+                      ) : isPausedVoluntary ? (
                         <button
                           type="button"
                           className="button button--primary button--small my-ad-card__btn-resume"

@@ -13,7 +13,13 @@ export type PricingMode = "TOTAL" | "PER_HEAD";
 
 export type GrainPricingMode = "TOTAL" | "PER_SACK";
 
-export type AdStatus = "ATIVO" | "PAUSADO" | "VENDIDO";
+export type AdStatus =
+  | "ATIVO"
+  | "PAUSADO"
+  | "PAUSADO_MODERACAO"
+  | "EM_REVISAO"
+  | "BLOQUEADO_MODERACAO"
+  | "VENDIDO";
 
 export type GrainCrop = "CAFE" | "SOJA" | "MILHO" | "TRIGO" | "OUTRO";
 
@@ -55,6 +61,8 @@ export interface AnimalLotAd {
   criadoEm: string;
   atualizadoEm?: string;
   status: AdStatus;
+  motivoModeracao?: string;
+  moderadoEm?: string;
   seloVerificado?: boolean;
 }
 
@@ -122,6 +130,8 @@ export interface GrainLotAd {
   criadoEm: string;
   atualizadoEm?: string;
   status: AdStatus;
+  motivoModeracao?: string;
+  moderadoEm?: string;
   seloVerificado?: boolean;
 }
 

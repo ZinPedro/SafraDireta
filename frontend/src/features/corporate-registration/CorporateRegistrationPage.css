@@ -55,6 +55,22 @@
   color: var(--color-text-secondary);
   font-size: var(--font-size-sm);
 }
+.corporate__field-label {
+  display: block;
+  font-weight: 500;
+  color: var(--color-text-primary);
+  margin-bottom: var(--space-1);
+}
+.corporate__upload-trigger {
+  margin-top: var(--space-2);
+}
+.corporate__upload-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  cursor: pointer;
+  user-select: none;
+}
 .corporate__dropzone input[type="file"] {
   width: 100%;
   min-width: 0;

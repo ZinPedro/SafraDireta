@@ -931,39 +931,27 @@
   object-fit: cover;
 }
 
-.my-ad-card__top-badges {
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 6px;
-  z-index: 2;
-  pointer-events: none;
-}
-
-.my-ad-card__top-badges .my-ad-card__status-badge,
-.my-ad-card__top-badges .market-card__video-badge {
-  position: static;
-  top: auto;
-  right: auto;
-}
-
 .my-ad-card__status-badge {
   position: absolute;
-  top: 12px;
+  bottom: 12px;
   right: 12px;
+  top: auto;
+  max-width: calc(100% - 24px);
   padding: 4px 10px;
   border-radius: 20px;
-  font-size: 0.75rem;
+  font-size: 0.72rem;
   font-weight: 700;
   letter-spacing: 0.03em;
   text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+  z-index: 2;
+  pointer-events: none;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.22);
 }
 
 .my-ad-card__status-badge--active {
@@ -1201,7 +1189,7 @@
   position: absolute;
   top: 12px;
   left: 12px;
-  right: 12px;
+  max-width: calc(100% - 96px);
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
@@ -1210,7 +1198,7 @@
 }
 
 .my-ad-card__thumb .market-card__tags {
-  max-width: calc(100% - 140px);
+  max-width: calc(100% - 96px);
 }
 
 .market-card__tag {
@@ -1374,9 +1362,12 @@
   position: absolute;
   top: 16px;
   left: 16px;
+  max-width: calc(100% - 130px);
   display: flex;
   gap: 0.5rem;
   flex-wrap: wrap;
+  z-index: 2;
+  pointer-events: none;
 }
 
 .ad-badge {
@@ -3040,9 +3031,40 @@
   gap: 4px;
 }
 
-.my-ad-card__status-badge--paused .icon {
+.my-ad-card__status-badge--moderation {
+  background: #fff7ed;
+  color: #c2410c;
+  border: 1px solid #fdba74;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.my-ad-card__status-badge--review {
+  background: #eff6ff;
+  color: #1d4ed8;
+  border: 1px solid #bfdbfe;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.my-ad-card__status-badge--blocked {
+  background: #fef2f2;
+  color: #b91c1c;
+  border: 1px solid #fecaca;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.my-ad-card__status-badge--paused .icon,
+.my-ad-card__status-badge--moderation .icon,
+.my-ad-card__status-badge--review .icon,
+.my-ad-card__status-badge--blocked .icon {
   width: 12px;
   height: 12px;
+  flex-shrink: 0;
 }
 
 /* Botões de Ação de Pausar e Reativar */

@@ -18,7 +18,9 @@ import { MyAdsPage } from "./features/ads/MyAdsPage";
 import { AdDetailPage } from "./features/ads/AdDetailPage";
 import { AdEditPage } from "./features/ads/AdEditPage";
 import { PublicProducerProfilePage } from "./features/ads/PublicProducerProfilePage";
-import { routes } from "./data/site";
+import { AdminBar } from "./features/admin/AdminBar";
+import { AdminDashboardPage } from "./features/admin/AdminDashboardPage";
+import { ADMIN_SECRET_SLUG, routes } from "./data/site";
 import type { DevelopmentFeature } from "./data/site";
 import "./App.css";
 
@@ -33,6 +35,7 @@ const pageTitles: Record<string, string> = {
   [routes.createAd]: "Cadastrar Lote de Animais | SafraDireta",
   [routes.producers]: "Produtores | SafraDireta",
   [routes.guide]: "Guia do usuário | SafraDireta",
+  [ADMIN_SECRET_SLUG]: "Portal de Governança e Moderação | SafraDireta",
 };
 
 function Site() {
@@ -44,7 +47,8 @@ function Site() {
   const isRegistrationPage =
     location.pathname === routes.registration ||
     location.pathname === routes.corporateRegistration ||
-    location.pathname === routes.sellerUpgrade;
+    location.pathname === routes.sellerUpgrade ||
+    location.pathname === ADMIN_SECRET_SLUG;
 
   function openFeature(feature: DevelopmentFeature) {
     if (feature === "registration" || feature === "sellerRegistration") {
@@ -81,9 +85,11 @@ function Site() {
       <a className="skip-link" href="#main-content">
         Pular para o conteúdo
       </a>
+      <AdminBar />
       {!isRegistrationPage && <Header key={location.pathname} onOpenDialog={openFeature} />}
       <main id="main-content" ref={mainRef} tabIndex={-1}>
         <Routes>
+          <Route path={ADMIN_SECRET_SLUG} element={<AdminDashboardPage />} />
           <Route path={routes.registration} element={<RegistrationPage onOpenDialog={openFeature} />} />
           <Route path={routes.sellerUpgrade} element={<SellerUpgradePage />} />
           <Route path={routes.profile} element={<ProfilePage onOpenDialog={openFeature} />} />

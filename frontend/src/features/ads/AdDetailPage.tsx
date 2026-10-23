@@ -1,10 +1,12 @@
-import { useEffect, useState } from "react";
+import { type FormEvent, useEffect, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "../../context/authContext";
-import { routes } from "../../data/site";
+import { ADMIN_SECRET_SLUG, routes } from "../../data/site";
 import { Icon } from "../../components/Icon";
 import { Avatar } from "../../components/Avatar";
 import farmImage from "../../assets/images/farm-landscape.jpeg";
+import { liberarAnuncioModeracao, pausarAnuncioModeracao } from "../admin/adminStorage";
+import "../admin/admin.css";
 import { formatPhone, phoneDigits } from "../profile/profile";
 import {
   COFFEE_SCREEN_LABELS,
@@ -35,6 +37,8 @@ export function AdDetailPage() {
   const [lightboxIndex, setLightboxIndex] = useState(0);
   const [isReactivating, setIsReactivating] = useState(false);
   const [activeToast, setActiveToast] = useState<string | null>(toastMessage || null);
+  const [showAdminPauseModal, setShowAdminPauseModal] = useState(false);
+  const [adminPauseReason, setAdminPauseReason] = useState("");
 
   const fotos = anuncio?.fotos && anuncio.fotos.length > 0 ? anuncio.fotos : [anuncio?.imagemUrl || ""];
 
@@ -100,6 +104,25 @@ export function AdDetailPage() {
     }
   }
 
+  function handleAdminConfirmPause(e: FormEvent) {
+    e.preventDefault();
+    if (!anuncio || adminPauseReason.trim().length < 10) return;
+    const lista = pausarAnuncioModeracao(anuncio.id, adminPauseReason);
+    const atualizado = lista.find((a) => a.id === anuncio.id) || null;
+    if (atualizado) setAnuncio(atualizado);
+    setShowAdminPauseModal(false);
+    setAdminPauseReason("");
+    setActiveToast("Lote pausado preventivamente por Moderação Administrativa.");
+  }
+
+  function handleAdminReleaseAd() {
+    if (!anuncio) return;
+    const lista = liberarAnuncioModeracao(anuncio.id);
+    const atualizado = lista.find((a) => a.id === anuncio.id) || null;
+    if (atualizado) setAnuncio(atualizado);
+    setActiveToast("Lote liberado pela Moderação e republicado no Mercado!");
+  }
+
   if (isLoading) {
     return (
       <div className="ad-detail-page">
@@ -129,7 +152,8 @@ export function AdDetailPage() {
     );
   }
 
-  const isOwner = session && session.conta.id === anuncio.vendedorId;
+  const isOwner = Boolean(session && session.conta.id === anuncio.vendedorId);
+  const isAdmin = session?.conta.tipo === "ADMIN";
   const [tag1, tag2] = obterTagsAnuncio(anuncio);
 
   const hasVideo = Boolean(anuncio.video?.url);
@@ -161,7 +185,60 @@ export function AdDetailPage() {
           </div>
         )}
 
-        {/* Banner de Aviso de Anúncio Pausado (US-015) */}
+        {/* Banner de Aviso de Anúncio Pausado / Moderado (US-015 + Governança) */}
+        {anuncio.status === "BLOQUEADO_MODERACAO" && (
+          <div className="ad-alert ad-alert--error" role="alert">
+            <div className="ad-alert__content">
+              <Icon name="ban" />
+              <div>
+                <strong>🚫 Anúncio Bloqueado em Definitivo pela Governança</strong>
+                <p>
+                  {anuncio.motivoModeracao ||
+                    "Este lote foi removido em definitivo do catálogo público por violação aos Termos de Uso e preservado apenas para fins de auditoria."}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {anuncio.status === "PAUSADO_MODERACAO" && (
+          <div className="ad-alert ad-alert--paused" role="status">
+            <div className="ad-alert__content">
+              <Icon name="alert" />
+              <div>
+                <strong>⏸ Lote Pausado pela Moderação Administrativa</strong>
+                <p>
+                  {anuncio.motivoModeracao ||
+                    "Este anúncio foi pausado preventivamente para adequação cadastral."}
+                </p>
+              </div>
+            </div>
+            {isOwner && (
+              <Link
+                to={`/anuncios/${anuncio.id}/editar`}
+                className="button button--primary button--small"
+              >
+                <Icon name="edit" /> Corrigir e Enviar para Revisão
+              </Link>
+            )}
+          </div>
+        )}
+
+        {anuncio.status === "EM_REVISAO" && (
+          <div className="ad-alert ad-alert--paused" role="status">
+            <div className="ad-alert__content">
+              <Icon name="clock" />
+              <div>
+                <strong>⏳ Anúncio Corrigido — Aguardando Liberação da Moderação</strong>
+                <p>
+                  As alterações realizadas pelo produtor foram registradas e aguardam conferência da
+                  Governança para retornar ao Mercado.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
         {anuncio.status === "PAUSADO" && (
           isOwner ? (
             <div className="ad-alert ad-alert--paused" role="status">
@@ -257,25 +334,17 @@ export function AdDetailPage() {
                       <Icon name="search" />
                       <span>Ampliar</span>
                     </button>
+
+                    <div className="ad-detail-banner__overlay">
+                      <span className="ad-badge ad-badge--category">{tag1}</span>
+                      <span className="ad-badge ad-badge--category">{tag2}</span>
+                    </div>
+
+                    <div className="ad-gallery-stage__counter">
+                      <Icon name="camera" /> {(typeof selectedMedia === "number" ? selectedMedia : 0) + 1} / {fotos.length}
+                    </div>
                   </>
                 )}
-
-                <div className="ad-detail-banner__overlay">
-                  <span className="ad-badge ad-badge--category">{tag1}</span>
-                  <span className="ad-badge ad-badge--category">{tag2}</span>
-                </div>
-
-                <div className="ad-gallery-stage__counter">
-                  {selectedMedia === "video" ? (
-                    <>
-                      <Icon name="play" /> Vídeo do Lote
-                    </>
-                  ) : (
-                    <>
-                      <Icon name="camera" /> {(typeof selectedMedia === "number" ? selectedMedia : 0) + 1} / {fotos.length}
-                    </>
-                  )}
-                </div>
               </div>
 
               {/* Faixa de Miniaturas (se houver mais de 1 foto ou houver vídeo) */}
@@ -642,7 +711,16 @@ export function AdDetailPage() {
               {isOwner ? (
                 <div className="ad-owner-box">
                   <div className="ad-owner-badge">
-                    <Icon name="user" /> {anuncio.status === "PAUSADO" ? "Seu anúncio (Pausado)" : "Seu anúncio publicado"}
+                    <Icon name="user" />{" "}
+                    {anuncio.status === "PAUSADO"
+                      ? "Seu anúncio (Pausado)"
+                      : anuncio.status === "PAUSADO_MODERACAO"
+                      ? "Seu anúncio (Pausado pela Moderação)"
+                      : anuncio.status === "EM_REVISAO"
+                      ? "Seu anúncio (Em Revisão)"
+                      : anuncio.status === "BLOQUEADO_MODERACAO"
+                      ? "Seu anúncio (Bloqueado)"
+                      : "Seu anúncio publicado"}
                   </div>
                   {anuncio.status === "PAUSADO" && (
                     <button
@@ -654,12 +732,14 @@ export function AdDetailPage() {
                       <Icon name="play" /> {isReactivating ? "Reativando..." : "Reativar Anúncio Agora"}
                     </button>
                   )}
-                  <Link
-                    to={`/anuncios/${anuncio.id}/editar`}
-                    className={`button ${anuncio.status === "PAUSADO" ? "button--outline" : "button--primary"} button--full ad-owner-edit-btn`}
-                  >
-                    <Icon name="edit" /> Editar Informações do Lote
-                  </Link>
+                  {anuncio.status !== "BLOQUEADO_MODERACAO" && (
+                    <Link
+                      to={`/anuncios/${anuncio.id}/editar`}
+                      className={`button ${anuncio.status === "PAUSADO" ? "button--outline" : "button--primary"} button--full ad-owner-edit-btn`}
+                    >
+                      <Icon name="edit" /> Editar Informações do Lote
+                    </Link>
+                  )}
                   <button
                     type="button"
                     className="button button--outline button--full"
@@ -668,13 +748,13 @@ export function AdDetailPage() {
                     Gerenciar em Meus Anúncios
                   </button>
                 </div>
-              ) : anuncio.status === "PAUSADO" ? (
+              ) : anuncio.status !== "ATIVO" ? (
                 <div className="ad-buyer-paused-box">
                   <div className="ad-buyer-paused-icon" aria-hidden="true">
                     <Icon name="pause" />
                   </div>
                   <h3>Lote Temporariamente Indisponível</h3>
-                  <p>Este lote está temporariamente indisponível ou em fase de negociação pelo produtor.</p>
+                  <p>Este lote está temporariamente indisponível ou em fase de negociação/revisão.</p>
                   <Link to={routes.market} className="button button--primary button--full">
                     Explorar outros lotes no Mercado
                   </Link>
@@ -705,6 +785,62 @@ export function AdDetailPage() {
                   <Link to={routes.market} className="button button--outline button--full">
                     Voltar ao Mercado
                   </Link>
+                </div>
+              )}
+
+              {/* Painel de Auditoria Administrativa (Exclusivo para Sessão ADMIN) */}
+              {isAdmin && (
+                <div className="ad-admin-audit-panel" role="region" aria-label="Painel de Auditoria do Lote">
+                  <div className="ad-admin-audit-panel__header">
+                    <span>🛡️</span>
+                    <span>Auditoria Interna — Governança</span>
+                  </div>
+                  <ul className="ad-admin-audit-panel__meta">
+                    <li>
+                      <strong>ID do Lote:</strong> <code>{anuncio.id}</code>
+                    </li>
+                    <li>
+                      <strong>ID do Vendedor:</strong> <code>{anuncio.vendedorId}</code>
+                    </li>
+                    <li>
+                      <strong>Timestamp de Criação:</strong>{" "}
+                      <code>{new Date(anuncio.criadoEm).toLocaleString("pt-BR")}</code>
+                    </li>
+                    <li>
+                      <strong>Status Interno:</strong> <code>{anuncio.status}</code>
+                    </li>
+                  </ul>
+                  <div className="ad-admin-audit-panel__actions">
+                    {anuncio.status !== "PAUSADO_MODERACAO" && (
+                      <button
+                        type="button"
+                        className="button button--outline button--small button--full"
+                        onClick={() => {
+                          setAdminPauseReason(anuncio.motivoModeracao || "");
+                          setShowAdminPauseModal(true);
+                        }}
+                      >
+                        ⏸ Pausar este Lote por Moderação
+                      </button>
+                    )}
+                    {(anuncio.status === "PAUSADO_MODERACAO" ||
+                      anuncio.status === "EM_REVISAO" ||
+                      anuncio.status === "BLOQUEADO_MODERACAO") && (
+                      <button
+                        type="button"
+                        className="button button--primary button--small button--full"
+                        onClick={handleAdminReleaseAd}
+                      >
+                        ✅ Liberar Anúncio para o Mercado
+                      </button>
+                    )}
+                    <Link
+                      to={ADMIN_SECRET_SLUG}
+                      className="button button--ghost button--small button--full"
+                    >
+                      Ir ao Painel de Gestão ↗
+                    </Link>
+                  </div>
                 </div>
               )}
             </div>
@@ -758,6 +894,57 @@ export function AdDetailPage() {
           </aside>
         </div>
       </div>
+
+      {/* Modal de Pausa por Moderação Administrativa */}
+      {showAdminPauseModal && (
+        <div
+          className="modal-backdrop"
+          role="dialog"
+          aria-modal="true"
+          onClick={() => setShowAdminPauseModal(false)}
+        >
+          <form
+            className="modal-card admin-modal-card"
+            onSubmit={handleAdminConfirmPause}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="modal-card__header">
+              <h3>⏸ Pausar Lote por Moderação Administrativa</h3>
+            </div>
+            <p className="modal-card__body">
+              O anúncio <strong>{anuncio.titulo}</strong> deixará de aparecer no Mercado público e o
+              vendedor receberá a justificativa abaixo para corrigir o lote.
+            </p>
+            <div className="field">
+              <label htmlFor="audit-pause-reason">Justificativa da Moderação (Obrigatória)</label>
+              <textarea
+                id="audit-pause-reason"
+                rows={4}
+                value={adminPauseReason}
+                onChange={(e) => setAdminPauseReason(e.target.value)}
+                placeholder="Informe o ajuste técnico ou documental necessário..."
+                required
+              />
+            </div>
+            <div className="modal-card__actions">
+              <button
+                type="button"
+                className="button button--ghost"
+                onClick={() => setShowAdminPauseModal(false)}
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                className="button button--primary"
+                disabled={adminPauseReason.trim().length < 10}
+              >
+                Confirmar Pausa Moderada
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
 
       {/* Visualizador Ampliado de Imagem / Lightbox (US-012) */}
       {isLightboxOpen && (

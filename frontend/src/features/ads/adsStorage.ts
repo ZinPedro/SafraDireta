@@ -260,7 +260,7 @@ export async function listarMeusAnuncios(vendedorId: string): Promise<Marketplac
   await new Promise((resolve) => setTimeout(resolve, 80));
   const anuncios = carregarDoStorage();
   const hidratados = anuncios
-    .filter((a) => a.vendedorId === vendedorId && (a.status === "ATIVO" || a.status === "PAUSADO"))
+    .filter((a) => a.vendedorId === vendedorId && a.status !== "VENDIDO")
     .map((a) => hidratarAnuncioComPerfil(a))
     .sort((a, b) => new Date(b.criadoEm).getTime() - new Date(a.criadoEm).getTime());
 
@@ -691,6 +691,8 @@ export async function atualizarAnuncio(
   }
 
   const agora = new Date().toISOString();
+  const proximoStatus =
+    existente.status === "PAUSADO_MODERACAO" ? "EM_REVISAO" : existente.status;
 
   if (existente.categoria === "ANIMAL") {
     const inputAnimal = input as Partial<CreateAnimalAdInput>;
@@ -757,6 +759,7 @@ export async function atualizarAnuncio(
       fotos,
       video,
       imagemUrl: imagemCapa,
+      status: proximoStatus,
       atualizadoEm: agora,
     };
 
@@ -832,6 +835,7 @@ export async function atualizarAnuncio(
       fotos,
       video,
       imagemUrl: imagemCapa,
+      status: proximoStatus,
       atualizadoEm: agora,
     };
 
@@ -858,8 +862,19 @@ export async function alternarStatusAnuncio(
   }
 
   const existente = anuncios[index];
-  if (existente.vendedorId !== session.conta.id) {
+  if (existente.vendedorId !== session.conta.id && session.conta.tipo !== "ADMIN") {
     throw new Error("Acesso não autorizado para alterar o status deste anúncio.");
+  }
+
+  if (
+    session.conta.tipo !== "ADMIN" &&
+    (existente.status === "PAUSADO_MODERACAO" ||
+      existente.status === "EM_REVISAO" ||
+      existente.status === "BLOQUEADO_MODERACAO")
+  ) {
+    throw new Error(
+      "Este lote está sob moderação administrativa e não pode ser reativado diretamente."
+    );
   }
 
   const agora = new Date().toISOString();
@@ -892,5 +907,13 @@ export async function alternarStatusAnuncio(
   }
 
   return hidratado;
+}
+
+export function obterTodosAnunciosRaw(): MarketplaceAd[] {
+  return carregarDoStorage().map((a) => hidratarAnuncioComPerfil(a));
+}
+
+export function salvarTodosAnunciosRaw(anuncios: MarketplaceAd[]): boolean {
+  return salvarNoStorage(anuncios);
 }
 

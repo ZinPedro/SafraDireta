@@ -14,15 +14,17 @@ import {
 import type {
   CorporateFormValues, CorporateRegisterResult, FieldErrors, RegisterCorporateAccount,
 } from "./corporateRegistration";
+import { salvarDocumentosPJNoIndexedDB } from "./corporateDocsStorage";
 import "../registration/RegistrationPage.css";
 import "./CorporateRegistrationPage.css";
 
 type FileMeta = { name: string; size: number };
-type DocKind = "company" | "repFront" | "repBack";
+type DocKind = "company" | "cnpjDoc" | "repFront" | "repBack";
 type TextField = keyof CorporateFormValues;
 
 const docKinds: { kind: DocKind; errorKey: string; label: string; hint: string; single?: boolean }[] = [
-  { kind: "company", errorKey: "companyDoc", label: "Documento de constituição da empresa", hint: "Contrato Social consolidado, CCMEI ou Estatuto Social." },
+  { kind: "company", errorKey: "companyDoc", label: "Documento de constituição da empresa", hint: "Contrato Social consolidado, CCMEI ou Estatuto Social.", single: true },
+  { kind: "cnpjDoc", errorKey: "cnpjDoc", label: "Cartão CNPJ", hint: "Comprovante de Inscrição e de Situação Cadastral emitido pela Receita Federal.", single: true },
   { kind: "repFront", errorKey: "repFrontDoc", label: "Documento do representante — frente", hint: "Foto da frente do RG, CNH ou documento profissional com foto.", single: true },
   { kind: "repBack", errorKey: "repBackDoc", label: "Documento do representante — verso", hint: "Foto do verso do mesmo documento.", single: true },
 ];
@@ -48,8 +50,14 @@ export function CorporateRegistrationPage({ onOpenDialog, onRegister = registerC
   const [values, setValues] = useState<CorporateFormValues>(initialCorporateValues);
   const [errors, setErrors] = useState<FieldErrors>({});
   const [stepIndex, setStepIndex] = useState(0);
-  const [files, setFiles] = useState<Record<DocKind, FileMeta[]>>({ company: [], repFront: [], repBack: [] });
-  const [fileMessages, setFileMessages] = useState<Record<DocKind, string>>({ company: "", repFront: "", repBack: "" });
+  const [files, setFiles] = useState<Record<DocKind, FileMeta[]>>({ company: [], cnpjDoc: [], repFront: [], repBack: [] });
+  const [rawFiles, setRawFiles] = useState<Record<DocKind, File[]>>({
+    company: [],
+    cnpjDoc: [],
+    repFront: [],
+    repBack: [],
+  });
+  const [fileMessages, setFileMessages] = useState<Record<DocKind, string>>({ company: "", cnpjDoc: "", repFront: "", repBack: "" });
   const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [feedback, setFeedback] = useState("");
@@ -61,7 +69,12 @@ export function CorporateRegistrationPage({ onOpenDialog, onRegister = registerC
   const step = steps[stepIndex];
   const isLast = stepIndex === steps.length - 1;
 
-  const fileCount = { company: files.company.length, repFront: files.repFront.length, repBack: files.repBack.length };
+  const fileCount = {
+    company: files.company.length,
+    cnpjDoc: files.cnpjDoc.length,
+    repFront: files.repFront.length,
+    repBack: files.repBack.length,
+  };
 
   function update<K extends TextField>(name: K, value: CorporateFormValues[K]) {
     setValues((c) => ({ ...c, [name]: value }));
@@ -97,24 +110,35 @@ export function CorporateRegistrationPage({ onOpenDialog, onRegister = registerC
     const picked = Array.from(event.target.files ?? []);
     event.target.value = "";
     const rejected: string[] = [];
-    const accepted: FileMeta[] = [];
+    const acceptedMeta: FileMeta[] = [];
+    const acceptedRaw: File[] = [];
+
     for (const file of picked) {
       const problem = validateFile(file);
-      if (problem) rejected.push(problem);
-      else accepted.push({ name: file.name, size: file.size });
+      if (problem) {
+        rejected.push(problem);
+      } else {
+        acceptedMeta.push({ name: file.name, size: file.size });
+        acceptedRaw.push(file);
+      }
     }
-    // Apenas metadados são guardados: o MVP não persiste o conteúdo binário.
+
     const single = docKinds.find((d) => d.kind === kind)?.single;
     setFiles((c) => ({
       ...c,
-      [kind]: single ? (accepted.length ? accepted.slice(0, 1) : c[kind]) : [...c[kind], ...accepted].slice(0, 3),
+      [kind]: single ? (acceptedMeta.length ? acceptedMeta.slice(0, 1) : c[kind]) : [...c[kind], ...acceptedMeta].slice(0, 3),
+    }));
+    setRawFiles((c) => ({
+      ...c,
+      [kind]: single ? (acceptedRaw.length ? acceptedRaw.slice(0, 1) : c[kind]) : [...c[kind], ...acceptedRaw].slice(0, 3),
     }));
     setFileMessages((c) => ({ ...c, [kind]: rejected.join(" ") }));
-    if (accepted.length) setErrors((c) => ({ ...c, [docKinds.find((d) => d.kind === kind)?.errorKey ?? ""]: "" }));
+    if (acceptedMeta.length) setErrors((c) => ({ ...c, [docKinds.find((d) => d.kind === kind)?.errorKey ?? ""]: "" }));
   }
 
   function removeFile(kind: DocKind, index: number) {
     setFiles((c) => ({ ...c, [kind]: c[kind].filter((_, i) => i !== index) }));
+    setRawFiles((c) => ({ ...c, [kind]: c[kind].filter((_, i) => i !== index) }));
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -138,11 +162,20 @@ export function CorporateRegistrationPage({ onOpenDialog, onRegister = registerC
       const response = await onRegister(
         toCorporateRegistrationData(values, {
           company: files.company.map((f) => f.name),
+          cnpjDoc: files.cnpjDoc.map((f) => f.name),
           repFront: files.repFront[0]?.name ?? "",
           repBack: files.repBack[0]?.name ?? "",
         }),
       );
       if (response.ok) {
+        // Salva os arquivos binários reais no IndexedDB
+        await salvarDocumentosPJNoIndexedDB(values.cnpj, {
+          contrato: rawFiles.company[0],
+          cartaoCnpj: rawFiles.cnpjDoc[0],
+          repFrente: rawFiles.repFront[0],
+          repVerso: rawFiles.repBack[0],
+        });
+
         setResult(response);
         requestAnimationFrame(() => headingRef.current?.focus());
       } else {
@@ -354,20 +387,43 @@ export function CorporateRegistrationPage({ onOpenDialog, onRegister = registerC
                 <p className="corporate__hint">Os arquivos serão submetidos para validação manual pela equipe do cliente antes da liberação de compras e vendas. Formatos aceitos: PDF, JPG e PNG, até 10 MB.</p>
                 {docKinds.map(({ kind, errorKey, label, hint, single }) => (
                   <div className="registration-field corporate__dropzone" key={kind}>
-                    <label htmlFor={`corporate-${errorKey}`}>{label} <span aria-hidden="true">*</span></label>
+                    <span className="corporate__field-label">{label} <span aria-hidden="true">*</span></span>
                     <p className="corporate__hint" id={`corporate-${errorKey}-hint`}>{hint}</p>
                     <input
-                      id={`corporate-${errorKey}`} name={errorKey} type="file" accept={ACCEPTED_FILE_TYPES.join(",")} multiple={!single}
+                      id={`corporate-${errorKey}`}
+                      name={errorKey}
+                      type="file"
+                      accept={ACCEPTED_FILE_TYPES.join(",")}
+                      multiple={!single}
+                      className="sr-only"
                       aria-invalid={Boolean(errors[errorKey])}
                       aria-describedby={errors[errorKey] ? `corporate-${errorKey}-error` : `corporate-${errorKey}-hint`}
                       onChange={(e) => handleFiles(kind, e)}
                     />
+                    <div className="corporate__upload-trigger">
+                      <label
+                        htmlFor={`corporate-${errorKey}`}
+                        className="button button--outline button--small corporate__upload-btn"
+                      >
+                        📎 {files[kind].length > 0 ? "Substituir Arquivo" : "Selecionar Arquivo"}
+                      </label>
+                    </div>
                     {files[kind].length > 0 && (
                       <ul className="corporate__files">
                         {files[kind].map((f, i) => (
                           <li key={`${f.name}-${i}`}>
-                            <span>{f.name} <small>({formatFileSize(f.size)})</small></span>
-                            <button type="button" className="registration__text-button" onClick={() => removeFile(kind, i)} aria-label={`Remover ${f.name}`}>Remover</button>
+                            <span className="truncate-filename" title={f.name}>
+                              {f.name} <small>({formatFileSize(f.size)})</small>
+                            </span>
+                            <button
+                              type="button"
+                              className="registration__text-button"
+                              style={{ flexShrink: 0 }}
+                              onClick={() => removeFile(kind, i)}
+                              aria-label={`Remover ${f.name}`}
+                            >
+                              Remover
+                            </button>
                           </li>
                         ))}
                       </ul>

@@ -1,3 +1,5 @@
+export const ADMIN_SECRET_SLUG = "/gestao-safra-k89a";
+
 export const routes = {
   home: "/",
   registration: "/cadastro",
@@ -13,6 +15,7 @@ export const routes = {
   adEdit: "/anuncios/:id/editar",
   editAd: (id: string) => `/anuncios/${id}/editar`,
   producerProfile: (id: string) => `/produtor/${id}`,
+  admin: ADMIN_SECRET_SLUG,
 } as const;
 
 // Categorias de navegação. Os destaques da home serão definidos pelo mercado.

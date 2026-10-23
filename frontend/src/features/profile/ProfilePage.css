@@ -35,6 +35,20 @@
 .profile__badge--seller {
   border-color: #2f6b3a;
   color: #2f6b3a;
+  background-color: #f0fdf4;
+  font-weight: 600;
+}
+.profile__badge--warning {
+  border-color: #d97706;
+  color: #b45309;
+  background-color: #fffbeb;
+  font-weight: 600;
+}
+.profile__badge--danger {
+  border-color: #dc2626;
+  color: #b91c1c;
+  background-color: #fef2f2;
+  font-weight: 600;
 }
 .profile__status {
   color: var(--color-text-secondary);
@@ -544,4 +558,772 @@
   border-top: 1px solid var(--color-border);
   background: var(--color-background-subtle, #fbfbf8);
 }
+
+/* ==========================================================================
+   Modal de Enquadramento de Avatar com Blur (Foto de Perfil)
+   ========================================================================== */
+
+.avatar-cropper-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(14, 27, 18, 0.72);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  z-index: 1000;
+  animation: avatarModalFadeIn 0.2s ease-out;
+}
+
+@keyframes avatarModalFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.avatar-cropper-modal {
+  background: #ffffff;
+  border-radius: var(--radius-lg, 16px);
+  box-shadow: 0 20px 48px rgba(18, 48, 28, 0.22);
+  width: 100%;
+  max-width: 440px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: avatarModalPop 0.22s ease-out;
+}
+
+@keyframes avatarModalPop {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.avatar-cropper-modal__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 1.25rem 1.5rem 0.75rem;
+  border-bottom: 1px solid var(--color-border, #e2e8df);
+}
+
+.avatar-cropper-modal__title-group h3 {
+  font-family: var(--font-family-serif, "Fraunces", serif);
+  font-size: 1.25rem;
+  color: var(--color-primary-dark, #12301c);
+  margin: 0 0 0.25rem;
+}
+
+.avatar-cropper-modal__title-group p {
+  font-size: 0.8125rem;
+  color: #556b55;
+  margin: 0;
+  line-height: 1.35;
+}
+
+.avatar-cropper-modal__close-btn {
+  background: transparent;
+  border: 0;
+  color: #556b55;
+  cursor: pointer;
+  padding: 0.25rem;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.16s ease;
+}
+
+.avatar-cropper-modal__close-btn:hover {
+  background-color: #f0f5ee;
+  color: #1e5631;
+}
+
+.avatar-cropper-modal__body {
+  padding: 1.25rem 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  background-color: #fbfdfa;
+}
+
+/* Área de Pré-visualização */
+.avatar-cropper__preview-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.avatar-cropper__preview-box {
+  position: relative;
+  width: 280px;
+  height: 280px;
+  border-radius: 12px;
+  overflow: hidden;
+  background-color: #1a2e1a;
+  box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.4), 0 4px 16px rgba(0, 0, 0, 0.1);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.avatar-cropper__preview-box--dragging {
+  cursor: grabbing;
+}
+
+/* Fundo com Desfoque (Blur) */
+.avatar-cropper__blur-bg {
+  position: absolute;
+  inset: -20px;
+  background-size: cover;
+  background-position: center;
+  filter: blur(18px) brightness(0.75);
+  transform: scale(1.1);
+  pointer-events: none;
+}
+
+/* Imagem Nítida em Primeiro Plano */
+.avatar-cropper__foreground-img {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform-origin: center center;
+  pointer-events: none;
+  transition: none;
+}
+
+/* Guia Circular de Corte */
+.avatar-cropper__circle-guide {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  box-shadow: 0 0 0 9999px rgba(10, 20, 12, 0.6);
+  border: 2px dashed rgba(255, 255, 255, 0.85);
+  pointer-events: none;
+}
+
+.avatar-cropper__hint-drag {
+  font-size: 0.75rem;
+  color: #637a63;
+  margin: 0;
+  text-align: center;
+}
+
+/* Controles de Zoom */
+.avatar-cropper__controls {
+  background: #ffffff;
+  border: 1px solid #e1ebe0;
+  border-radius: 10px;
+  padding: 0.875rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.avatar-cropper__zoom-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.avatar-cropper__zoom-label {
+  font-size: 0.8125rem;
+  font-weight: 700;
+  color: #2e4d30;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.avatar-cropper__zoom-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+}
+
+.avatar-cropper__zoom-val {
+  font-size: 0.8125rem;
+  font-weight: 700;
+  color: #1e5631;
+}
+
+.avatar-cropper__reset-btn {
+  background: transparent;
+  border: 0;
+  color: #3b6e43;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0.2rem 0.4rem;
+  border-radius: 4px;
+}
+
+.avatar-cropper__reset-btn:hover:not(:disabled) {
+  background-color: #edf5eb;
+  text-decoration: underline;
+}
+
+.avatar-cropper__reset-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.avatar-cropper__slider-row {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+}
+
+.avatar-cropper__zoom-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  border: 1px solid #c9dcc6;
+  background: #f7faf6;
+  color: #1e5631;
+  font-size: 1.125rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  line-height: 1;
+}
+
+.avatar-cropper__zoom-btn:hover:not(:disabled) {
+  background: #eaf4e8;
+  border-color: #1e5631;
+}
+
+.avatar-cropper__zoom-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.avatar-cropper__range-input {
+  flex: 1;
+  accent-color: #1e5631;
+  cursor: pointer;
+}
+
+.avatar-cropper__slider-hints {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.6875rem;
+  color: #6d846d;
+}
+
+/* Rodapé do Modal */
+.avatar-cropper-modal__footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  padding: 1rem 1.5rem;
+  border-top: 1px solid #e7eee5;
+  background-color: #f7faf6;
+}
+
+/* ==========================================================================
+   Gestão de Dossiê, Documentos Cadastrados e Troca de Representante (PJ)
+   ========================================================================== */
+
+/* Seção Representante Legal */
+.profile-rep-section {
+  margin-top: var(--space-8);
+  padding: var(--space-5);
+  background: var(--color-background-subtle);
+  border: 1px solid var(--color-border);
+  border-radius: 0.75rem;
+}
+
+.profile-rep-section__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-4);
+}
+
+.profile-rep-change-btn {
+  white-space: nowrap;
+}
+
+.profile-rep-alert {
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  border-radius: 0.5rem;
+  padding: 1rem;
+  margin-bottom: 1.25rem;
+}
+
+.profile-rep-alert__header {
+  display: flex;
+  gap: 0.75rem;
+  align-items: flex-start;
+}
+
+.profile-rep-alert__icon {
+  font-size: 1.25rem;
+  flex-shrink: 0;
+}
+
+.profile-rep-alert__header strong {
+  display: block;
+  font-size: 0.95rem;
+  color: #92400e;
+  margin-bottom: 0.25rem;
+}
+
+.profile-rep-alert__header p {
+  margin: 0;
+  font-size: 0.85rem;
+  color: #78350f;
+}
+
+.profile-rep-alert__body {
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px dashed #fcd34d;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.5rem;
+  font-size: 0.825rem;
+  color: #78350f;
+}
+
+.profile-rep-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+/* Seção Dossiê e Documentos Cadastrados */
+.profile-dossier-section {
+  margin-top: var(--space-10);
+  padding-top: var(--space-6);
+  border-top: 1px solid var(--color-border);
+}
+
+.profile-dossier-section__header {
+  margin-bottom: var(--space-5);
+}
+
+.profile-dossier-section__header h2 {
+  font-size: 1.35rem;
+  margin-bottom: 0.25rem;
+}
+
+.profile-dossier-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 1.25rem;
+}
+
+.profile-dossier-card {
+  display: flex;
+  flex-direction: column;
+  background: var(--color-background);
+  border: 1px solid var(--color-border);
+  border-radius: 0.75rem;
+  padding: 1.25rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.profile-dossier-card:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+.profile-dossier-card.is-rejected {
+  border-color: #f87171;
+  background: #fffafa;
+}
+
+.profile-dossier-card__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.75rem;
+}
+
+.profile-dossier-card__icon {
+  font-size: 1.5rem;
+}
+
+.profile-dossier-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.profile-dossier-badge--success {
+  background: #ecfdf5;
+  color: #065f46;
+  border: 1px solid #a7f3d0;
+}
+
+.profile-dossier-badge--warning {
+  background: #fffbeb;
+  color: #92400e;
+  border: 1px solid #fde68a;
+}
+
+.profile-dossier-badge--danger {
+  background: #fef2f2;
+  color: #991b1b;
+  border: 1px solid #fecaca;
+}
+
+.profile-dossier-card__title {
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 0 0 0.35rem;
+  color: var(--color-text-primary);
+}
+
+.profile-dossier-card__desc {
+  font-size: 0.8125rem;
+  color: var(--color-text-secondary);
+  line-height: 1.45;
+  margin: 0 0 0.85rem;
+}
+
+.profile-dossier-card__meta {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  padding: 0.65rem;
+  background: var(--color-background-subtle);
+  border-radius: 6px;
+  margin-bottom: 0.85rem;
+  font-size: 0.8125rem;
+}
+
+.profile-dossier-card__meta strong {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+.profile-dossier-card__meta small {
+  display: block;
+  color: var(--color-text-secondary);
+  font-size: 0.75rem;
+}
+
+.profile-dossier-card__rejection {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 6px;
+  padding: 0.65rem;
+  margin-bottom: 0.85rem;
+  font-size: 0.8rem;
+  color: #991b1b;
+}
+
+.profile-dossier-card__rejection strong {
+  display: block;
+  margin-bottom: 0.2rem;
+}
+
+.profile-dossier-card__rejection p {
+  margin: 0;
+}
+
+.profile-dossier-card__actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: auto;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--color-border);
+}
+
+.profile-dossier-card__actions button {
+  flex: 1;
+  justify-content: center;
+}
+
+/* Modais de Documentos e Assistente de Troca */
+.profile-replace-doc-current {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  background: #f8faf9;
+  border: 1px solid #dce5de;
+  border-radius: 8px;
+  margin: 1rem 0;
+  font-size: 0.85rem;
+}
+
+.profile-replace-doc-current p {
+  margin: 0;
+  color: #1b4332;
+  font-weight: 500;
+}
+
+.profile-doc-dropzone {
+  border: 2px dashed #cbd7cf;
+  border-radius: 8px;
+  padding: 2rem 1.5rem;
+  text-align: center;
+  background: #fafcfb;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.profile-doc-dropzone.is-dragging {
+  border-color: #1b4332;
+  background: #f0f7f2;
+}
+
+.profile-doc-dropzone.has-file {
+  border-color: #2f6b3a;
+  background: #ecfdf5;
+}
+
+.profile-doc-dropzone__label {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
+  cursor: pointer;
+}
+
+.profile-doc-dropzone__icon {
+  font-size: 2.25rem;
+}
+
+.profile-doc-dropzone__label strong {
+  font-size: 0.95rem;
+  color: #1b4332;
+}
+
+.profile-doc-dropzone__label p {
+  margin: 0;
+  font-size: 0.8rem;
+  color: #6a7c70;
+}
+
+.profile-doc-dropzone__selected {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.profile-doc-dropzone__selected strong {
+  display: block;
+  font-size: 0.95rem;
+  color: #065f46;
+}
+
+.profile-doc-dropzone__selected p {
+  margin: 0;
+  font-size: 0.8rem;
+  color: #047857;
+}
+
+.profile-doc-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  margin-top: 1rem;
+  padding: 0.85rem 1rem;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: 6px;
+  font-size: 0.8125rem;
+  color: #166534;
+}
+
+.profile-doc-notice p {
+  margin: 0;
+}
+
+/* Wizard Stepper da Troca de Representante */
+.profile-wizard-steps {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 1.25rem 0 1.5rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid #e2eae4;
+}
+
+.profile-wizard-step {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  opacity: 0.5;
+  transition: opacity 0.2s ease;
+}
+
+.profile-wizard-step.is-active {
+  opacity: 1;
+}
+
+.profile-wizard-step__number {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: #cbd7cf;
+  color: #1b4332;
+  font-weight: 700;
+  font-size: 0.85rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.profile-wizard-step.is-active .profile-wizard-step__number {
+  background: #1b4332;
+  color: #ffffff;
+}
+
+.profile-wizard-step__label {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #1b4332;
+}
+
+.profile-wizard-step__line {
+  flex: 1;
+  height: 2px;
+  background: #e2eae4;
+  margin: 0 0.75rem;
+}
+
+.profile-wizard-body {
+  min-height: 260px;
+}
+
+.profile-file-slot {
+  background: #f8faf9;
+  border: 1px solid #dce5de;
+  border-radius: 8px;
+  padding: 1rem;
+}
+
+.profile-file-slot label strong {
+  display: block;
+  font-size: 0.875rem;
+  color: #1b4332;
+  margin-bottom: 0.5rem;
+}
+
+.profile-file-slot__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.profile-file-slot__info {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  color: #1b4332;
+  font-weight: 500;
+}
+
+.profile-terms-box {
+  background: #f8faf9;
+  border: 1px solid #dce5de;
+  border-radius: 8px;
+  padding: 1rem;
+}
+
+.profile-checkbox-label {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  cursor: pointer;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: #334155;
+}
+
+.profile-checkbox-label input {
+  margin-top: 0.2rem;
+  accent-color: #1b4332;
+}
+
+/* ==========================================================================
+   Card de Erro de Arquivo Ausente / Zero Documentos Fictícios
+   ========================================================================== */
+.admin-doc-error-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 40px 24px;
+  background: #ffffff;
+  border: 1.5px dashed #f87171;
+  border-radius: 12px;
+  max-width: 540px;
+  margin: 32px auto;
+  box-shadow: 0 4px 16px rgba(239, 68, 68, 0.08);
+}
+
+.admin-doc-error-icon {
+  font-size: 3rem;
+  margin-bottom: 12px;
+  display: inline-block;
+  animation: pulse-warn 2s infinite ease-in-out;
+}
+
+.admin-doc-error-card h4 {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #991b1b;
+  margin: 0 0 8px;
+}
+
+.admin-doc-error-card p {
+  font-size: 0.9rem;
+  color: #4b5563;
+  line-height: 1.55;
+  margin: 0 0 16px;
+  max-width: 460px;
+}
+
+.admin-doc-error-card p code {
+  background: #fee2e2;
+  color: #991b1b;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.825rem;
+  font-family: monospace;
+}
+
+.admin-doc-error-hint {
+  font-size: 0.8rem;
+  color: #6b7280;
+  font-style: italic;
+  margin-bottom: 20px;
+}
+
+.admin-doc-error-actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+
 

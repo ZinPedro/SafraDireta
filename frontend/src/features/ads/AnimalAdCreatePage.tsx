@@ -7,6 +7,8 @@ import type { OpenDevelopmentDialog } from "../../data/site";
 import { ufs } from "../corporate-registration/corporateRegistration";
 import { AccessRestricted } from "../../components/AccessRestricted";
 import { Icon } from "../../components/Icon";
+import { SellerBlockedView } from "../admin/SellerBlockedView";
+import { obterStatusGovernancaProdutor } from "../admin/adminStorage";
 import {
   BEEF_CATTLE_BREEDS,
   BEEF_CATTLE_PURPOSES,
@@ -408,6 +410,27 @@ export function AnimalAdCreatePage({ onOpenDialog, mode = "create" }: AnimalAdCr
     };
   }, [isEditMode, id, session]);
 
+  const govStatus = session ? obterStatusGovernancaProdutor(session.conta.id) : null;
+  const isBlockedSeller =
+    session?.vendedorEstado === "SUSPENSO" ||
+    session?.vendedorEstado === "BANIDO" ||
+    govStatus?.estado === "SUSPENSO" ||
+    govStatus?.estado === "BANIDO";
+
+  if (session && isBlockedSeller) {
+    const estadoBloqueio =
+      session.vendedorEstado === "BANIDO" || govStatus?.estado === "BANIDO"
+        ? "BANIDO"
+        : "SUSPENSO";
+    return (
+      <SellerBlockedView
+        produtorId={session.conta.id}
+        estadoSessao={estadoBloqueio}
+        nomeProdutor={session.conta.nome}
+      />
+    );
+  }
+
   // Guarda de rota: Vendedor precisa estar habilitado
   if (!session || session.vendedorEstado !== "HABILITADO") {
     return (
@@ -759,9 +782,14 @@ export function AnimalAdCreatePage({ onOpenDialog, mode = "create" }: AnimalAdCr
         };
 
         if (isEditMode && id) {
+          const wasModerated = loadedAd?.status === "PAUSADO_MODERACAO";
           await atualizarAnuncio(id, input, session);
           navigate(`/anuncios/${id}`, {
-            state: { toastMessage: "Anúncio atualizado com sucesso!" },
+            state: {
+              toastMessage: wasModerated
+                ? "Alterações enviadas! O lote entrou em revisão e voltará ao Mercado após liberação da Moderação."
+                : "Anúncio atualizado com sucesso!",
+            },
           });
           return;
         }
@@ -835,9 +863,14 @@ export function AnimalAdCreatePage({ onOpenDialog, mode = "create" }: AnimalAdCr
         };
 
         if (isEditMode && id) {
+          const wasModerated = loadedAd?.status === "PAUSADO_MODERACAO";
           await atualizarAnuncio(id, inputGraos, session);
           navigate(`/anuncios/${id}`, {
-            state: { toastMessage: "Anúncio atualizado com sucesso!" },
+            state: {
+              toastMessage: wasModerated
+                ? "Alterações enviadas! O lote entrou em revisão e voltará ao Mercado após liberação da Moderação."
+                : "Anúncio atualizado com sucesso!",
+            },
           });
           return;
         }
@@ -911,6 +944,27 @@ export function AnimalAdCreatePage({ onOpenDialog, mode = "create" }: AnimalAdCr
               : "Publique as especificações agronômicas, safra, volume e condições comerciais da sua produção agrícola no mercado."}
           </p>
         </header>
+
+        {isEditMode && loadedAd?.status === "PAUSADO_MODERACAO" && (
+          <div
+            className="admin-ad-row__reason"
+            style={{
+              marginBottom: "1.5rem",
+              padding: "1rem 1.25rem",
+              fontSize: "0.92rem",
+              borderRadius: "10px",
+            }}
+            role="status"
+          >
+            <strong>⏸ Anúncio Pausado pela Moderação:</strong>{" "}
+            {loadedAd.motivoModeracao || "Realize os ajustes solicitados."}
+            <br />
+            <span style={{ display: "inline-block", marginTop: "0.35rem" }}>
+              Ao salvar as alterações abaixo, este lote será encaminhado automaticamente para o
+              status <strong>"Em Revisão"</strong> para liberação pela equipe de Governança.
+            </span>
+          </div>
+        )}
 
         {/* Seletor de Modalidade (Boi Gordo vs Grãos e Café) */}
         <section className="ad-modality-selector" aria-label="Selecione a categoria do lote">

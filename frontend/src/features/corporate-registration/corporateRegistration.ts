@@ -1,5 +1,6 @@
 import { getSession, saveSession } from "../../context/session";
 import { MOCK_API, mockDelay } from "../../dev/mockApi";
+import { registrarEmpresaParaValidacao } from "../admin/adminStorage";
 export interface CorporateRegistrationData {
   company: {
     cnpj: string;
@@ -83,8 +84,48 @@ export const registerCorporateAccount: RegisterCorporateAccount = async (data: C
           cidade: data.address.cidade,
           uf: data.address.uf,
         },
+        representative: {
+          nome: data.representative.nome,
+          cpf: data.representative.cpf,
+          vinculo: data.representative.vinculo,
+        },
+        documents: {
+          fileNames: data.documents.fileNames,
+          representativeFrontFileName: data.documents.representativeFrontFileName,
+          representativeBackFileName: data.documents.representativeBackFileName,
+        },
+        createdAt: new Date().toISOString(),
       };
       localStorage.setItem(key, JSON.stringify(stored));
+      registrarEmpresaParaValidacao({
+        id: contaId,
+        razaoSocial: data.company.razaoSocial,
+        nomeFantasia: data.company.nomeFantasia,
+        naturezaJuridica: data.company.naturezaJuridica,
+        cnpj: formatCnpj(data.company.cnpj),
+        email: data.access.email,
+        telefone: formatPhone(data.access.telefone.replace(/^\+55/, "")),
+        representante: {
+          nome: data.representative.nome,
+          cpf: formatCpf(data.representative.cpf),
+          vinculo: data.representative.vinculo,
+        },
+        endereco: {
+          cep: formatCep(data.address.cep),
+          logradouro: data.address.logradouro,
+          numero: data.address.numero,
+          complemento: data.address.complemento,
+          bairro: data.address.bairro,
+          cidade: data.address.cidade,
+          uf: data.address.uf,
+        },
+        documentos: {
+          contratoSocialNome: data.documents.fileNames[0] || "Contrato_Social.pdf",
+          cartaoCnpjNome: data.documents.fileNames[1] || "Cartao_CNPJ_Receita.pdf",
+          docRepresentanteFrente: data.documents.representativeFrontFileName || "Doc_Representante_Frente.jpg",
+          docRepresentanteVerso: data.documents.representativeBackFileName || "Doc_Representante_Verso.jpg",
+        },
+      });
     } catch {
       /* no-op */
     }
@@ -109,6 +150,72 @@ export const registerCorporateAccount: RegisterCorporateAccount = async (data: C
       const res = await response.json();
       if (res.token) {
         saveSession(res.token, res.conta, res.vendedor?.estado ?? null);
+      }
+      const contaId = res.conta?.id || `pj-${data.company.cnpj.replace(/\D/g, "")}`;
+      try {
+        const key = `safradireta_mock_profile:${contaId}`;
+        const stored = {
+          account: {
+            id: contaId,
+            tipo: "PJ",
+            nome: data.company.razaoSocial,
+            email: data.access.email,
+            cpfCnpj: data.company.cnpj,
+            telefone: data.access.telefone,
+          },
+          address: {
+            cep: data.address.cep,
+            logradouro: data.address.logradouro,
+            numero: data.address.numero,
+            complemento: data.address.complemento ?? "",
+            bairro: data.address.bairro,
+            cidade: data.address.cidade,
+            uf: data.address.uf,
+          },
+          representative: {
+            nome: data.representative.nome,
+            cpf: data.representative.cpf,
+            vinculo: data.representative.vinculo,
+          },
+          documents: {
+            fileNames: data.documents.fileNames,
+            representativeFrontFileName: data.documents.representativeFrontFileName,
+            representativeBackFileName: data.documents.representativeBackFileName,
+          },
+          createdAt: new Date().toISOString(),
+        };
+        localStorage.setItem(key, JSON.stringify(stored));
+        registrarEmpresaParaValidacao({
+          id: contaId,
+          razaoSocial: data.company.razaoSocial,
+          nomeFantasia: data.company.nomeFantasia,
+          naturezaJuridica: data.company.naturezaJuridica,
+          cnpj: formatCnpj(data.company.cnpj),
+          email: data.access.email,
+          telefone: formatPhone(data.access.telefone.replace(/^\+55/, "")),
+          representante: {
+            nome: data.representative.nome,
+            cpf: formatCpf(data.representative.cpf),
+            vinculo: data.representative.vinculo,
+          },
+          endereco: {
+            cep: formatCep(data.address.cep),
+            logradouro: data.address.logradouro,
+            numero: data.address.numero,
+            complemento: data.address.complemento,
+            bairro: data.address.bairro,
+            cidade: data.address.cidade,
+            uf: data.address.uf,
+          },
+          documentos: {
+            contratoSocialNome: data.documents.fileNames[0] || "Contrato_Social.pdf",
+            cartaoCnpjNome: data.documents.fileNames[1] || "Cartao_CNPJ_Receita.pdf",
+            docRepresentanteFrente: data.documents.representativeFrontFileName || "Doc_Representante_Frente.jpg",
+            docRepresentanteVerso: data.documents.representativeBackFileName || "Doc_Representante_Verso.jpg",
+          },
+        });
+      } catch {
+        /* no-op */
       }
       return {
         ok: true,
@@ -274,7 +381,7 @@ export function isValidCpf(value: string): boolean {
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-export function validateStep(step: StepId, v: CorporateFormValues, fileCount?: { company: number; repFront: number; repBack: number }): FieldErrors {
+export function validateStep(step: StepId, v: CorporateFormValues, fileCount?: { company: number; cnpjDoc?: number; repFront: number; repBack: number }): FieldErrors {
   const e: FieldErrors = {};
   if (step === "company") {
     if (!isValidCnpj(v.cnpj)) e.cnpj = "Informe um CNPJ válido, com 14 caracteres.";
@@ -295,6 +402,7 @@ export function validateStep(step: StepId, v: CorporateFormValues, fileCount?: {
   }
   if (step === "documents") {
     if (!fileCount?.company) e.companyDoc = "Anexe o documento de constituição da empresa.";
+    if (!fileCount?.cnpjDoc) e.cnpjDoc = "Anexe o Cartão CNPJ emitido pela Receita Federal.";
     if (!fileCount?.repFront) e.repFrontDoc = "Anexe a foto da frente do documento do representante.";
     if (!fileCount?.repBack) e.repBackDoc = "Anexe a foto do verso do documento do representante.";
   }
@@ -319,9 +427,11 @@ export function validateFile(file: { name: string; size: number }): string | nul
 
 export function toCorporateRegistrationData(
   v: CorporateFormValues,
-  files: { company: string[]; repFront: string; repBack: string },
+  files: { company: string[]; cnpjDoc?: string[]; repFront: string; repBack: string },
 ): CorporateRegistrationData {
   const optional = (s: string) => s.trim() || undefined;
+  const companyFile = files.company[0] || "";
+  const cnpjFile = (files.cnpjDoc && files.cnpjDoc[0]) || "";
   return {
     company: {
       cnpj: normalizeCnpj(v.cnpj),
@@ -348,7 +458,7 @@ export function toCorporateRegistrationData(
       hasRepresentativeDoc: Boolean(files.repFront && files.repBack),
       representativeFrontFileName: files.repFront,
       representativeBackFileName: files.repBack,
-      fileNames: [...files.company, files.repFront, files.repBack].filter(Boolean),
+      fileNames: [companyFile, cnpjFile, files.repFront, files.repBack].filter(Boolean),
     },
     access: {
       email: v.email.trim().toLowerCase(),

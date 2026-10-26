@@ -3,8 +3,10 @@ import { clearSession, getSession, updateSession } from "../../context/session";
 import type { Session } from "../../context/session";
 import { formatCnpj, formatCpf, isValidCpf } from "../corporate-registration/corporateRegistration";
 import type { SellerCategory } from "../seller-upgrade/sellerUpgrade";
+import { sincronizarProdutorNosAnuncios } from "../ads/adsStorage";
+import { registrarProdutorParaGovernanca, sincronizarDadosEmpresaAdmin } from "../admin/adminStorage";
 
-export { formatCep, formatCnpj, formatCpf, formatPhone, ufs } from "../corporate-registration/corporateRegistration";
+export { formatCep, formatCnpj, formatCpf, formatPhone, isValidCpf, ufs } from "../corporate-registration/corporateRegistration";
 export { sellerCategories } from "../seller-upgrade/sellerUpgrade";
 export type { SellerCategory } from "../seller-upgrade/sellerUpgrade";
 
@@ -36,6 +38,7 @@ export interface UserProfileData {
     publicPhone: string;
     categories: SellerCategory[];
     hasOwnTransport: boolean;
+    bannerUrl?: string;
   };
 }
 
@@ -123,6 +126,21 @@ interface BackendEndereco {
 function normalizeProfile(raw: Record<string, unknown>, session: Session): UserProfileData {
   if (raw.account) {
     const nested = raw as Partial<UserProfileData>;
+    const isHabilitado =
+      session.vendedorEstado === "HABILITADO" || Boolean(nested.seller?.isHabilitado);
+    const seller = isHabilitado
+      ? {
+          isHabilitado: true,
+          farmName: "",
+          bio: "",
+          city: "",
+          state: "",
+          publicPhone: "",
+          categories: [],
+          hasOwnTransport: false,
+          ...(nested.seller || {}),
+        }
+      : undefined;
     return {
       account: {
         id: session.conta.id, tipo: session.conta.tipo, nome: session.conta.nome, email: session.conta.email,
@@ -132,7 +150,7 @@ function normalizeProfile(raw: Record<string, unknown>, session: Session): UserP
         ...(session.avatarUrl ? { avatarUrl: (nested.account?.avatarUrl as string | undefined) || session.avatarUrl } : {}),
       },
       address: { ...emptyAddress, ...nested.address },
-      seller: nested.seller,
+      seller,
     };
   }
   const flat = raw as {
@@ -177,15 +195,69 @@ async function withHabilitacao(profile: UserProfileData, session: Session): Prom
 }
 
 async function fetchRealProfile(session: Session): Promise<ProfileLoadResult> {
+  if (session.conta.tipo === "ADMIN" || session.token.startsWith("admin-")) {
+    return { ok: true, profile: mockRead(session) };
+  }
   try {
     const response = await fetch("/api/perfil", { headers: authHeaders(session) });
     if (response.status === 401) {
-      clearSession();
+      if (getSession()?.token === session.token) {
+        clearSession();
+      }
       return { ok: false, reason: "unauthorized", message: "Sua sessão expirou. Entre novamente." };
     }
     if (!response.ok) return { ok: false, reason: "unavailable", message: "Não foi possível carregar seu perfil agora. Tente novamente mais tarde." };
-    const profile = normalizeProfile(await response.json(), session);
-    return { ok: true, profile: await withHabilitacao(profile, session) };
+    const profile = normalizeProfile(await response.json(), getSession() ?? session);
+    try {
+      const rawLocal = localStorage.getItem(`${MOCK_KEY}:${session.conta.id}`);
+      if (rawLocal) {
+        const parsed = JSON.parse(rawLocal);
+        if (parsed?.seller && profile.seller) {
+          profile.seller = { ...profile.seller, ...parsed.seller, isHabilitado: true };
+        }
+      }
+    } catch {
+      /* ignore */
+    }
+    const finalProfile = await withHabilitacao(profile, getSession() ?? session);
+    try {
+      const toStore = {
+        ...finalProfile,
+        account: {
+          ...finalProfile.account,
+          avatarUrl:
+            finalProfile.account.avatarUrl && finalProfile.account.avatarUrl.startsWith("data:")
+              ? undefined
+              : finalProfile.account.avatarUrl,
+        },
+      };
+      localStorage.setItem(`${MOCK_KEY}:${session.conta.id}`, JSON.stringify(toStore));
+      if (session.conta.tipo === "PJ") {
+        sincronizarDadosEmpresaAdmin({
+          id: session.conta.id,
+          razaoSocial: finalProfile.account.nome || session.conta.nome,
+          cnpj: finalProfile.account.cpfCnpj,
+          telefone: finalProfile.account.telefone,
+          endereco: finalProfile.address,
+        });
+      }
+      if (finalProfile.seller?.isHabilitado) {
+        registrarProdutorParaGovernanca({
+          id: session.conta.id,
+          nome: finalProfile.account.nome || session.conta.nome,
+          farmName: finalProfile.seller.farmName || `Fazenda ${finalProfile.account.nome || session.conta.nome}`,
+          documento: finalProfile.account.cpfCnpj || "",
+          tipoDocumento: session.conta.tipo === "PJ" ? "CNPJ" : "CPF",
+          email: finalProfile.account.email || session.conta.email,
+          cidade: finalProfile.seller.city || finalProfile.address?.cidade || "",
+          uf: finalProfile.seller.state || finalProfile.address?.uf || "",
+          estado: "HABILITADO",
+        });
+      }
+    } catch {
+      /* ignore */
+    }
+    return { ok: true, profile: finalProfile };
   } catch {
     return { ok: false, reason: "unavailable", message: "Não foi possível conectar ao servidor. Verifique sua conexão." };
   }
@@ -194,7 +266,7 @@ async function fetchRealProfile(session: Session): Promise<ProfileLoadResult> {
 export const loadUserProfile: LoadUserProfile = async () => {
   const session = getSession();
   if (!session) return { ok: false, reason: "unauthorized", message: "Entre na sua conta para acessar o perfil." };
-  if (MOCK_API) {
+  if (MOCK_API || session.conta.tipo === "ADMIN" || session.token.startsWith("admin-")) {
     await mockDelay(300);
     return { ok: true, profile: mockRead(session) };
   }
@@ -224,6 +296,7 @@ export const updateUserProfile: UpdateUserProfile = async (data) => {
     merged.account = {
       ...current.account,
       ...data.account,
+      nome: data.account?.nome ?? current.account.nome ?? session.conta.nome,
       email: current.account.email,
       cpfCnpj: nextCpf,
       avatarUrl: session.avatarUrl ?? current.account.avatarUrl,
@@ -231,13 +304,47 @@ export const updateUserProfile: UpdateUserProfile = async (data) => {
     merged.address = { ...current.address, ...data.address };
     merged.seller = current.seller && data.seller ? { ...current.seller, ...data.seller, isHabilitado: true } : current.seller;
     localStorage.setItem(`${MOCK_KEY}:${session.conta.id}`, JSON.stringify(merged));
+    if (session.conta.tipo === "PJ") {
+      sincronizarDadosEmpresaAdmin({
+        id: session.conta.id,
+        razaoSocial: merged.account.nome,
+        cnpj: merged.account.cpfCnpj,
+        telefone: merged.account.telefone,
+        endereco: merged.address,
+      });
+    }
+    if (merged.seller?.farmName || data.account?.nome) {
+      sincronizarProdutorNosAnuncios(session.conta.id, {
+        farmName: merged.seller?.farmName,
+        vendedorNome: merged.account.nome,
+        avatarUrl: merged.account.avatarUrl,
+      });
+      if (merged.seller) {
+        registrarProdutorParaGovernanca({
+          id: session.conta.id,
+          nome: merged.account.nome,
+          farmName: merged.seller.farmName,
+          documento: merged.account.cpfCnpj || "",
+          tipoDocumento: session.conta.tipo === "PJ" ? "CNPJ" : "CPF",
+          email: merged.account.email,
+          cidade: merged.seller.city || merged.address.cidade || "",
+          uf: merged.seller.state || merged.address.uf || "",
+          estado: "HABILITADO",
+        });
+      }
+    }
     return { ok: true, message: "Alterações salvas (simulação local).", updatedProfile: merged };
   }
 
   const body: Record<string, unknown> = {};
   if (data.account?.nome) body.name = data.account.nome;
   if (data.account?.telefone) body.phone = data.account.telefone;
-  if (data.account?.cpfCnpj?.trim()) body.cpf = data.account.cpfCnpj.trim();
+  if (session.conta.tipo !== "PJ" && data.account?.cpfCnpj?.trim()) {
+    const cleanCpf = data.account.cpfCnpj.replace(/\D/g, "");
+    if (cleanCpf.length === 11) {
+      body.cpf = cleanCpf;
+    }
+  }
   if (data.account?.avatarUrl && !data.account.avatarUrl.startsWith("data:") && data.account.avatarUrl.length <= 500) {
     body.avatarUrl = data.account.avatarUrl;
   }
@@ -247,7 +354,7 @@ export const updateUserProfile: UpdateUserProfile = async (data) => {
       cep: data.address.cep ? data.address.cep.replace(/\D/g, "") : null,
       logradouro: data.address.logradouro?.trim() || null,
       numero: data.address.numero?.trim() || null,
-      complemento: data.address.complemento?.trim() || null,
+      complemento: data.address.complemento !== undefined ? data.address.complemento.trim() : null,
       bairro: data.address.bairro?.trim() || null,
       cidade: data.address.cidade?.trim() || null,
       uf: data.address.uf?.trim() || null,
@@ -263,6 +370,7 @@ export const updateUserProfile: UpdateUserProfile = async (data) => {
       publicPhone: data.seller.publicPhone?.trim() || null,
       categories: data.seller.categories ?? [],
       hasOwnTransport: Boolean(data.seller.hasOwnTransport),
+      bannerUrl: data.seller.bannerUrl?.trim() || null,
     };
   }
 
@@ -287,8 +395,78 @@ export const updateUserProfile: UpdateUserProfile = async (data) => {
     if (saved?.conta?.avatar_url || saved?.conta?.avatarUrl) {
       updateSession({ avatarUrl: saved.conta.avatar_url || saved.conta.avatarUrl });
     }
+    try {
+      const rawLocal = localStorage.getItem(`${MOCK_KEY}:${session.conta.id}`);
+      const existing = rawLocal ? JSON.parse(rawLocal) : {};
+      if (data.seller) {
+        existing.seller = { ...(existing.seller || {}), ...data.seller, isHabilitado: true };
+      }
+      const existingAccount = (existing.account && typeof existing.account === "object" ? existing.account : {}) as Record<string, unknown>;
+      const resolvedNome = data.account?.nome ?? saved?.conta?.nome ?? (existingAccount.nome as string | undefined) ?? session.conta.nome;
+      const rawAvatar = (session.avatarUrl ?? existingAccount.avatarUrl) as string | undefined;
+      existing.account = {
+        ...existingAccount,
+        ...(data.account || {}),
+        nome: resolvedNome,
+        avatarUrl: rawAvatar && rawAvatar.startsWith("data:") ? undefined : rawAvatar,
+      };
+      if (data.address) existing.address = { ...(existing.address || {}), ...data.address };
+      localStorage.setItem(`${MOCK_KEY}:${session.conta.id}`, JSON.stringify(existing));
+
+      if (session.conta.tipo === "PJ") {
+        const addrObj = (existing.address as Record<string, string | undefined>) || {};
+        const accountObj = (existing.account as Record<string, string | undefined>) || {};
+        sincronizarDadosEmpresaAdmin({
+          id: session.conta.id,
+          razaoSocial: resolvedNome,
+          cnpj: accountObj.cpfCnpj,
+          telefone: accountObj.telefone,
+          endereco: addrObj,
+        });
+      }
+
+      if (data.seller?.farmName || data.account?.nome) {
+        sincronizarProdutorNosAnuncios(session.conta.id, {
+          farmName: data.seller?.farmName,
+          vendedorNome: resolvedNome,
+          avatarUrl: session.avatarUrl,
+        });
+        if (existing.seller) {
+          const sellerObj = existing.seller as Record<string, unknown>;
+          const addrObj = (existing.address as Record<string, unknown>) || {};
+          const accountObj = (existing.account as Record<string, unknown>) || {};
+          registrarProdutorParaGovernanca({
+            id: session.conta.id,
+            nome: resolvedNome,
+            farmName: (sellerObj.farmName as string) || `Fazenda ${resolvedNome}`,
+            documento: (accountObj.cpfCnpj as string) || "",
+            tipoDocumento: session.conta.tipo === "PJ" ? "CNPJ" : "CPF",
+            email: session.conta.email,
+            cidade: (sellerObj.city as string) || (addrObj.cidade as string) || "",
+            uf: (sellerObj.state as string) || (addrObj.uf as string) || "",
+            estado: "HABILITADO",
+          });
+        }
+      }
+    } catch {
+      /* ignore */
+    }
     if (saved && (saved.account || saved.enderecos)) {
       const normalized = normalizeProfile(saved, getSession() ?? session);
+      try {
+        const rawLocal = localStorage.getItem(`${MOCK_KEY}:${session.conta.id}`);
+        if (rawLocal) {
+          const parsedLocal = JSON.parse(rawLocal);
+          if (parsedLocal?.seller && normalized.seller) {
+            normalized.seller = { ...normalized.seller, ...parsedLocal.seller, isHabilitado: true };
+          }
+        }
+      } catch {
+        /* ignore */
+      }
+      if (data.seller && normalized.seller) {
+        normalized.seller = { ...normalized.seller, ...data.seller, isHabilitado: true };
+      }
       return { ok: true, message: saved.message ?? "Perfil salvo com sucesso.", updatedProfile: await withHabilitacao(normalized, getSession() ?? session) };
     }
     const reloaded = await fetchRealProfile(getSession() ?? session);

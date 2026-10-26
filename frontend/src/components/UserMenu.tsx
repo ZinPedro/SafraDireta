@@ -80,9 +80,15 @@ export function UserMenu({ onNavigate }: { onNavigate?: () => void }) {
             </div>
           </div>
           <Link role="menuitem" to={routes.profile} onClick={() => close()}><Icon name="user" /> Meu perfil</Link>
+          {isSeller && (
+            <>
+              <Link role="menuitem" to={routes.myAds} onClick={() => close()}><Icon name="box" /> Meus anúncios</Link>
+              <Link role="menuitem" to={routes.createAd} onClick={() => close()}><Icon name="leaf" /> + Anunciar lote</Link>
+            </>
+          )}
           {conta.tipo !== "PJ" && (
             isSeller
-              ? <Link role="menuitem" to={`${routes.profile}?aba=produtor`} onClick={() => close()}><Icon name="leaf" /> Área do produtor</Link>
+              ? <Link role="menuitem" to={`${routes.profile}?aba=produtor`} onClick={() => close()}><Icon name="leaf" /> Vitrine do produtor</Link>
               : vendedorEstado === "PENDENTE"
                 ? <Link role="menuitem" to={`${routes.profile}`} onClick={() => close()}><Icon name="clock" /> Habilitação em análise</Link>
                 : <Link role="menuitem" to={routes.sellerUpgrade} onClick={() => close()}><Icon name="leaf" /> Área do produtor</Link>

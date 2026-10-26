@@ -230,6 +230,23 @@ main:focus {
   background: rgb(232 213 163 / 10%);
   border-color: var(--color-cream-200);
 }
+.button--secondary {
+  background: var(--color-cream-100);
+  color: var(--color-text-primary);
+  border-color: var(--color-border);
+}
+.button--secondary:hover {
+  background: var(--color-cream-200);
+  border-color: var(--color-earth-700);
+}
+.button--ghost {
+  background: transparent;
+  color: var(--color-text-primary);
+  border-color: transparent;
+}
+.button--ghost:hover {
+  background: var(--color-cream-100);
+}
 .button--small {
   min-height: 2.75rem;
   padding: var(--space-2) var(--space-5);
@@ -263,6 +280,14 @@ main:focus {
 .text-link:hover {
   text-decoration: underline;
   text-underline-offset: 5px;
+}
+.truncate-filename {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: middle;
 }
 @media (prefers-reduced-motion: reduce) {
   *,

@@ -12,7 +12,15 @@ import { DevelopmentDialog } from "./components/DevelopmentDialog";
 import { LegalDialog } from "./components/LegalDialog";
 import { HomePage } from "./pages/HomePage";
 import { DevelopmentPage } from "./pages/DevelopmentPage";
-import { routes } from "./data/site";
+import { MarketPage } from "./features/ads/MarketPage";
+import { AnimalAdCreatePage } from "./features/ads/AnimalAdCreatePage";
+import { MyAdsPage } from "./features/ads/MyAdsPage";
+import { AdDetailPage } from "./features/ads/AdDetailPage";
+import { AdEditPage } from "./features/ads/AdEditPage";
+import { PublicProducerProfilePage } from "./features/ads/PublicProducerProfilePage";
+import { AdminBar } from "./features/admin/AdminBar";
+import { AdminDashboardPage } from "./features/admin/AdminDashboardPage";
+import { ADMIN_SECRET_SLUG, routes } from "./data/site";
 import type { DevelopmentFeature } from "./data/site";
 import "./App.css";
 
@@ -22,9 +30,12 @@ const pageTitles: Record<string, string> = {
   [routes.sellerUpgrade]: "Habilitar vendedor | SafraDireta",
   [routes.profile]: "Meu perfil | SafraDireta",
   [routes.home]: "SafraDireta — Do campo à negociação",
-  [routes.market]: "Mercado | SafraDireta",
+  [routes.market]: "Mercado Agropecuário | SafraDireta",
+  [routes.myAds]: "Meus Anúncios | SafraDireta",
+  [routes.createAd]: "Cadastrar Lote de Animais | SafraDireta",
   [routes.producers]: "Produtores | SafraDireta",
   [routes.guide]: "Guia do usuário | SafraDireta",
+  [ADMIN_SECRET_SLUG]: "Portal de Governança e Moderação | SafraDireta",
 };
 
 function Site() {
@@ -36,7 +47,8 @@ function Site() {
   const isRegistrationPage =
     location.pathname === routes.registration ||
     location.pathname === routes.corporateRegistration ||
-    location.pathname === routes.sellerUpgrade;
+    location.pathname === routes.sellerUpgrade ||
+    location.pathname === ADMIN_SECRET_SLUG;
 
   function openFeature(feature: DevelopmentFeature) {
     if (feature === "registration" || feature === "sellerRegistration") {
@@ -51,8 +63,16 @@ function Site() {
   const previousLocationKey = useRef(location.key);
 
   useEffect(() => {
-    document.title =
-      pageTitles[location.pathname] ?? "Página não encontrada | SafraDireta";
+    if (location.pathname.startsWith("/anuncios/") && location.pathname.endsWith("/editar")) {
+      document.title = "Editar Anúncio | SafraDireta";
+    } else if (location.pathname.startsWith("/anuncios/")) {
+      document.title = "Ficha Técnica do Lote | SafraDireta";
+    } else if (location.pathname.startsWith("/produtor/")) {
+      document.title = "Vitrine do Produtor | SafraDireta";
+    } else {
+      document.title =
+        pageTitles[location.pathname] ?? "Página não encontrada | SafraDireta";
+    }
     if (previousLocationKey.current !== location.key) {
       window.scrollTo({ top: 0, behavior: "instant" });
       mainRef.current?.focus({ preventScroll: true });
@@ -65,9 +85,11 @@ function Site() {
       <a className="skip-link" href="#main-content">
         Pular para o conteúdo
       </a>
+      <AdminBar />
       {!isRegistrationPage && <Header key={location.pathname} onOpenDialog={openFeature} />}
       <main id="main-content" ref={mainRef} tabIndex={-1}>
         <Routes>
+          <Route path={ADMIN_SECRET_SLUG} element={<AdminDashboardPage />} />
           <Route path={routes.registration} element={<RegistrationPage onOpenDialog={openFeature} />} />
           <Route path={routes.sellerUpgrade} element={<SellerUpgradePage />} />
           <Route path={routes.profile} element={<ProfilePage onOpenDialog={openFeature} />} />
@@ -76,16 +98,12 @@ function Site() {
             path={routes.home}
             element={<HomePage onOpenDialog={openFeature} />}
           />
-          <Route
-            path={routes.market}
-            element={
-              <DevelopmentPage
-                title="Um mercado cheio de possibilidades."
-                description="Estamos preparando o espaço onde você encontrará todos os lotes. Em breve, novas ofertas vão conectar o campo a bons negócios."
-                onOpenDialog={openFeature}
-              />
-            }
-          />
+          <Route path={routes.market} element={<MarketPage />} />
+          <Route path={routes.createAd} element={<AnimalAdCreatePage onOpenDialog={openFeature} />} />
+          <Route path={routes.myAds} element={<MyAdsPage onOpenDialog={openFeature} />} />
+          <Route path={routes.adEdit} element={<AdEditPage onOpenDialog={openFeature} />} />
+          <Route path="/anuncios/:id" element={<AdDetailPage />} />
+          <Route path="/produtor/:id" element={<PublicProducerProfilePage />} />
           <Route
             path={routes.producers}
             element={

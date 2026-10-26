@@ -63,7 +63,8 @@ export function Header({
           aria-label="SafraDireta — início"
           onClick={closeMenus}
         >
-          Safra<span>Direta</span>
+          <Icon name="leaf" className="brand__icon" />
+          SafraDireta
           <span className="brand__label">Mercado</span>
         </Link>
         <button

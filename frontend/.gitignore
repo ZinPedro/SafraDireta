@@ -1,23 +1,32 @@
+# Dependências e compilação
+node_modules/
+dist/
+dist-ssr/
+*.tsbuildinfo
+
+# Variáveis de ambiente e credenciais
+.env
+.env.*
+*.local
+!.env.example
+
 # Logs
-logs
+logs/
 *.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
-lerna-debug.log*
 
-node_modules
-dist
-dist-ssr
-*.local
-docs
+# Documentação interna local
+docs/
 
-# Editor directories and files
+# Editor e Sistema Operacional
 .vscode/*
 !.vscode/extensions.json
-.idea
+.idea/
 .DS_Store
+Thumbs.db
 *.suo
 *.ntvs*
 *.njsproj

@@ -1,10 +1,12 @@
 """Dependencias reutilizaveis das rotas (equivalente a middlewares no Express)."""
+from uuid import UUID
+
 from fastapi import Depends
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from psycopg import Connection
 
 from app.database import get_connection
-from app.errors import nao_autenticado, proibido
+from app.errors import nao_autenticado, nao_encontrado, proibido
 from app.security import hash_token
 
 # auto_error=False: quem decide a resposta de erro somos nos (formato padrao).
@@ -78,3 +80,25 @@ def vendedor_habilitado(
         )
 
     return atual
+
+
+def anuncio_do_dono(
+    anuncio_id: UUID,
+    atual: dict = Depends(vendedor_habilitado),
+    conn: Connection = Depends(get_connection),
+) -> dict:
+    """Rotas com {anuncio_id}: so o vendedor dono do anuncio passa.
+
+    Devolve o anuncio (id, vendedor_id, estado_comercial, versao) para a rota usar.
+    """
+    anuncio = conn.execute(
+        """SELECT id, vendedor_id, estado_comercial, versao
+           FROM safradireta.anuncio WHERE id = %s""",
+        (anuncio_id,),
+    ).fetchone()
+
+    if anuncio is None:
+        raise nao_encontrado("Anúncio não encontrado.")
+    if anuncio["vendedor_id"] != atual["conta_id"]:
+        raise proibido("Este anúncio pertence a outro vendedor.")
+    return anuncio

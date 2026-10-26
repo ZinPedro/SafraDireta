@@ -1,9 +1,14 @@
 """Erros da aplicacao e formato padrao de resposta de erro."""
+import logging
+
 from fastapi import FastAPI, Request
 from fastapi.exception_handlers import http_exception_handler
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from psycopg.errors import UniqueViolation
 from starlette.exceptions import HTTPException as StarletteHTTPException
+
+_log = logging.getLogger("safradireta")
 
 
 class ErroApp(Exception):
@@ -78,6 +83,18 @@ _CAMPOS_PJ = {
 }
 
 
+# Rede de seguranca para duas requisicoes simultaneas que furam a checagem previa:
+# o banco barra pela restricao de unicidade e aqui viramos um 409 no formato padrao.
+_UNICIDADES = {
+    "uq_perfil_pf_cpf": ("CPF ja cadastrado.", {"cpf": "CPF ja cadastrado."}),
+    "empresa_cnpj_key": ("CNPJ ja cadastrado.", {"cnpj": "Este CNPJ ja esta cadastrado."}),
+    "conta_email_acesso_key": ("Email ja cadastrado.", {"email": "Este email ja esta cadastrado."}),
+}
+
+
+_TIPOS_DE_FORMULARIO = {"ANIMAL", "GRAOS"}
+
+
 def _nome_do_campo(caminho: list[str]) -> str:
     if len(caminho) == 2:
         if tuple(caminho) in _CAMPOS_PJ:
@@ -97,8 +114,23 @@ def registrar_handlers(app: FastAPI) -> None:
         campos = {}
         for erro in exc.errors():
             caminho = [str(p) for p in erro["loc"] if p not in ("body", "query", "path")]
+            if caminho and caminho[0] in _TIPOS_DE_FORMULARIO:  # etiqueta da uniao, nao e um campo
+                caminho = caminho[1:]
             campos[_nome_do_campo(caminho)] = _mensagem_pt(erro)
         return _resposta(422, "DADOS_INVALIDOS", "Dados inválidos.", campos)
+
+    @app.exception_handler(UniqueViolation)
+    async def _tratar_unicidade(request: Request, exc: UniqueViolation):
+        mensagem, campos = _UNICIDADES.get(
+            exc.diag.constraint_name or "", ("Dados ja cadastrados.", {})
+        )
+        return _resposta(409, "CONFLITO", mensagem, campos)
+
+    @app.exception_handler(Exception)
+    async def _tratar_erro_inesperado(request: Request, exc: Exception):
+        # Registra o detalhe so no log do servidor; o cliente nunca ve stack trace.
+        _log.error("Erro inesperado em %s %s", request.method, request.url.path, exc_info=exc)
+        return _resposta(500, "ERRO_INTERNO", "Erro interno. Tente novamente mais tarde.")
 
     @app.exception_handler(StarletteHTTPException)
     async def _tratar_http(request: Request, exc: StarletteHTTPException):

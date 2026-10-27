@@ -102,3 +102,13 @@ def anuncio_do_dono(
     if anuncio["vendedor_id"] != atual["conta_id"]:
         raise proibido("Este anúncio pertence a outro vendedor.")
     return anuncio
+
+def exigir_admin(
+    atual: dict = Depends(conta_autenticada)
+) -> dict:
+    """Permite acesso apenas a contas administrativas (painel interno)."""
+    
+    if atual["tipo"] != "ADMIN":
+        raise proibido("Acesso negado. Requer privilégios de administrador.")
+        
+    return atual

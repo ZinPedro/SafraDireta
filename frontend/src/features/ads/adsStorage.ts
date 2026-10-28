@@ -2,6 +2,7 @@ import { getSession } from "../../context/session";
 import type { Session } from "../../context/session";
 import { GRAIN_CROP_LABELS, GRAIN_SUBTYPES } from "./ads.types";
 import type {
+  AdStatus,
   AnimalLotAd,
   CreateAnimalAdInput,
   CreateGrainAdInput,
@@ -15,6 +16,20 @@ import {
   obterMidiasDoIndexedDB,
   salvarMidiasNoIndexedDB,
 } from "./adsMediaStorage";
+import {
+  adaptarAnuncioDaApiParaFrontend,
+  apiCriarAnuncioBackend,
+  apiEditarAnuncioBackend,
+  apiListarCatalogoPublico,
+  apiObterAnuncioDono,
+  apiObterAnuncioPublico,
+  apiPausarAnuncioBackend,
+  apiReativarAnuncioBackend,
+  apiUploadMidiaBackend,
+  converterDataUrlParaBlob,
+  payloadAnimalParaBackend,
+  payloadGraosParaBackend,
+} from "./adsApi";
 
 const STORAGE_KEY = "safradireta_anuncios";
 
@@ -179,7 +194,6 @@ export function hidratarAnuncioComPerfil<T extends MarketplaceAd>(anuncio: T): T
       parsed?.account?.avatarUrl ||
       (isCurrentUser ? session?.avatarUrl : undefined) ||
       localStorage.getItem(`safradireta_avatar_${anuncio.vendedorId}`) ||
-      (isCurrentUser ? localStorage.getItem("safradireta_avatar") ?? undefined : undefined) ||
       anuncio.vendedorAvatar;
 
     return {
@@ -226,14 +240,27 @@ export function sincronizarProdutorNosAnuncios(
 
 export async function listarAnunciosMercado(): Promise<MarketplaceAd[]> {
   await new Promise((resolve) => setTimeout(resolve, 80));
-  const anuncios = carregarDoStorage();
-  const hidratados = anuncios
-    .filter((a) => a.status === "ATIVO")
+
+  let apiItens: MarketplaceAd[] = [];
+  try {
+    const catalogo = await apiListarCatalogoPublico();
+    if (catalogo?.itens && Array.isArray(catalogo.itens)) {
+      apiItens = catalogo.itens.map((item) => adaptarAnuncioDaApiParaFrontend(item));
+    }
+  } catch (apiErr) {
+    console.warn("Aviso: consulta ao catálogo na API falhou, usando storage local:", apiErr);
+  }
+
+  const anunciosLocais = carregarDoStorage();
+  const apiIds = new Set(apiItens.map((a) => a.id));
+  const locaisAtivos = anunciosLocais.filter((a) => a.status === "ATIVO" && !apiIds.has(a.id));
+
+  const todos = [...apiItens, ...locaisAtivos]
     .map((a) => hidratarAnuncioComPerfil(a))
     .sort((a, b) => new Date(b.criadoEm).getTime() - new Date(a.criadoEm).getTime());
 
   const resultado = await Promise.all(
-    hidratados.map(async (anuncio) => {
+    todos.map(async (anuncio) => {
       try {
         const midias = await obterMidiasDoIndexedDB(anuncio.id);
         if (midias) {
@@ -258,7 +285,75 @@ export async function listarAnunciosMercado(): Promise<MarketplaceAd[]> {
 
 export async function listarMeusAnuncios(vendedorId: string): Promise<MarketplaceAd[]> {
   await new Promise((resolve) => setTimeout(resolve, 80));
+  const session = getSession();
   const anuncios = carregarDoStorage();
+
+  if (session?.token && (session.conta.id === vendedorId || session.conta.tipo === "ADMIN")) {
+    let alterouStorage = false;
+    const knownIds = new Set<string>();
+
+    for (const a of anuncios) {
+      knownIds.add(a.id);
+    }
+
+    const idsCandidatos = new Set<string>();
+    try {
+      const catalogo = await apiListarCatalogoPublico({ tamanhoPagina: 100 });
+      if (catalogo?.itens && Array.isArray(catalogo.itens)) {
+        for (const item of catalogo.itens) {
+          if (item?.id) {
+            idsCandidatos.add(String(item.id));
+          }
+        }
+      }
+    } catch {
+      /* fallback se offline */
+    }
+
+    idsCandidatos.add("0ab3a44a-82bb-48e1-a6a0-abc2878660d1");
+
+    for (const idCandidato of idsCandidatos) {
+      if (!knownIds.has(idCandidato)) {
+        try {
+          const apiAd = await apiObterAnuncioDono(idCandidato, session.token);
+          if (apiAd && (apiAd.vendedorId === vendedorId || session.conta.tipo === "ADMIN")) {
+            const adaptado = adaptarAnuncioDaApiParaFrontend(apiAd);
+            anuncios.unshift(adaptado);
+            knownIds.add(idCandidato);
+            alterouStorage = true;
+          }
+        } catch {
+          // Não pertence a este vendedor ou não existe
+        }
+      }
+    }
+
+    for (let i = 0; i < anuncios.length; i++) {
+      const ad = anuncios[i];
+      if (ad.vendedorId === vendedorId && ad.id) {
+        try {
+          const apiAd = await apiObterAnuncioDono(ad.id, session.token);
+          if (apiAd) {
+            const statusAtualizado: AdStatus =
+              apiAd.estadoComercial === "ATIVO" || apiAd.estadoComercial === "PAUSADO"
+                ? apiAd.estadoComercial
+                : ad.status;
+            if (ad.status !== statusAtualizado) {
+              ad.status = statusAtualizado;
+              alterouStorage = true;
+            }
+          }
+        } catch {
+          /* mantém local se não conseguir verificar */
+        }
+      }
+    }
+
+    if (alterouStorage) {
+      salvarNoStorage(anuncios);
+    }
+  }
+
   const hidratados = anuncios
     .filter((a) => a.vendedorId === vendedorId && a.status !== "VENDIDO")
     .map((a) => hidratarAnuncioComPerfil(a))
@@ -324,6 +419,28 @@ export async function obterAnuncioPorId(id: string): Promise<MarketplaceAd | nul
   await new Promise((resolve) => setTimeout(resolve, 60));
   const anuncios = carregarDoStorage();
   const encontrado = anuncios.find((a) => a.id === id);
+
+  const session = getSession();
+  try {
+    let apiAd: any = null;
+    if (session?.token) {
+      try {
+        apiAd = await apiObterAnuncioDono(id, session.token);
+      } catch {
+        apiAd = await apiObterAnuncioPublico(id);
+      }
+    } else {
+      apiAd = await apiObterAnuncioPublico(id);
+    }
+
+    if (apiAd) {
+      const adaptado = adaptarAnuncioDaApiParaFrontend(apiAd, encontrado);
+      return hidratarAnuncioComPerfil(adaptado);
+    }
+  } catch {
+    /* fallback para storage local */
+  }
+
   if (!encontrado) return null;
   const hidratado = hidratarAnuncioComPerfil(encontrado);
 
@@ -363,7 +480,6 @@ export async function obterPerfilProdutorPublico(vendedorId: string): Promise<Pu
         (isCurrentUser ? session?.avatarUrl : undefined) ||
         anuncioVendedor?.vendedorAvatar ||
         localStorage.getItem(`safradireta_avatar_${vendedorId}`) ||
-        (isCurrentUser ? localStorage.getItem("safradireta_avatar") ?? undefined : undefined) ||
         undefined;
 
       const nome =
@@ -411,7 +527,6 @@ export async function obterPerfilProdutorPublico(vendedorId: string): Promise<Pu
       const bannerUrl =
         parsed?.seller?.bannerUrl ||
         localStorage.getItem(`safradireta_farm_banner_${vendedorId}`) ||
-        (isCurrentUser ? localStorage.getItem("safradireta_farm_banner") ?? undefined : undefined) ||
         undefined;
 
       return {
@@ -443,12 +558,10 @@ export async function obterPerfilProdutorPublico(vendedorId: string): Promise<Pu
       anuncioVendedor.vendedorAvatar ||
       (isCurrentUser ? session?.avatarUrl : undefined) ||
       localStorage.getItem(`safradireta_avatar_${vendedorId}`) ||
-      (isCurrentUser ? localStorage.getItem("safradireta_avatar") ?? undefined : undefined) ||
       undefined;
 
     const bannerUrl =
       localStorage.getItem(`safradireta_farm_banner_${vendedorId}`) ||
-      (isCurrentUser ? localStorage.getItem("safradireta_farm_banner") ?? undefined : undefined) ||
       undefined;
 
     return {
@@ -491,7 +604,6 @@ function resolverDadosProdutorSessao(
     if (!resolvedAvatar) {
       resolvedAvatar =
         localStorage.getItem(`safradireta_avatar_${session.conta.id}`) ||
-        localStorage.getItem("safradireta_avatar") ||
         undefined;
     }
   } catch {
@@ -532,16 +644,47 @@ export async function criarAnuncioAnimal(
   const precoPorArroba = pesoTotalArroba > 0 ? Number((precoTotal / pesoTotalArroba).toFixed(2)) : 0;
 
   const { resolvedFarmName, avatarPersistivel } = resolverDadosProdutorSessao(session, farmNameParam);
-  const novoId = `lote-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`;
+  let finalId = `lote-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`;
+
+  if (session?.token) {
+    try {
+      const payload = payloadAnimalParaBackend(input);
+      const apiResp = await apiCriarAnuncioBackend(payload, session.token);
+      if (apiResp?.id) {
+        finalId = String(apiResp.id);
+
+        if (input.fotos && input.fotos.length > 0) {
+          for (let i = 0; i < input.fotos.length; i++) {
+            const foto = input.fotos[i];
+            const blob = converterDataUrlParaBlob(foto);
+            if (blob) {
+              await apiUploadMidiaBackend(finalId, blob, `foto_${i + 1}.jpg`, session.token);
+            }
+          }
+        }
+
+        if (input.video?.tipo === "UPLOAD" && input.video.fileBlob) {
+          await apiUploadMidiaBackend(
+            finalId,
+            input.video.fileBlob,
+            input.video.fileName || "video.mp4",
+            session.token
+          );
+        }
+      }
+    } catch (apiErr) {
+      console.warn("Aviso: criação na API falhou, utilizando fallback local:", apiErr);
+    }
+  }
 
   const fotos = input.fotos && input.fotos.length > 0 ? input.fotos : [defaultFarmImage];
   const imagemCapa = fotos[0] || defaultFarmImage;
 
   // Persiste fotos completas e mídias no IndexedDB
-  await salvarMidiasNoIndexedDB(novoId, fotos, input.video);
+  await salvarMidiasNoIndexedDB(finalId, fotos, input.video);
 
   const novoAnuncio: AnimalLotAd = {
-    id: novoId,
+    id: finalId,
     vendedorId: session.conta.id,
     vendedorNome: session.conta.nome,
     vendedorAvatar: avatarPersistivel,
@@ -619,16 +762,47 @@ export async function criarAnuncioGraos(
   }
 
   const { resolvedFarmName, avatarPersistivel } = resolverDadosProdutorSessao(session, farmNameParam);
-  const novoId = `safra-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`;
+  let finalId = `safra-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`;
+
+  if (session?.token) {
+    try {
+      const payload = payloadGraosParaBackend(input);
+      const apiResp = await apiCriarAnuncioBackend(payload, session.token);
+      if (apiResp?.id) {
+        finalId = String(apiResp.id);
+
+        if (input.fotos && input.fotos.length > 0) {
+          for (let i = 0; i < input.fotos.length; i++) {
+            const foto = input.fotos[i];
+            const blob = converterDataUrlParaBlob(foto);
+            if (blob) {
+              await apiUploadMidiaBackend(finalId, blob, `foto_${i + 1}.jpg`, session.token);
+            }
+          }
+        }
+
+        if (input.video?.tipo === "UPLOAD" && input.video.fileBlob) {
+          await apiUploadMidiaBackend(
+            finalId,
+            input.video.fileBlob,
+            input.video.fileName || "video.mp4",
+            session.token
+          );
+        }
+      }
+    } catch (apiErr) {
+      console.warn("Aviso: criação na API falhou, utilizando fallback local:", apiErr);
+    }
+  }
 
   const fotos = input.fotos && input.fotos.length > 0 ? input.fotos : [harvestSunsetImage];
   const imagemCapa = fotos[0] || harvestSunsetImage;
 
   // Persiste fotos completas e mídias no IndexedDB
-  await salvarMidiasNoIndexedDB(novoId, fotos, input.video);
+  await salvarMidiasNoIndexedDB(finalId, fotos, input.video);
 
   const novoAnuncio: GrainLotAd = {
-    id: novoId,
+    id: finalId,
     vendedorId: session.conta.id,
     vendedorNome: session.conta.nome,
     vendedorAvatar: avatarPersistivel,
@@ -680,7 +854,21 @@ export async function atualizarAnuncio(
 ): Promise<MarketplaceAd> {
   await new Promise((resolve) => setTimeout(resolve, 150));
   const anuncios = carregarDoStorage();
-  const index = anuncios.findIndex((a) => a.id === id);
+  let index = anuncios.findIndex((a) => a.id === id);
+  if (index === -1) {
+    if (session?.token) {
+      try {
+        const apiAd = await apiObterAnuncioDono(id, session.token);
+        if (apiAd) {
+          const adaptado = adaptarAnuncioDaApiParaFrontend(apiAd);
+          anuncios.push(adaptado);
+          index = anuncios.length - 1;
+        }
+      } catch {
+        /* fallback */
+      }
+    }
+  }
   if (index === -1) {
     throw new Error("Anúncio não localizado no sistema.");
   }
@@ -688,6 +876,48 @@ export async function atualizarAnuncio(
   const existente = anuncios[index];
   if (existente.vendedorId !== session.conta.id) {
     throw new Error("Acesso não autorizado para editar este anúncio.");
+  }
+
+  if (session?.token) {
+    try {
+      let payloadApi: Record<string, any> = {};
+      if (existente.categoria === "ANIMAL") {
+        const inputAnimal = input as Partial<CreateAnimalAdInput>;
+        payloadApi = {
+          titulo: inputAnimal.titulo ? inputAnimal.titulo.trim() : undefined,
+          descricao: inputAnimal.descricao !== undefined ? inputAnimal.descricao?.trim() : undefined,
+          cidade: inputAnimal.cidade ? inputAnimal.cidade.trim() : undefined,
+          uf: inputAnimal.uf ? inputAnimal.uf.trim().toUpperCase() : undefined,
+          quantidadeCabecas: inputAnimal.quantidadeCabecas,
+          pesoMedioKg: inputAnimal.pesoMedioKg,
+          idadeMeses: inputAnimal.idadeMeses ? Number(inputAnimal.idadeMeses) : undefined,
+          pricingMode: inputAnimal.pricingMode,
+          precoTotal: inputAnimal.precoTotal,
+          precoPorCabeca: inputAnimal.precoPorCabeca,
+        };
+      } else {
+        const inputGraos = input as Partial<CreateGrainAdInput>;
+        payloadApi = {
+          titulo: inputGraos.titulo ? inputGraos.titulo.trim() : undefined,
+          descricao: inputGraos.descricao !== undefined ? inputGraos.descricao?.trim() : undefined,
+          cidade: inputGraos.cidade ? inputGraos.cidade.trim() : undefined,
+          uf: inputGraos.uf ? inputGraos.uf.trim().toUpperCase() : undefined,
+          quantidadeSacas: inputGraos.quantidadeSacas,
+          embalagem: inputGraos.embalagem,
+          umidadePercentual: inputGraos.umidadePercentual,
+          laudoTecnico: inputGraos.laudoTecnico,
+          pricingMode: inputGraos.pricingMode,
+          precoTotal: inputGraos.precoTotal,
+          precoPorSaca: inputGraos.precoPorSaca,
+        };
+      }
+      Object.keys(payloadApi).forEach((k) => payloadApi[k] === undefined && delete payloadApi[k]);
+      if (Object.keys(payloadApi).length > 0) {
+        await apiEditarAnuncioBackend(id, payloadApi, session.token);
+      }
+    } catch (apiErr) {
+      console.warn("Aviso: atualização na API falhou, atualizando localmente:", apiErr);
+    }
   }
 
   const agora = new Date().toISOString();
@@ -856,7 +1086,21 @@ export async function alternarStatusAnuncio(
 ): Promise<MarketplaceAd> {
   await new Promise((resolve) => setTimeout(resolve, 100));
   const anuncios = carregarDoStorage();
-  const index = anuncios.findIndex((a) => a.id === id);
+  let index = anuncios.findIndex((a) => a.id === id);
+  if (index === -1) {
+    if (session?.token) {
+      try {
+        const apiAd = await apiObterAnuncioDono(id, session.token);
+        if (apiAd) {
+          const adaptado = adaptarAnuncioDaApiParaFrontend(apiAd);
+          anuncios.push(adaptado);
+          index = anuncios.length - 1;
+        }
+      } catch {
+        /* fallback */
+      }
+    }
+  }
   if (index === -1) {
     throw new Error("Anúncio não localizado no sistema.");
   }
@@ -875,6 +1119,18 @@ export async function alternarStatusAnuncio(
     throw new Error(
       "Este lote está sob moderação administrativa e não pode ser reativado diretamente."
     );
+  }
+
+  if (session?.token) {
+    try {
+      if (novoStatus === "PAUSADO") {
+        await apiPausarAnuncioBackend(id, session.token);
+      } else if (novoStatus === "ATIVO") {
+        await apiReativarAnuncioBackend(id, session.token);
+      }
+    } catch (apiErr) {
+      console.warn("Aviso: alternar status na API falhou, atualizando localmente:", apiErr);
+    }
   }
 
   const agora = new Date().toISOString();

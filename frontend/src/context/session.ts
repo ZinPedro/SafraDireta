@@ -97,9 +97,14 @@ function read(): Session | null {
       estado = null;
       localStorage.removeItem(VENDEDOR_KEY);
     }
+    try {
+      localStorage.removeItem(AVATAR_KEY);
+    } catch {
+      /* ignore */
+    }
+    const userAvatarKey = parsed.id ? `${AVATAR_KEY}_${parsed.id}` : null;
     const avatar =
-      (parsed.id ? localStorage.getItem(`${AVATAR_KEY}_${parsed.id}`) : null) ??
-      localStorage.getItem(AVATAR_KEY) ??
+      (userAvatarKey ? localStorage.getItem(userAvatarKey) : null) ??
       parsed.avatar_url ??
       parsed.avatarUrl ??
       undefined;

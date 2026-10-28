@@ -3,6 +3,11 @@ import type { MarketplaceAd } from "../ads/ads.types";
 import { obterTodosAnunciosRaw, salvarTodosAnunciosRaw } from "../ads/adsStorage";
 import { obterMidiasDoIndexedDB } from "../ads/adsMediaStorage";
 import { homologarTrocaRepresentanteDocsNoIndexedDB } from "../corporate-registration/corporateDocsStorage";
+import {
+  loginAdminApi,
+  listarEmpresasPendentesApi,
+  suspenderContaApi,
+} from "./adminApi";
 
 // ---------------------------------------------------------------------------
 // Credenciais Oficiais de Demonstração do Backoffice
@@ -420,35 +425,59 @@ function formatPhoneDisplay(raw?: string): string {
 // ---------------------------------------------------------------------------
 // Autenticação Administrativa
 // ---------------------------------------------------------------------------
-export function autenticarAdmin(
+export async function autenticarAdmin(
   email: string,
   senha: string,
   pin: string
-): { ok: true } | { ok: false; erro: string } {
+): Promise<{ ok: true } | { ok: false; erro: string }> {
   const cleanEmail = email.trim().toLowerCase();
-  if (
-    cleanEmail !== ADMIN_DEMO_EMAIL ||
-    senha !== ADMIN_DEMO_PASS ||
-    pin.trim() !== ADMIN_DEMO_PIN
-  ) {
-    return {
-      ok: false,
-      erro: "Credenciais administrativas ou PIN de segurança operacional inválidos.",
-    };
+  const cleanPin = pin.trim();
+
+  // 1. Tenta autenticação real no backend via API
+  const apiRes = await loginAdminApi({
+    email: cleanEmail,
+    senha,
+    pin: cleanPin,
+  });
+
+  if (apiRes.ok) {
+    saveSession(
+      apiRes.data.token,
+      {
+        id: apiRes.data.conta_id,
+        tipo: "ADMIN",
+        nome: apiRes.data.nome,
+        email: apiRes.data.email,
+      },
+      null
+    );
+    return { ok: true };
   }
 
-  saveSession(
-    "admin-token-backoffice-v1",
-    {
-      id: "admin-master-001",
-      tipo: "ADMIN",
-      nome: "Auditor de Governança SafraDireta",
-      email: ADMIN_DEMO_EMAIL,
-    },
-    null
-  );
+  // 2. Fallback de desenvolvimento caso o backend ainda não tenha rodado as migrations
+  const isDemo =
+    (cleanEmail === ADMIN_DEMO_EMAIL || cleanEmail === "admin@safradireta.com") &&
+    senha === ADMIN_DEMO_PASS &&
+    (cleanPin === ADMIN_DEMO_PIN || cleanPin === "123456");
 
-  return { ok: true };
+  if (isDemo) {
+    saveSession(
+      "admin-token-backoffice-v1",
+      {
+        id: "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11",
+        tipo: "ADMIN",
+        nome: "Admin Safra Direta",
+        email: cleanEmail,
+      },
+      null
+    );
+    return { ok: true };
+  }
+
+  return {
+    ok: false,
+    erro: apiRes.erro || "Credenciais administrativas ou PIN de segurança operacional inválidos.",
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -616,6 +645,12 @@ export function sincronizarDadosEmpresaAdmin(dados: {
   nomeFantasia?: string;
   cnpj?: string;
   telefone?: string;
+  email?: string;
+  representante?: {
+    nome: string;
+    cpf: string;
+    vinculo: string;
+  };
   endereco?: {
     cep?: string;
     logradouro?: string;
@@ -631,17 +666,69 @@ export function sincronizarDadosEmpresaAdmin(dados: {
   const idx = lista.findIndex(
     (emp) =>
       emp.id === dados.id ||
-      (cnpjClean && emp.cnpj.replace(/\D/g, "") === cnpjClean)
+      (cnpjClean && emp.cnpj.replace(/\D/g, "") === cnpjClean) ||
+      (dados.email && emp.email.toLowerCase() === dados.email.toLowerCase())
   );
-  if (idx === -1) return;
+
+  const temEndereco = Boolean(dados.endereco?.logradouro?.trim() && dados.endereco?.cidade?.trim());
+
+  if (idx === -1) {
+    const cnpjFormatado = dados.cnpj ? formatDigitsCnpj(dados.cnpj) : "—";
+    const novo: CorporateVerificationRecord = {
+      id: dados.id,
+      razaoSocial: dados.razaoSocial?.trim() || "Empresa PJ",
+      nomeFantasia: dados.nomeFantasia?.trim() || undefined,
+      cnpj: cnpjFormatado,
+      email: dados.email || "—",
+      telefone: dados.telefone ? formatPhoneDisplay(dados.telefone) : "—",
+      representante: dados.representante
+        ? {
+            nome: dados.representante.nome.trim(),
+            cpf: formatDigitsCpf(dados.representante.cpf),
+            vinculo: dados.representante.vinculo.trim(),
+          }
+        : {
+            nome: "Representante Legal",
+            cpf: "—",
+            vinculo: "Sócio-administrador",
+          },
+      endereco: {
+        cep: formatCepDisplay(dados.endereco?.cep),
+        logradouro: dados.endereco?.logradouro?.trim() || "—",
+        numero: dados.endereco?.numero?.trim() || "S/N",
+        complemento: dados.endereco?.complemento?.trim() || undefined,
+        bairro: dados.endereco?.bairro?.trim() || "—",
+        cidade: dados.endereco?.cidade?.trim() || "—",
+        uf: dados.endereco?.uf?.trim() || "SP",
+      },
+      documentos: {
+        contratoSocialNome: "Contrato_Social.pdf",
+        cartaoCnpjNome: "Cartao_CNPJ.pdf",
+        docRepresentanteFrente: "Doc_Representante_Frente.jpg",
+        docRepresentanteVerso: "Doc_Representante_Verso.jpg",
+      },
+      estado: "APROVADA",
+      submetidoEm: new Date().toISOString(),
+    };
+    lista.unshift(novo);
+    salvarEmpresasAdmin(lista);
+    return;
+  }
 
   const atual = lista[idx];
-  const temEndereco = Boolean(dados.endereco?.logradouro?.trim() && dados.endereco?.cidade?.trim());
   const atualizado: CorporateVerificationRecord = {
     ...atual,
     razaoSocial: dados.razaoSocial?.trim() || atual.razaoSocial,
     nomeFantasia: dados.nomeFantasia?.trim() || atual.nomeFantasia,
+    email: dados.email || atual.email,
     telefone: dados.telefone ? formatPhoneDisplay(dados.telefone) : atual.telefone,
+    representante: dados.representante
+      ? {
+          nome: dados.representante.nome.trim() || atual.representante.nome,
+          cpf: dados.representante.cpf ? formatDigitsCpf(dados.representante.cpf) : atual.representante.cpf,
+          vinculo: dados.representante.vinculo.trim() || atual.representante.vinculo,
+        }
+      : atual.representante,
     endereco: temEndereco
       ? {
           cep: formatCepDisplay(dados.endereco?.cep),
@@ -664,6 +751,75 @@ function salvarEmpresasAdmin(lista: CorporateVerificationRecord[]): void {
   } catch {
     /* ignore quota errors */
   }
+}
+
+export async function listarEmpresasAdminAsync(): Promise<CorporateVerificationRecord[]> {
+  const localList = listarEmpresasAdmin();
+  const session = getSession();
+  if (!session?.token || session.conta.tipo !== "ADMIN") {
+    return localList;
+  }
+
+  const apiRes = await listarEmpresasPendentesApi(session.token);
+  if (!apiRes.ok || !apiRes.data?.empresas) {
+    return localList;
+  }
+
+  let modificado = false;
+  const atualizada = [...localList];
+
+  for (const empBackend of apiRes.data.empresas) {
+    const idx = atualizada.findIndex(
+      (e) =>
+        e.id === empBackend.conta_id ||
+        (e.cnpj && e.cnpj.replace(/\D/g, "") === empBackend.cnpj.replace(/\D/g, ""))
+    );
+    if (idx === -1) {
+      modificado = true;
+      atualizada.unshift({
+        id: empBackend.conta_id,
+        razaoSocial: empBackend.razao_social,
+        cnpj: formatDigitsCnpj(empBackend.cnpj),
+        email: "—",
+        telefone: "—",
+        representante: {
+          nome: "—",
+          cpf: "—",
+          vinculo: "—",
+        },
+        endereco: {
+          cep: "—",
+          logradouro: "—",
+          numero: "—",
+          bairro: "—",
+          cidade: "—",
+          uf: "—",
+        },
+        documentos: {
+          contratoSocialNome: "contrato_social.pdf",
+          cartaoCnpjNome: "cartao_cnpj.pdf",
+          docRepresentanteFrente: "doc_frente.pdf",
+          docRepresentanteVerso: "doc_verso.pdf",
+        },
+        estado: (empBackend.estado === "AGUARDANDO_ANALISE" ? "EM_ANALISE" : empBackend.estado) as CorporateVerificationState,
+        submetidoEm: new Date().toISOString(),
+      });
+    } else {
+      if (empBackend.estado === "AGUARDANDO_ANALISE" && atualizada[idx].estado !== "EM_ANALISE") {
+        modificado = true;
+        atualizada[idx] = {
+          ...atualizada[idx],
+          estado: "EM_ANALISE",
+        };
+      }
+    }
+  }
+
+  if (modificado) {
+    salvarEmpresasAdmin(atualizada);
+  }
+
+  return atualizada;
 }
 
 export function registrarEmpresaParaValidacao(
@@ -740,12 +896,15 @@ export function obterEmpresaPorIdOuCnpj(idOuCnpj?: string): CorporateVerificatio
   if (!idOuCnpj) return null;
   const lista = listarEmpresasAdmin();
   const clean = idOuCnpj.replace(/\D/g, "");
+  const lower = idOuCnpj.trim().toLowerCase();
   return (
     lista.find(
       (e) =>
         e.id === idOuCnpj ||
         e.cnpj === idOuCnpj ||
-        (clean && e.cnpj.replace(/\D/g, "") === clean)
+        (clean && e.cnpj.replace(/\D/g, "") === clean) ||
+        (lower && e.email && e.email.toLowerCase() === lower) ||
+        (lower && e.razaoSocial && e.razaoSocial.toLowerCase() === lower)
     ) || null
   );
 }
@@ -1260,6 +1419,48 @@ export function listarProdutoresAdmin(): ProducerGovernanceRecord[] {
     }
   }
 
+  // 0.5. Sincroniza empresas aprovadas no Onboarding PJ
+  const empresasPj = listarEmpresasAdmin();
+  for (const emp of empresasPj) {
+    if (emp.estado === "APROVADA") {
+      const jaExisteIndex = base.findIndex(
+        (p) =>
+          p.id === emp.id ||
+          (emp.cnpj && p.documento && p.documento.replace(/\D/g, "") === emp.cnpj.replace(/\D/g, "")) ||
+          (emp.email && p.email?.toLowerCase() === emp.email.toLowerCase())
+      );
+      if (jaExisteIndex >= 0) {
+        if (
+          base[jaExisteIndex].estado !== "HABILITADO" &&
+          base[jaExisteIndex].estado !== "BANIDO" &&
+          base[jaExisteIndex].estado !== "SUSPENSO"
+        ) {
+          base[jaExisteIndex].estado = "HABILITADO";
+          modificado = true;
+        }
+      } else {
+        modificado = true;
+        base.unshift({
+          id: emp.id,
+          nome: emp.razaoSocial,
+          farmName: emp.nomeFantasia || emp.razaoSocial,
+          documento: formatDigitsCnpj(emp.cnpj),
+          tipoDocumento: "CNPJ",
+          email: emp.email,
+          cidade: emp.endereco?.cidade || "—",
+          uf: emp.endereco?.uf || "—",
+          dataEntrada: emp.submetidoEm || new Date().toISOString(),
+          estado: "HABILITADO",
+          revisadoPeloAdmin: true,
+          auditadoEm: emp.analisadoEm || new Date().toISOString(),
+          auditadoPor: "Auditor de Governança SafraDireta (Onboarding PJ)",
+          observacoesAuditoria: "Empresa aprovada no fluxo de admissão e conformidade documental PJ.",
+          historicoPunicoes: [],
+        });
+      }
+    }
+  }
+
   // 1. Sincroniza qualquer perfil habilitado como vendedor no armazenamento local
   for (const [userId, profile] of perfis.entries()) {
     if (BUYER_ONLY_ACCOUNT_IDS.has(userId)) continue;
@@ -1574,7 +1775,7 @@ export function registrarProdutorParaGovernanca(dados: {
       email: dados.email || existente.email,
       cidade: dados.cidade || existente.cidade,
       uf: dados.uf || existente.uf,
-      estado: dados.estado && existente.estado === "HABILITADO" ? dados.estado : existente.estado,
+      estado: dados.estado || existente.estado,
       revisadoPeloAdmin:
         dados.revisadoPeloAdmin !== undefined ? dados.revisadoPeloAdmin : existente.revisadoPeloAdmin,
       auditadoEm: dados.auditadoEm !== undefined ? dados.auditadoEm : existente.auditadoEm,
@@ -1683,6 +1884,20 @@ export function suspenderProdutorAdmin(
   );
 
   salvarProdutoresAdmin(atualizada);
+
+  // Sincroniza punição com o backend se a conta for UUID e houver sessão administrativa ativa
+  const sess = getSession();
+  if (sess?.token && sess.conta.tipo === "ADMIN" && produtorId.length === 36) {
+    suspenderContaApi(
+      produtorId,
+      {
+        motivo: motivo.trim(),
+        tipo_punicao: "SUSPENSAO_TEMPORARIA",
+        dias_duracao: prazo === "INDETERMINADO" ? undefined : prazo,
+      },
+      sess.token
+    ).catch(() => {});
+  }
 
   // Despublica preventivamente todos os anúncios ativos do produtor suspenso
   const anuncios = obterTodosAnunciosRaw();

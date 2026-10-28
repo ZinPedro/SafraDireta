@@ -182,8 +182,8 @@ def avaliar_documento_pj(
     # Verifica se o documento existe e ainda está pendente.
     doc = db.execute(
         """
-        SELECT id, estado
-        FROM safradireta.documento_empresa
+        SELECT id, status
+        FROM safradireta.documento_verificacao
         WHERE id = %s
         """,
         (documento_id,),
@@ -195,7 +195,7 @@ def avaliar_documento_pj(
             detail="Documento não encontrado.",
         )
 
-    if doc["estado"] != "PENDENTE":
+    if doc["status"] not in ("EM_ANALISE", "PENDENTE"):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Este documento já foi avaliado.",
@@ -204,18 +204,16 @@ def avaliar_documento_pj(
     # Atualiza o estado do documento.
     db.execute(
         """
-        UPDATE safradireta.documento_empresa
+        UPDATE safradireta.documento_verificacao
         SET
-            estado = %s,
+            status = %s,
             motivo_recusa = %s,
-            analisado_por = %s,
-            analisado_em = NOW()
+            atualizado_em = NOW()
         WHERE id = %s
         """,
         (
             payload.resultado,
             payload.motivo_recusa,
-            admin_id,
             documento_id,
         ),
     )
@@ -257,12 +255,12 @@ def suspender_conta_produtor(
     # Registra o histórico da punição.
     db.execute(
         """
-        INSERT INTO safradireta.punicao_governanca (
+        INSERT INTO safradireta.historico_punicao (
             conta_id,
-            aplicado_por,
+            autor_id,
             tipo,
             motivo,
-            dias_duracao
+            prazo_dias
         )
         VALUES (%s, %s, %s, %s, %s)
         """,

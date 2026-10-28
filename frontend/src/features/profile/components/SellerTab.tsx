@@ -250,6 +250,19 @@ export function SellerTab({ seller, onSave, onSaved }: {
     setSaving(false);
     if (result.ok) {
       setFeedback({ kind: "ok", text: result.message });
+      if (result.updatedProfile.seller) {
+        const s = result.updatedProfile.seller;
+        setValues({
+          farmName: s.farmName || "",
+          bio: s.bio || "",
+          city: s.city || "",
+          state: s.state || "",
+          publicPhone: formatPhone(phoneDigits(s.publicPhone || "")),
+          categories: (s.categories || []) as SellerCategory[],
+          transport: s.hasOwnTransport ? "own" : "buyer",
+          bannerUrl: s.bannerUrl || "",
+        });
+      }
       onSaved(result.updatedProfile);
     } else {
       setFeedback({ kind: "error", text: result.message });

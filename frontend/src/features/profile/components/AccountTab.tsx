@@ -16,6 +16,7 @@ import {
   obterStatusDocumentosEmpresa,
   obterStatusGovernancaProdutor,
   obterStatusDocumentosProdutor,
+  sincronizarDadosEmpresaAdmin,
 } from "../../admin/adminStorage";
 import type {
   CorporateDocMetadata,
@@ -38,22 +39,46 @@ export function AccountTab({ profile, onSave, onSaved }: {
   const isSeller = Boolean(profile.seller?.isHabilitado || vendedorEstado === "HABILITADO" || vendedorEstado === "SUSPENSO");
 
   // Sincronização do registro corporativo da empresa no Backoffice
-  const [empresa, setEmpresa] = useState<CorporateVerificationRecord | null>(() => {
-    return (
+  const resolveEmpresa = (): CorporateVerificationRecord | null => {
+    const existing =
       obterEmpresaPorIdOuCnpj(profile.account.id) ||
       obterEmpresaPorIdOuCnpj(profile.account.cpfCnpj) ||
       obterEmpresaPorIdOuCnpj(session?.conta.id) ||
-      obterEmpresaPorIdOuCnpj(session?.conta.email)
-    );
-  });
+      obterEmpresaPorIdOuCnpj(session?.conta.email) ||
+      obterEmpresaPorIdOuCnpj(profile.account.razaoSocial || profile.account.nome);
+    if (existing) return existing;
+    if (isPj) {
+      const rep = profile.representantes?.[0];
+      sincronizarDadosEmpresaAdmin({
+        id: profile.account.id || session?.conta.id || "",
+        razaoSocial: profile.account.razaoSocial || profile.account.nome || session?.conta.nome,
+        nomeFantasia: profile.account.nomeFantasia,
+        cnpj: profile.account.cpfCnpj,
+        email: profile.account.email || session?.conta.email,
+        telefone: profile.account.telefone,
+        endereco: profile.address,
+        representante: rep
+          ? {
+              nome: rep.nome,
+              cpf: rep.cpf,
+              vinculo: rep.vinculo,
+            }
+          : undefined,
+      });
+      return (
+        obterEmpresaPorIdOuCnpj(profile.account.id) ||
+        obterEmpresaPorIdOuCnpj(profile.account.cpfCnpj) ||
+        obterEmpresaPorIdOuCnpj(session?.conta.id) ||
+        null
+      );
+    }
+    return null;
+  };
+
+  const [empresa, setEmpresa] = useState<CorporateVerificationRecord | null>(resolveEmpresa);
 
   const refreshEmpresa = () => {
-    const emp =
-      obterEmpresaPorIdOuCnpj(profile.account.id) ||
-      obterEmpresaPorIdOuCnpj(profile.account.cpfCnpj) ||
-      obterEmpresaPorIdOuCnpj(session?.conta.id) ||
-      obterEmpresaPorIdOuCnpj(session?.conta.email);
-    setEmpresa(emp);
+    setEmpresa(resolveEmpresa());
   };
 
   // Sincronização do registro de governança do produtor individual (PF)
@@ -423,7 +448,7 @@ export function AccountTab({ profile, onSave, onSaved }: {
                   <input
                     id="profile-rep-nome-ro"
                     type="text"
-                    value={empresa?.representante.nome || "Não informado"}
+                    value={empresa?.representante.nome || profile.representantes?.[0]?.nome || "Não informado"}
                     readOnly
                     aria-readonly="true"
                   />
@@ -440,6 +465,8 @@ export function AccountTab({ profile, onSave, onSaved }: {
                       value={
                         empresa?.representante.cpf
                           ? formatCpf(empresa.representante.cpf)
+                          : profile.representantes?.[0]?.cpf
+                          ? formatCpf(profile.representantes[0].cpf)
                           : "—"
                       }
                       readOnly
@@ -454,7 +481,11 @@ export function AccountTab({ profile, onSave, onSaved }: {
                     <input
                       id="profile-rep-vinculo-ro"
                       type="text"
-                      value={empresa?.representante.vinculo || "Sócio-administrador"}
+                      value={
+                        empresa?.representante.vinculo ||
+                        profile.representantes?.[0]?.vinculo ||
+                        "Sócio-administrador"
+                      }
                       readOnly
                       aria-readonly="true"
                     />
@@ -651,6 +682,13 @@ export function AccountTab({ profile, onSave, onSaved }: {
           onClose={() => setCropRawUrl(null)}
           onConfirm={(croppedDataUrl) => {
             setAvatar(croppedDataUrl);
+            onSaved({
+              ...profile,
+              account: {
+                ...profile.account,
+                avatarUrl: croppedDataUrl,
+              },
+            });
             setCropRawUrl(null);
           }}
         />
@@ -688,7 +726,18 @@ export function AccountTab({ profile, onSave, onSaved }: {
                   representante: empresa.representante,
                   endereco: empresa.endereco,
                 }
-              : undefined
+              : {
+                  razaoSocial: profile.account.razaoSocial || profile.account.nome,
+                  cnpj: profile.account.cpfCnpj,
+                  representante: profile.representantes?.[0]
+                    ? {
+                        nome: profile.representantes[0].nome,
+                        cpf: profile.representantes[0].cpf,
+                        vinculo: profile.representantes[0].vinculo,
+                      }
+                    : undefined,
+                  endereco: profile.address,
+                }
           }
         />
       )}
@@ -722,13 +771,15 @@ export function AccountTab({ profile, onSave, onSaved }: {
       )}
 
       {/* Modal: Troca de Representante Legal */}
-      {showChangeRepModal && empresa && (
+      {showChangeRepModal && (
         <ChangeRepresentativeModal
           isOpen={true}
           onClose={() => setShowChangeRepModal(false)}
-          empresaId={empresa.id}
+          empresaId={empresa?.id || profile.account.id}
           cnpjClean={cnpjClean}
-          currentRepresentativeName={empresa.representante.nome}
+          currentRepresentativeName={
+            empresa?.representante.nome || profile.representantes?.[0]?.nome || "Representante Atual"
+          }
           onSuccess={() => {
             refreshEmpresa();
             setFeedback({

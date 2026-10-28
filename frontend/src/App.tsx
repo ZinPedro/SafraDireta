@@ -91,7 +91,7 @@ function Site() {
         <Routes>
           <Route path={ADMIN_SECRET_SLUG} element={<AdminDashboardPage />} />
           <Route path={routes.registration} element={<RegistrationPage onOpenDialog={openFeature} />} />
-          <Route path={routes.sellerUpgrade} element={<SellerUpgradePage />} />
+          <Route path={routes.sellerUpgrade} element={<SellerUpgradePage onOpenDialog={openFeature} />} />
           <Route path={routes.profile} element={<ProfilePage onOpenDialog={openFeature} />} />
           <Route path={routes.corporateRegistration} element={<CorporateRegistrationPage onOpenDialog={openFeature} />} />
           <Route

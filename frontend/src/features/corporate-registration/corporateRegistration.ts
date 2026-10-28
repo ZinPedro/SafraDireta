@@ -1,5 +1,4 @@
 import { getSession, saveSession } from "../../context/session";
-import { MOCK_API, mockDelay } from "../../dev/mockApi";
 import { registrarEmpresaParaValidacao } from "../admin/adminStorage";
 export interface CorporateRegistrationData {
   company: {
@@ -57,83 +56,6 @@ export const registerCorporateAccount: RegisterCorporateAccount = async (data: C
       message: currentSession.conta.tipo === "PF"
         ? "Você já está conectado em uma conta de Pessoa Física. Saia da sua conta antes de cadastrar uma empresa."
         : "Você já possui uma sessão ativa. Saia da sua conta antes de iniciar um novo cadastro corporativo.",
-    };
-  }
-
-  if (MOCK_API) {
-    await mockDelay();
-    const contaId = `mock-${data.access.email}`;
-    saveSession("mock-token", { id: contaId, tipo: "PJ", nome: data.company.razaoSocial, email: data.access.email }, null);
-    try {
-      const key = `safradireta_mock_profile:${contaId}`;
-      const stored = {
-        account: {
-          id: contaId,
-          tipo: "PJ",
-          nome: data.company.razaoSocial,
-          email: data.access.email,
-          cpfCnpj: data.company.cnpj,
-          telefone: data.access.telefone,
-        },
-        address: {
-          cep: data.address.cep,
-          logradouro: data.address.logradouro,
-          numero: data.address.numero,
-          complemento: data.address.complemento ?? "",
-          bairro: data.address.bairro,
-          cidade: data.address.cidade,
-          uf: data.address.uf,
-        },
-        representative: {
-          nome: data.representative.nome,
-          cpf: data.representative.cpf,
-          vinculo: data.representative.vinculo,
-        },
-        documents: {
-          fileNames: data.documents.fileNames,
-          representativeFrontFileName: data.documents.representativeFrontFileName,
-          representativeBackFileName: data.documents.representativeBackFileName,
-        },
-        createdAt: new Date().toISOString(),
-      };
-      localStorage.setItem(key, JSON.stringify(stored));
-      registrarEmpresaParaValidacao({
-        id: contaId,
-        razaoSocial: data.company.razaoSocial,
-        nomeFantasia: data.company.nomeFantasia,
-        naturezaJuridica: data.company.naturezaJuridica,
-        cnpj: formatCnpj(data.company.cnpj),
-        email: data.access.email,
-        telefone: formatPhone(data.access.telefone.replace(/^\+55/, "")),
-        representante: {
-          nome: data.representative.nome,
-          cpf: formatCpf(data.representative.cpf),
-          vinculo: data.representative.vinculo,
-        },
-        endereco: {
-          cep: formatCep(data.address.cep),
-          logradouro: data.address.logradouro,
-          numero: data.address.numero,
-          complemento: data.address.complemento,
-          bairro: data.address.bairro,
-          cidade: data.address.cidade,
-          uf: data.address.uf,
-        },
-        documentos: {
-          contratoSocialNome: data.documents.fileNames[0] || "Contrato_Social.pdf",
-          cartaoCnpjNome: data.documents.fileNames[1] || "Cartao_CNPJ_Receita.pdf",
-          docRepresentanteFrente: data.documents.representativeFrontFileName || "Doc_Representante_Frente.jpg",
-          docRepresentanteVerso: data.documents.representativeBackFileName || "Doc_Representante_Verso.jpg",
-        },
-      });
-    } catch {
-      /* no-op */
-    }
-    return {
-      ok: true,
-      status: "registered_pending_validation",
-      protocol: `SIM-${Date.now().toString(36).toUpperCase()}`,
-      message: "Simulação local: nenhuma conta foi realmente criada.",
     };
   }
 

@@ -28,6 +28,7 @@ import {
   indeferirTrocaRepresentanteAdmin,
   liberarAnuncioModeracao,
   listarEmpresasAdmin,
+  listarEmpresasAdminAsync,
   listarProdutoresAdmin,
   listarTodosAnunciosAdmin,
   listarTodosAnunciosAdminAsync,
@@ -108,6 +109,7 @@ export function AdminDashboardPage() {
   const [loginPass, setLoginPass] = useState("");
   const [loginPin, setLoginPin] = useState("");
   const [loginError, setLoginError] = useState<string | null>(null);
+  const [isAuthenticating, setIsAuthenticating] = useState(false);
 
   // Estado das Abas e Listas
   const [activeTab, setActiveTab] = useState<AdminTab>("EMPRESAS");
@@ -120,12 +122,17 @@ export function AdminDashboardPage() {
   );
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  // Carrega e hidrata mídias reais do IndexedDB (fotos de capa e anexos dos lotes)
+  // Carrega e hidrata mídias reais do IndexedDB (fotos de capa e anexos dos lotes) e empresas do backend
   useEffect(() => {
     let ativo = true;
     listarTodosAnunciosAdminAsync().then((lista) => {
       if (ativo && lista && lista.length > 0) {
         setAnuncios(lista);
+      }
+    });
+    listarEmpresasAdminAsync().then((lista) => {
+      if (ativo && lista && lista.length > 0) {
+        setEmpresas(lista);
       }
     });
     return () => {
@@ -309,6 +316,7 @@ export function AdminDashboardPage() {
 
   const refreshAllData = () => {
     setEmpresas(listarEmpresasAdmin());
+    listarEmpresasAdminAsync().then(setEmpresas);
     setAnuncios(listarTodosAnunciosAdmin());
     listarTodosAnunciosAdminAsync().then(setAnuncios);
     setProdutores(listarProdutoresAdmin());
@@ -317,15 +325,21 @@ export function AdminDashboardPage() {
   // ---------------------------------------------------------------------------
   // Handlers de Autenticação
   // ---------------------------------------------------------------------------
-  const handleAdminLogin = (e: FormEvent) => {
+  const handleAdminLogin = async (e: FormEvent) => {
     e.preventDefault();
-    const res = autenticarAdmin(loginEmail, loginPass, loginPin);
-    if (!res.ok) {
-      setLoginError(res.erro);
-      return;
-    }
+    if (isAuthenticating) return;
+    setIsAuthenticating(true);
     setLoginError(null);
-    refreshAllData();
+    try {
+      const res = await autenticarAdmin(loginEmail, loginPass, loginPin);
+      if (!res.ok) {
+        setLoginError(res.erro);
+        return;
+      }
+      refreshAllData();
+    } finally {
+      setIsAuthenticating(false);
+    }
   };
 
   const handleFillDemoCredentials = () => {
@@ -429,6 +443,7 @@ export function AdminDashboardPage() {
   const handleApproveCompany = (emp: CorporateVerificationRecord) => {
     const novaLista = aprovarEmpresaAdmin(emp.id);
     setEmpresas(novaLista);
+    setProdutores(listarProdutoresAdmin());
     showToast(`Empresa "${emp.razaoSocial}" aprovada e habilitada com sucesso.`);
   };
 
@@ -437,6 +452,7 @@ export function AdminDashboardPage() {
     if (!rejectCompanyTarget || rejectCompanyReason.trim().length < 10) return;
     const novaLista = recusarEmpresaAdmin(rejectCompanyTarget.id, rejectCompanyReason);
     setEmpresas(novaLista);
+    setProdutores(listarProdutoresAdmin());
     showToast(`Cadastro corporativo de "${rejectCompanyTarget.razaoSocial}" recusado.`);
     setRejectCompanyTarget(null);
     setRejectCompanyReason("");
@@ -844,8 +860,12 @@ export function AdminDashboardPage() {
               <Link to={routes.home} className="button button--ghost">
                 Voltar ao Site Público
               </Link>
-              <button type="submit" className="button button--primary">
-                Autenticar no Backoffice
+              <button
+                type="submit"
+                className="button button--primary"
+                disabled={isAuthenticating}
+              >
+                {isAuthenticating ? "Autenticando..." : "Autenticar no Backoffice"}
               </button>
             </div>
           </form>

@@ -273,14 +273,14 @@ export function HomePage({
             <br />O próximo capítulo da sua safra começa com uma conexão.
           </p>
           {session ? (
-            session.conta.tipo === "PJ" ? (
-              <Link className="button button--primary" to={routes.profile}>
-                Acessar perfil corporativo
-                <Icon name="arrow" />
-              </Link>
-            ) : session.vendedorEstado === "HABILITADO" ? (
+            session.vendedorEstado === "HABILITADO" ? (
               <Link className="button button--primary" to={`${routes.profile}?aba=produtor`}>
                 Minha vitrine de produtor
+                <Icon name="arrow" />
+              </Link>
+            ) : session.conta.tipo === "PJ" ? (
+              <Link className="button button--primary" to={routes.profile}>
+                Acessar perfil corporativo
                 <Icon name="arrow" />
               </Link>
             ) : (

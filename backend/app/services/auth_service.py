@@ -585,6 +585,20 @@ def editar_perfil(
                     ),
                 )
             else:
+                # Primeiro endereco da conta: nao inventamos valores, tudo precisa vir preenchido.
+                obrigatorios = {
+                    "cep": cep, "logradouro": logradouro, "numero": numero,
+                    "bairro": bairro, "cidade": cidade, "uf": uf,
+                }
+                faltando = {
+                    campo: "Informe este campo para cadastrar o endereço."
+                    for campo, valor in obrigatorios.items() if not valor
+                }
+                if faltando:
+                    raise invalido(
+                        "Para cadastrar o endereço, preencha todos os campos obrigatórios.",
+                        faltando,
+                    )
                 conn.execute(
                     """
                     INSERT INTO safradireta.endereco
@@ -594,12 +608,12 @@ def editar_perfil(
                     """,
                     (
                         atual["conta_id"],
-                        logradouro or "Não informado",
-                        numero or "S/N",
+                        logradouro,
+                        numero,
                         complemento,
                         bairro,
-                        cidade or "Não informado",
-                        uf or "SP",
+                        cidade,
+                        uf,
                         cep,
                     ),
                 )
@@ -653,6 +667,13 @@ def editar_perfil(
                         tuple(params),
                     )
                     campos_modificados.append("seller")
+
+        if campos_modificados:
+            # Garante a data de atualizacao em qualquer edicao (nome e telefone ja fazem isso).
+            conn.execute(
+                "UPDATE safradireta.conta SET atualizado_em = now() WHERE id = %s",
+                (atual["conta_id"],),
+            )
 
         _auditar(
             conn,
@@ -859,10 +880,17 @@ def consultar_perfil(conn: Connection, atual: dict) -> dict:
     return perfil
 
 
-def alterar_email(conn: Connection, atual: dict, dados: AlterarEmail) -> dict:
-    """Altera o email da conta apos confirmar a senha atual."""
+def alterar_email(conn: Connection, atual: dict, dados: AlterarEmail, ip: str = "desconhecido") -> dict:
+    """Altera o email da conta apos confirmar a senha atual.
+
+    Protecoes: limite de tentativas erradas da senha atual (por conta) e revogacao
+    das demais sessoes da conta, ja que o email e uma credencial de acesso.
+    """
 
     novo_email = str(dados.novo_email).strip().lower()
+    # Mesmo limitador do login, com uma chave propria por conta.
+    chave_limite = f"troca-email:{atual['conta_id']}"
+    ratelimit.verificar(chave_limite, ip)
 
     with conn.transaction():
         conta = conn.execute(
@@ -879,7 +907,10 @@ def alterar_email(conn: Connection, atual: dict, dados: AlterarEmail) -> dict:
             raise nao_autenticado()
 
         if not verificar_senha(dados.senha_atual, conta["senha_hash"]):
+            # O contador fica em memoria, entao nao e desfeito pelo rollback da transacao.
+            ratelimit.registrar_falha(chave_limite, ip)
             raise invalido("Senha atual incorreta.", {"senhaAtual": "Senha atual incorreta."})
+        ratelimit.limpar_email(chave_limite)
 
         if novo_email == conta["email_acesso"]:
             return {
@@ -904,13 +935,24 @@ def alterar_email(conn: Connection, atual: dict, dados: AlterarEmail) -> dict:
                 conn.execute(
                     """
                     UPDATE safradireta.conta
-                    SET email_acesso = %s
+                    SET email_acesso = %s,
+                        atualizado_em = now()
                     WHERE id = %s
                     """,
                     (novo_email, atual["conta_id"]),
                 )
         except UniqueViolation:
             raise conflito("Este email ja esta cadastrado.") from None
+
+        # Encerra todas as OUTRAS sessoes da conta; a atual continua valida.
+        revogadas = conn.execute(
+            """
+            UPDATE safradireta.sessao
+            SET revogada_em = now()
+            WHERE conta_id = %s AND id <> %s AND revogada_em IS NULL
+            """,
+            (atual["conta_id"], atual["sessao_id"]),
+        ).rowcount
 
         _auditar(
             conn,
@@ -919,6 +961,7 @@ def alterar_email(conn: Connection, atual: dict, dados: AlterarEmail) -> dict:
             "EMAIL_ALTERADO",
             "conta",
             atual["conta_id"],
+            {"sessoes_revogadas": revogadas},
         )
 
     return {

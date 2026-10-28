@@ -217,3 +217,74 @@ SafraDireta/
 ├── docker-compose.yml        # Orquestração de containers (branch Exec)
 └── README.md                 # Documentação principal da Sprint 1
 ```
+
+## Upload de fotos e vídeos — US012
+
+A API permite adicionar fotos e vídeos aos anúncios pela rota:
+
+`POST /api/vendedor/anuncios/{anuncio_id}/midias`
+
+A rota exige autenticação e permite o envio apenas pelo proprietário do anúncio.
+
+### Regras implementadas
+
+- Até 6 fotos por anúncio.
+- Até 1 vídeo por anúncio.
+- Fotos de até 10 MB.
+- Vídeos de até 30 MB.
+- Formatos de imagem: JPEG, PNG e WebP.
+- Formatos de vídeo: MP4, MOV e WebM.
+- A primeira foto é definida automaticamente como capa.
+- Anúncios vendidos não aceitam novas mídias.
+
+Esses limites devem ser confirmados com os requisitos da equipe.
+
+### Armazenamento
+
+Os arquivos são armazenados localmente em `backend/uploads/`.
+
+O caminho pode ser alterado pela variável de ambiente `UPLOAD_DIR`.
+
+Os metadados são registrados nas tabelas `safradireta.arquivo` e `safradireta.midia_anuncio`.
+
+O diretório de uploads não deve ser versionado no Git.
+
+### Dependências
+
+Instale as bibliotecas Python:
+
+```bash
+python -m pip install -r requirements.txt
+```
+
+Para validar vídeos, também é necessário instalar o FFmpeg, que inclui o FFprobe.
+
+macOS com Homebrew:
+
+```bash
+brew install ffmpeg
+```
+
+Ubuntu/Debian:
+
+```bash
+sudo apt install ffmpeg
+```
+
+Verifique a instalação:
+
+```bash
+ffprobe -version
+```
+
+Sem o FFprobe, o backend não consegue validar vídeos enviados.
+
+### Testes
+
+Execute os testes da US012:
+
+```bash
+python -m pytest tests/test_anuncios_midias.py -q --tb=short
+```
+
+Os testes utilizam diretórios temporários para não misturar seus arquivos com os uploads locais.

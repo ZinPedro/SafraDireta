@@ -31,6 +31,7 @@ export function ProfilePage({ onOpenDialog, onLoad = loadUserProfile, onUpdate =
   const tabRefs = useRef<Record<TabId, HTMLButtonElement | null>>({ conta: null, produtor: null, previa: null });
 
   const token = session?.token;
+  const vendedorEstado = session?.vendedorEstado;
   const [reloadKey, setReloadKey] = useState(0);
   useEffect(() => {
     if (!token) return;
@@ -46,7 +47,7 @@ export function ProfilePage({ onOpenDialog, onLoad = loadUserProfile, onUpdate =
       }
     });
     return () => { cancelled = true; };
-  }, [token, onLoad, reloadKey]);
+  }, [token, vendedorEstado, onLoad, reloadKey]);
 
   function retry() {
     setState("loading");
@@ -89,6 +90,17 @@ export function ProfilePage({ onOpenDialog, onLoad = loadUserProfile, onUpdate =
 
   const account = profile?.account;
   const displayName = account?.nome ?? session.conta.nome;
+  const isSuspendedSeller = session.vendedorEstado === "SUSPENSO";
+  const isBannedSeller = session.vendedorEstado === "BANIDO";
+  const isPendingSeller = session.vendedorEstado === "PENDENTE";
+
+  const badgeModClass = isSeller
+    ? "profile__badge--seller"
+    : isBannedSeller
+    ? "profile__badge--danger"
+    : isSuspendedSeller || isPendingSeller
+    ? "profile__badge--warning"
+    : "";
 
   return (
     <section className="container profile" aria-labelledby="profile-title">
@@ -97,8 +109,36 @@ export function ProfilePage({ onOpenDialog, onLoad = loadUserProfile, onUpdate =
         <div>
           <p className="eyebrow">Perfil</p>
           <h1 id="profile-title">{displayName}</h1>
-          <span className={`profile__badge ${isSeller ? "profile__badge--seller" : ""}`}>
-            {session.conta.tipo === "PJ" ? "Conta corporativa" : isSeller ? <><Icon name="leaf" /> Vendedor habilitado</> : "Comprador"}
+          <span className={`profile__badge ${badgeModClass}`}>
+            {session.conta.tipo === "ADMIN" ? (
+              "Administrador da Plataforma"
+            ) : session.conta.tipo === "PJ" ? (
+              isSeller ? (
+                <>
+                  <Icon name="leaf" /> Conta corporativa • Vendedor habilitado
+                </>
+              ) : isSuspendedSeller ? (
+                "Conta corporativa • Vendedor suspenso"
+              ) : isBannedSeller ? (
+                "Conta corporativa • Conta bloqueada"
+              ) : isPendingSeller ? (
+                "Conta corporativa • Em análise documental"
+              ) : (
+                "Conta corporativa"
+              )
+            ) : isSeller ? (
+              <>
+                <Icon name="leaf" /> Vendedor habilitado
+              </>
+            ) : isSuspendedSeller ? (
+              "Vendedor suspenso pela Moderação"
+            ) : isBannedSeller ? (
+              "Vendedor bloqueado"
+            ) : isPendingSeller ? (
+              "Vendedor em análise"
+            ) : (
+              "Comprador"
+            )}
           </span>
         </div>
       </header>
@@ -127,9 +167,9 @@ export function ProfilePage({ onOpenDialog, onLoad = loadUserProfile, onUpdate =
           )}
           <div className="profile__panel" role={tabs.length > 1 ? "tabpanel" : undefined} id={`profile-panel-${active}`}
             aria-labelledby={tabs.length > 1 ? `profile-tab-${active}` : undefined}>
-            {active === "conta" && <AccountTab profile={profile} onSave={onUpdate} onSaved={setProfile} />}
-            {active === "produtor" && profile.seller && <SellerTab seller={profile.seller} onSave={onUpdate} onSaved={setProfile} />}
-            {active === "previa" && <PublicPreviewTab profile={profile} />}
+            {active === "conta" && <AccountTab key={profile.account.id} profile={profile} onSave={onUpdate} onSaved={setProfile} />}
+            {active === "produtor" && profile.seller && <SellerTab key={profile.account.id} seller={profile.seller} onSave={onUpdate} onSaved={setProfile} />}
+            {active === "previa" && <PublicPreviewTab key={profile.account.id} profile={profile} />}
           </div>
         </>
       )}

@@ -2,7 +2,12 @@ import { useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { Icon } from "../../components/Icon";
 import { saveSession } from "../../context/session";
-import { MOCK_API, mockDelay } from "../../dev/mockApi";
+import { loadUserProfile } from "../profile/profile";
+import {
+  listarEmpresasAdmin,
+  obterStatusGovernancaProdutor,
+  removerProdutorDaGovernanca,
+} from "../admin/adminStorage";
 
 type LoginFormProps = {
   onPreview: () => void;
@@ -55,17 +60,6 @@ export function LoginForm({ onPreview, onRecovery, onRegister, authenticationErr
 
     setSubmitting(true);
     setAuthError(undefined);
-    if (MOCK_API) {
-      // Simulação de dev: e-mails com "vendedor" entram como vendedor habilitado.
-      await mockDelay(400);
-      const address = email.value.trim().toLowerCase();
-      const local = address.split("@")[0].replace(/[._-]+/g, " ").trim() || "Usuário";
-      const nome = local.replace(/\b\p{L}/gu, (c) => c.toUpperCase());
-      saveSession("mock-token", { id: `mock-${address}`, tipo: "PF", nome, email: address }, address.includes("vendedor") ? "HABILITADO" : null);
-      setSubmitting(false);
-      onPreview();
-      return;
-    }
     try {
       const response = await fetch("/api/auth/login", {
         method: "POST",
@@ -76,7 +70,43 @@ export function LoginForm({ onPreview, onRecovery, onRegister, authenticationErr
       if (response.ok) {
         const data = await response.json();
         if (data.token) {
-          saveSession(data.token, data.conta, data.vendedor?.estado ?? null, data.conta?.avatar_url ?? data.conta?.avatarUrl);
+          let estadoVendedor = data.vendedor?.estado ?? null;
+          try {
+            if (data.conta?.id) {
+              if (data.conta.tipo === "PF" && !estadoVendedor) {
+                removerProdutorDaGovernanca(data.conta.id);
+              } else {
+                const statusGov = obterStatusGovernancaProdutor(data.conta.id);
+                if (statusGov?.estado === "BANIDO") {
+                  estadoVendedor = "BANIDO";
+                } else if (statusGov?.estado === "SUSPENSO") {
+                  estadoVendedor = "SUSPENSO";
+                } else if (data.conta.tipo === "PJ") {
+                  const pjEmpresas = listarEmpresasAdmin();
+                  const pjAprovada = pjEmpresas.find(
+                    (e) =>
+                      (e.id === data.conta.id ||
+                        (e.cnpj &&
+                          data.conta.cpf_cnpj &&
+                          e.cnpj.replace(/\D/g, "") === data.conta.cpf_cnpj.replace(/\D/g, ""))) &&
+                      e.estado === "APROVADA"
+                  );
+                  if (pjAprovada || statusGov?.estado === "HABILITADO") {
+                    estadoVendedor = "HABILITADO";
+                  }
+                }
+              }
+            }
+          } catch {
+            /* fallback seguro */
+          }
+          saveSession(
+            data.token,
+            data.conta,
+            estadoVendedor,
+            data.conta?.avatar_url ?? data.conta?.avatarUrl
+          );
+          loadUserProfile().catch(() => {});
         }
         onPreview();
         return;

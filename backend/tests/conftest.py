@@ -81,3 +81,60 @@ def criar_pj(enviar_pj):
         return {"email": email, "senha": SENHA, "token": token,
                 "headers": _auth(token), "resposta": r.json()}
     return _criar
+
+
+def gerar_cpf():
+    """CPF valido e aleatorio: testes nao colidem com CPFs que ja existem no banco de desenvolvimento."""
+    import random
+    while True:
+        n = [random.randint(0, 9) for _ in range(9)]
+        if len(set(n)) == 1:
+            continue
+        for tamanho in (9, 10):
+            soma = sum(d * p for d, p in zip(n, range(tamanho + 1, 1, -1)))
+            n.append((soma * 10 % 11) % 10)
+        return "".join(map(str, n))
+
+
+@pytest.fixture()
+def criar_vendedor(client, criar_pf):
+    """Cria uma conta PF ja habilitada como vendedora (CPF novo a cada uso). Devolve o dict do criar_pf mais "id"."""
+    def _criar(cpf=None):
+        cpf = cpf or gerar_cpf()
+        pf = criar_pf()
+        r = client.post("/api/vendedor/habilitacao", headers=pf["headers"], json={"cpf": cpf})
+        assert r.status_code == 201, r.text
+        pf["id"] = client.get("/api/auth/me", headers=pf["headers"]).json()["conta"]["id"]
+        return pf
+    return _criar
+
+
+def corpo_animal(**extra):
+    """Formulario de animais no formato do front."""
+    corpo = {"categoria": "ANIMAL", "especie": "BOVINO", "titulo": "Lote de bois nelore",
+             "raca": "Nelore", "finalidade": "ENGORDA_ABATE", "quantidadeCabecas": 10,
+             "pesoMedioKg": 480, "idadeMeses": 24, "cidade": "Campinas", "uf": "SP",
+             "pricingMode": "TOTAL", "precoTotal": 50000}
+    corpo.update(extra)
+    return corpo
+
+
+def corpo_graos(**extra):
+    """Formulario de graos (soja) no formato do front."""
+    corpo = {"categoria": "GRAOS", "cultura": "SOJA", "subtipo": "CONVENCIONAL_NAO_TRANSGENICA",
+             "titulo": "Soja safra nova", "safra": "2025/2026", "embalagem": "GRANEL",
+             "umidadePercentual": 13, "quantidadeSacas": 1000, "cidade": "Sorriso", "uf": "MT",
+             "pricingMode": "TOTAL", "precoTotal": 130000}
+    corpo.update(extra)
+    return corpo
+
+
+@pytest.fixture()
+def criar_anuncio(client):
+    """Cria um anuncio pela API para o vendedor dado. tipo: "animal" (boi) ou "graos" (soja)."""
+    def _criar(vendedor, tipo="animal", **extra):
+        corpo = corpo_animal(**extra) if tipo == "animal" else corpo_graos(**extra)
+        r = client.post("/api/vendedor/anuncios", headers=vendedor["headers"], json=corpo)
+        assert r.status_code == 201, r.text
+        return r.json()
+    return _criar

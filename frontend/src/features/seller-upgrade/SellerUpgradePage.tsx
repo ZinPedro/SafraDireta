@@ -2,8 +2,10 @@ import { useEffect, useRef, useState } from "react";
 import type { ChangeEvent, FormEvent } from "react";
 import { Link } from "react-router-dom";
 import registrationImage from "../../assets/images/registration-landscape.jpeg";
+import { AccessRestricted } from "../../components/AccessRestricted";
 import { Icon } from "../../components/Icon";
 import { routes } from "../../data/site";
+import type { OpenDevelopmentDialog } from "../../data/site";
 import { useAuth } from "../../context/authContext";
 import { getSession } from "../../context/session";
 import { loadUserProfile } from "../profile/profile";
@@ -12,6 +14,7 @@ import {
   sellerCategories, toSellerUpgradeData, ufs, validateFile, validateSellerUpgrade,
 } from "./sellerUpgrade";
 import type { SellerCategory, SellerUpgradeValues, UpgradeToSeller } from "./sellerUpgrade";
+import { salvarDocumentosProdutorNoIndexedDB } from "./producerDocsStorage";
 import "../registration/RegistrationPage.css";
 import "../corporate-registration/CorporateRegistrationPage.css";
 import "./SellerUpgradePage.css";
@@ -46,7 +49,13 @@ function FileSlot({ id, label, hint, required, file, error, message, onPick, onR
   );
 }
 
-export function SellerUpgradePage({ onUpgrade = defaultUpgradeToSeller }: { onUpgrade?: UpgradeToSeller }) {
+export function SellerUpgradePage({
+  onUpgrade = defaultUpgradeToSeller,
+  onOpenDialog,
+}: {
+  onUpgrade?: UpgradeToSeller;
+  onOpenDialog?: OpenDevelopmentDialog;
+}) {
   const { session, setVendedorEstado } = useAuth();
   const isAlreadyHabilitado = session?.vendedorEstado === "HABILITADO";
   const isAlreadyPending = session?.vendedorEstado === "PENDENTE";
@@ -94,6 +103,11 @@ export function SellerUpgradePage({ onUpgrade = defaultUpgradeToSeller }: { onUp
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [files, setFiles] = useState<Record<DocKey, FileMeta | null>>({ cpfFrontDoc: null, cpfBackDoc: null, carDoc: null });
+  const [realFiles, setRealFiles] = useState<{
+    cpfFrontDoc: File | null;
+    cpfBackDoc: File | null;
+    carDoc: File | null;
+  }>({ cpfFrontDoc: null, cpfBackDoc: null, carDoc: null });
   const [fileMessages, setFileMessages] = useState<Record<DocKey, string>>({ cpfFrontDoc: "", cpfBackDoc: "", carDoc: "" });
   const [submitting, setSubmitting] = useState(false);
   const [feedback, setFeedback] = useState("");
@@ -153,9 +167,15 @@ export function SellerUpgradePage({ onUpgrade = defaultUpgradeToSeller }: { onUp
     const problem = validateFile(file);
     setFileMessages((c) => ({ ...c, [key]: problem ?? "" }));
     if (problem) return;
-    // Apenas metadados: o conteúdo binário não é persistido no MVP.
+
     setFiles((c) => ({ ...c, [key]: { name: file.name, size: file.size } }));
+    setRealFiles((c) => ({ ...c, [key]: file }));
     clearError(key);
+  }
+
+  function removeFile(key: DocKey) {
+    setFiles((c) => ({ ...c, [key]: null }));
+    setRealFiles((c) => ({ ...c, [key]: null }));
   }
 
   function focusFirstError(next: Record<string, string>) {
@@ -186,6 +206,13 @@ export function SellerUpgradePage({ onUpgrade = defaultUpgradeToSeller }: { onUp
     try {
       const result = await onUpgrade(toSellerUpgradeData(valuesToValidate, files.cpfFrontDoc?.name, files.cpfBackDoc?.name, files.carDoc?.name));
       if (result.ok) {
+        if (session?.conta.id && (realFiles.cpfFrontDoc || realFiles.cpfBackDoc || realFiles.carDoc)) {
+          salvarDocumentosProdutorNoIndexedDB(session.conta.id, {
+            rgFrente: realFiles.cpfFrontDoc || undefined,
+            rgVerso: realFiles.cpfBackDoc || undefined,
+            car: realFiles.carDoc || undefined,
+          }).catch(() => {});
+        }
         setVendedorEstado(result.status === "habilitado" ? "HABILITADO" : "PENDENTE");
         setDoneState(result.status);
         setProtocol(result.protocol);
@@ -204,6 +231,36 @@ export function SellerUpgradePage({ onUpgrade = defaultUpgradeToSeller }: { onUp
       pendingRef.current = false;
       setSubmitting(false);
     }
+  }
+
+  if (!session) {
+    return (
+      <AccessRestricted
+        title="Identifique-se para solicitar habilitação"
+        description="Para habilitar sua conta como produtor vendedor no SafraDireta, entre na sua conta ou crie um cadastro."
+        onOpenLogin={() => onOpenDialog?.("login")}
+        onOpenRegister={() => onOpenDialog?.("registration")}
+      />
+    );
+  }
+
+  if (session.conta.tipo === "PJ") {
+    return (
+      <AccessRestricted
+        title="Habilitação de Vendedor para Pessoa Jurídica"
+        description="Contas corporativas (PJ) gerenciam a habilitação de vendedor e a vitrine da fazenda diretamente pelo perfil da empresa."
+        customAction={
+          <div style={{ display: "flex", gap: "1rem", flexWrap: "wrap", justifyContent: "center" }}>
+            <Link to={routes.profile} className="button button--primary">
+              Acessar Perfil Corporativo
+            </Link>
+            <Link to={routes.home} className="button button--outline">
+              Voltar ao Início
+            </Link>
+          </div>
+        }
+      />
+    );
   }
 
   const finalState = doneState ?? (isAlreadyHabilitado ? "habilitado" : isAlreadyPending ? "pendente" : null);
@@ -356,13 +413,13 @@ export function SellerUpgradePage({ onUpgrade = defaultUpgradeToSeller }: { onUp
                 <h2 className="seller-upgrade__section">5. Documentos</h2>
                 <FileSlot id="cpfFrontDoc" required label="Documento com CPF — frente" hint="Foto da frente do RG ou CNH, com o CPF visível. PDF, JPG ou PNG, até 10 MB."
                   file={files.cpfFrontDoc} error={errors.cpfFrontDoc} message={fileMessages.cpfFrontDoc}
-                  onPick={(e) => pickFile("cpfFrontDoc", e)} onRemove={() => setFiles((c) => ({ ...c, cpfFrontDoc: null }))} />
+                  onPick={(e) => pickFile("cpfFrontDoc", e)} onRemove={() => removeFile("cpfFrontDoc")} />
                 <FileSlot id="cpfBackDoc" required label="Documento com CPF — verso" hint="Foto do verso do mesmo documento. PDF, JPG ou PNG, até 10 MB."
                   file={files.cpfBackDoc} error={errors.cpfBackDoc} message={fileMessages.cpfBackDoc}
-                  onPick={(e) => pickFile("cpfBackDoc", e)} onRemove={() => setFiles((c) => ({ ...c, cpfBackDoc: null }))} />
+                  onPick={(e) => pickFile("cpfBackDoc", e)} onRemove={() => removeFile("cpfBackDoc")} />
                 <FileSlot id="carDoc" label="Inscrição Estadual de Produtor Rural ou CAR (opcional)" hint="Documento opcional que poderá conceder selo de produtor verificado no futuro."
                   file={files.carDoc} message={fileMessages.carDoc}
-                  onPick={(e) => pickFile("carDoc", e)} onRemove={() => setFiles((c) => ({ ...c, carDoc: null }))} />
+                  onPick={(e) => pickFile("carDoc", e)} onRemove={() => removeFile("carDoc")} />
 
                 <button className="button registration__submit" type="submit" disabled={submitting}>
                   {submitting ? "Enviando…" : "Concluir Habilitação de Vendedor"}

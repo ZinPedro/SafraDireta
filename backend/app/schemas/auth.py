@@ -1,13 +1,25 @@
 """Formatos de entrada e saida das rotas de autenticacao."""
 import re
 from typing import Literal
+from urllib.parse import urlparse
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from pydantic.alias_generators import to_camel
 
 # formatacao de email e telefone
-_EMAIL = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$") 
+_EMAIL = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
 _TELEFONE = re.compile(r"^\+55[1-9][0-9][0-9]{8,9}$")
+
+
+def _validar_url_avatar(v: str | None) -> str | None:
+    """So aceita link http ou https. Bloqueia javascript:, data: e similares."""
+    if v is None or not v.strip():
+        return v
+    v = v.strip()
+    partes = urlparse(v)
+    if partes.scheme not in ("http", "https") or not partes.netloc or any(c.isspace() for c in v):
+        raise ValueError("Informe um link http ou https valido para a imagem.")
+    return v
 
 
 class _Base(BaseModel):
@@ -193,6 +205,11 @@ class ContaPerfilEntrada(_Base):
             raise ValueError("Informe um CPF valido.")
         return v
 
+    @field_validator("avatar_url")
+    @classmethod
+    def validar_avatar(cls, v: str | None) -> str | None:
+        return _validar_url_avatar(v)
+
 
 class EditarPerfil(_Base):
     name: str | None = Field(default=None, min_length=2, max_length=150)
@@ -239,6 +256,12 @@ class EditarPerfil(_Base):
         if not validar_cpf(v):
             raise ValueError("Informe um CPF valido.")
         return v
+
+    @field_validator("avatar_url")
+    @classmethod
+    def validar_avatar(cls, v: str | None) -> str | None:
+        return _validar_url_avatar(v)
+
 
 class VerificacaoResumo(_Base):
     protocol: str | None = None

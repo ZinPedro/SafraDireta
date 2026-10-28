@@ -1,6 +1,6 @@
-# Contrato da API SafraDireta, Sprint 1
+# Contrato da API SafraDireta, Sprints 1 e 2
 
-Versao: rascunho 0.3 (atualizada em 08/10/2026). Status: PROPOSTA para alinhar com Pedro (front) e Felipe (banco).
+Versao: rascunho 0.7 (atualizada em 18/10/2026). Status: PROPOSTA para alinhar com Pedro (front) e Felipe (banco).
 Itens marcados com [DECIDIR] dependem de resposta de alguem e podem mudar.
 Itens marcados com [IMPLEMENTADO] ja existem na branch `back`. Os itens de perfil, vendedor e cadastro PJ foram validados na mao (`/docs`); ainda faltam testes automaticos de integracao para eles.
 
@@ -36,9 +36,10 @@ Codigos usados:
 * 403 `PROIBIDO`: logado, mas sem permissao (ex: nao e vendedor habilitado) ou conta suspensa/encerrada.
 * 404 `NAO_ENCONTRADO`: recurso ou rota inexistente.
 * 405 `METODO_NAO_PERMITIDO`: a rota existe, mas nao aceita aquele metodo HTTP (a resposta traz o cabecalho `Allow`).
-* 409 `CONFLITO`: duplicado (email, CNPJ, CPF) ou transicao de estado invalida.
+* 409 `CONFLITO`: duplicado (email, CNPJ, CPF), inclusive quando duas requisicoes simultaneas disputam o mesmo valor, ou transicao de estado invalida.
 * 422 `DADOS_INVALIDOS`: validacao falhou.
-* 429 `MUITAS_TENTATIVAS`: limite de login excedido.
+* 429 `MUITAS_TENTATIVAS`: limite de login excedido, ou limite de senhas atuais erradas na troca de email.
+* 500 `ERRO_INTERNO`: falha inesperada do servidor. A resposta nunca traz detalhes tecnicos; eles ficam so no log.
 * 503: banco indisponivel (rotas `/health`, formato do FastAPI: `{"detail": "..."}`).
 * 503 `TERMO_INDISPONIVEL`: cadastro sem termo de uso vigente no banco.
 
@@ -197,13 +198,19 @@ Exige login. 200: `id`, `tipo`, `nome`, `email`, `telefone`, `estado` e a lista 
 * PJ: acrescenta `razaoSocial`, `nomeFantasia`, `cnpj` e a lista `representantes` (`id`, `nome`, `cpf`, `vinculo`, `inicioVigencia`, `fimVigencia`).
 
 ### PATCH /api/perfil
-Exige login. Corpo com `name` e/ou `phone` (so o que for enviado muda; nenhum pode ser `null`; corpo vazio da 422). Telefone no formato `+55DDDNUMERO`. O `contaId` vem sempre do token. Gera evento de auditoria.
-Resposta 200: `{ "message": "...", "conta": { "id", "tipo", "nome", "email" } }`.
+Exige login. Corpo com qualquer combinacao de `name`, `phone`, `cpf`, `avatarUrl`, `address` e `seller` (so o que for enviado muda; nenhum campo de topo pode ser `null`; corpo vazio da 422). Tambem aceita `account` com `nome`, `telefone`, `cpfCnpj` e `avatarUrl`. Telefone no formato `+55DDDNUMERO`. O `contaId` vem sempre do token. Gera evento de auditoria.
+* `avatarUrl`: so aceita link `http` ou `https` (maximo 500 caracteres). Outros formatos, como `javascript:` e `data:`, dao 422.
+* `address`: se a conta ja tem endereco principal, so os campos enviados mudam. Se ainda nao tem, e preciso enviar `cep`, `logradouro`, `numero`, `bairro`, `cidade` e `uf`; faltando algum, 422 com `campos` indicando quais, e nada e gravado.
+* `cpf`: so pode ser gravado se a conta ainda nao tiver CPF; depois disso, tentar trocar da 422 `DOCUMENTO_PROTEGIDO`.
+* Para PJ, `name` altera a razao social diretamente nesta versao. [DECIDIR] se passara por `alteracao_cadastral`.
+Resposta 200: o perfil atualizado, com `message` e `conta` (`id`, `tipo`, `nome`, `email`).
 
 ### PATCH /api/perfil/email
 Exige login. Corpo: `{ "novoEmail": "novo@exemplo.com", "senhaAtual": "..." }`.
 * 422 com `campos.senhaAtual` se a senha atual estiver errada (nao e 401, para o front nao deslogar o usuario); 409 se o email ja pertence a outra conta; 422 se o email for invalido.
 * Se o email enviado ja for o da conta, responde 200 sem alterar nada.
+* Depois de 5 senhas atuais erradas em 15 minutos, responde 429 `MUITAS_TENTATIVAS` ate a janela passar. Senha certa zera a contagem.
+* Ao trocar o email, todas as outras sessoes da conta sao revogadas; a sessao que fez a troca continua valida.
 Resposta 200: `{ "message": "Email atualizado com sucesso.", "email": "novo@exemplo.com" }`.
 Observacao: o contrato antigo previa a troca de email dentro do `PATCH /api/perfil`; ficou em rota separada. [DECIDIR] com Pedro.
 
@@ -219,11 +226,12 @@ Entrada:
 { "cpf": "52998224725", "possuiTransportadora": false, "observacaoTransportadora": null }
 ```
 `observacaoTransportadora` e opcional (maximo 500 caracteres). Tambem aceita os mesmos nomes em snake_case.
-Regras: valida CPF; 409 se o CPF cadastrado na conta for diferente, se o CPF pertencer a outra conta (`campos.cpf`) ou se ja existe habilitacao ativa; cria `habilitacao_vendedor` em PENDENTE e uma verificacao do tipo HABILITACAO_VENDEDOR em RASCUNHO.
-Resposta 201: `{ "message": "...", "estado": "PENDENTE", "protocol": "<uuid>" }`.
+Regras: valida CPF; 409 se o CPF cadastrado na conta for diferente, se o CPF pertencer a outra conta (`campos.cpf`) ou se ja existe habilitacao ativa; grava o CPF, cria a verificacao do tipo HABILITACAO_VENDEDOR e a `habilitacao_vendedor`.
+Decisao do grupo (18/10/2026): na Sprint 1 a habilitacao e imediata, sem analise de operador. A conta ja sai `HABILITADO`. A analise por operador fica para uma sprint futura.
+Resposta 201: `{ "ok": true, "message": "...", "estado": "HABILITADO", "status": "habilitado", "protocol": "<uuid>" }`.
 
 ### GET /api/vendedor/habilitacao
-Exige login. 200: `{ "possuiHabilitacao": true, "estado": "PENDENTE", "possuiTransportadora": false, "observacaoTransportadora": null }`. 404 `NAO_ENCONTRADO` se nunca solicitou.
+Exige login. 200: `{ "possuiHabilitacao": true, "estado": "HABILITADO", "possuiTransportadora": false, "observacaoTransportadora": null }`. 404 `NAO_ENCONTRADO` se nunca solicitou.
 
 ### POST /api/arquivos   (upload de documento) [DECIDIR]
 Exige login. `multipart/form-data` com os campos `verificacaoId`, `tipoDocumento` e `arquivo`. Aceita PDF, JPG e PNG ate 10 MB, valida tipo pelo conteudo e nao pelo nome. Resposta 201: `{ "id": "3b7e1d52-6a0c-4f9e-9d14-72c8a5e0b6f1", "nome": "contrato.pdf", "tamanho": 120394 }`. Define onde guardar (disco local ou storage) antes de implementar.
@@ -231,7 +239,75 @@ Exige login. `multipart/form-data` com os campos `verificacaoId`, `tipoDocumento
 ### Guarda para funcoes de vendedor
 Qualquer rota futura de venda usa a dependencia `exige_vendedor_habilitado`: responde 403 `PROIBIDO` se a conta nao tiver `habilitacao_vendedor.estado = HABILITADO` com decisao APROVADA do tipo habilitacao.
 
-## 6. Resumo por historia
+## 6. Anuncios   (Sprint 2: US010, US011, US012, US014, US015, US018 e US019)   [IMPLEMENTADO]
+
+Formato do formulario do front (Pedro). O front nao manda ids: o backend escolhe o produto pelo tipo.
+Rotas do vendedor ficam em `/api/vendedor/anuncios` e exigem vendedor habilitado (sem token: 401; sem habilitacao: 403).
+Banco: rode `sql/06_seed_anuncios.sql` e `sql/07_anuncios_formulario.sql`.
+
+### GET /api/categorias   (publica)
+
+Devolve categorias com produtos, o `formulario` de cada uma (`ANIMAL` ou `GRAOS`), `camposObrigatorios`, as `unidades` e o bloco `opcoes`:
+`racas`, `finalidades`, `culturas`, `embalagens`, `peneirasCafe` e `subtipos` (por cultura, lista de `{codigo, rotulo}`). O front envia o `codigo`.
+
+### POST /api/vendedor/anuncios   (US010 e US011)
+
+Cria o anuncio ja publicado (`estadoComercial: ATIVO`), ligado ao vendedor do token. Sem rascunho. Resposta 201 com o anuncio.
+O campo `categoria` define o formulario. Fotos e video NAO vao aqui: usar a rota de midias (US012). Enviar `fotos` ou `video` da 422.
+
+Comuns: `titulo` (5 a 150), `descricao` (opcional, ate 2000), `cidade`, `uf`, `pricingMode`, `precoTotal` (maior que zero, 2 casas).
+
+`categoria: "ANIMAL"`:
+* `especie` (BOVINO), `raca` (da lista; `OUTRA` exige `racaPersonalizada` ate 30), `finalidade` (ENGORDA_ABATE, RECRIA_GARROTES, CRIA_DESMAMA, REPRODUCAO_TOUROS)
+* `quantidadeCabecas` (1 a 100000), `pesoMedioKg` (maior que zero), `idadeMeses` (opcional, 0 a 600)
+* `pricingMode`: `TOTAL` ou `PER_HEAD` (com `precoPorCabeca` que deve bater com o total)
+
+`categoria: "GRAOS"`:
+* `cultura` (SOJA, MILHO, CAFE, TRIGO, OUTRO; OUTRO exige `culturaPersonalizada`), `subtipo` (codigo da cultura; `OUTRO` pode ter `subtipoPersonalizado`)
+* `safra` (`AAAA/AAAA+1`, ex 2025/2026), `embalagem` (SACARIA, BIG_BAG, GRANEL), `umidadePercentual` (1 a 50)
+* `quantidadeSacas` (sacas de 60 kg), `pesoTotalToneladas` (opcional, deve bater com sacas x 60 / 1000)
+* `pricingMode`: `TOTAL` ou `PER_SACK` (com `precoPorSaca` que deve bater com o total)
+* `laudoTecnico` (objeto, campos por cultura): cafe exige `cafePeneira` (`cafeCatacaoDefeitos` texto ate 30, `cafePontuacaoSca` 80 a 100); soja `sojaImpurezasPct`, `sojaAvariadosPct`, `sojaQuebradosPct`; milho `milhoImpurezasPct`, `milhoArdidosPct`, `milhoQuebradosPct`; trigo exige `trigoPhKgHl` (`trigoForcaGlutenW`, `trigoFallingNumberSeg`); outro `outroObservacoesLaudo` ate 60. Campos de 0 a 100 nos percentuais. Campo desconhecido: 422.
+
+Erros 422 trazem a chave do campo (ex `laudoTecnico.cafePeneira`, `racaPersonalizada`).
+
+### GET /api/vendedor/anuncios/{id}   (US014)
+
+So o dono (outro vendedor: 403; id inexistente: 404). Devolve os mesmos nomes do formulario para preencher a edicao.
+
+### PATCH /api/vendedor/anuncios/{id}   (US014)
+
+So o dono. Aceita so os campos alterados ou o formulario inteiro (o que veio do GET pode ser reenviado). Tudo e revalidado com as regras da criacao.
+* `categoria`, `especie` e `cultura` nao mudam (422). Corpo vazio: 422.
+* Trocar o subtipo de cafe (arabica x conilon) troca o produto automaticamente.
+* Anuncio `VENDIDO` nao edita (409). `ATIVO` e `PAUSADO` editam. Cada edicao soma 1 em `versao`.
+
+### Resposta do anuncio
+
+Campos do formulario (mesmos nomes) mais `id`, `vendedorId`, `produto {id, nome}`, `estadoComercial`, `versao`, `criadoEm`, `atualizadoEm`, `publicadoEm`, `midias` (`{id, tipo, ordem, capa}`, vazia ate a US012). Animais trazem `precoPorCabeca`; graos trazem `precoPorSaca` e `pesoTotalToneladas`, calculados.
+
+### Fotos e video (US012, Elo)   [IMPLEMENTADO]
+
+`POST /api/vendedor/anuncios/{id}/midias`, multipart, campo `arquivo`. So o dono. Ate 6 fotos (10 MB, jpeg, png, webp) e 1 video (30 MB, mp4, quicktime, webm). A primeira foto vira a capa. O video precisa do `ffprobe` (FFmpeg) instalado no servidor. Excesso de midias: 409. Arquivo invalido: 422.
+
+### Pausar e reativar (US015, Elo)   [IMPLEMENTADO]
+
+`POST /api/vendedor/anuncios/{id}/pausar` (ATIVO para PAUSADO) e `/reativar` (PAUSADO para ATIVO). So o dono. Estado errado: 409. Cada mudanca soma 1 em `versao` e grava auditoria.
+
+### Catalogo publico (US018)   [IMPLEMENTADO]
+
+`GET /api/anuncios`, sem login. So anuncios ATIVOS. Parametros opcionais: `categoria` (ANIMAL ou GRAOS), `cultura`, `uf`, `precoMin`, `precoMax`, `busca` (no titulo), `ordem` (recentes, menor_preco, maior_preco), `pagina` (1 em diante) e `tamanho` (1 a 50, padrao 12).
+Resposta: `{itens, pagina, tamanho, total}`. Cada item: `id`, `titulo`, `categoria`, `produto`, `cidade`, `uf`, `precoTotal`, `pricingMode`, `publicadoEm`, `capa` (`{id, url}` ou `null`) e, por tipo, `quantidadeCabecas` e `precoPorCabeca` (animais) ou `cultura`, `quantidadeSacas` e `precoPorSaca` (graos).
+
+### Detalhe publico (US019)   [IMPLEMENTADO]
+
+`GET /api/anuncios/{id}`, sem login. Mesmos campos do anuncio do vendedor, sem `vendedorId`, mais `vendedor {nome}` e `url` em cada midia. Anuncio pausado, vendido ou inexistente: 404.
+
+### Arquivo da midia   [IMPLEMENTADO]
+
+`GET /api/midias/{id}`, sem login. Devolve a foto ou o video (com o tipo correto) so se o anuncio estiver ATIVO. O front usa a `url` que vem na capa e nas midias.
+
+## 7. Resumo por historia
 
 * US001 (executar de ponta a ponta): `/health`, `/health/db`, CORS, formato de erro, rodar front e back juntos.
 * US002 (areas publicas): `GET /api/termos/vigente`, 404 padronizado, rotas publicas sem token.
@@ -239,8 +315,9 @@ Qualquer rota futura de venda usa a dependencia `exige_vendedor_habilitado`: res
 * US004 (cadastrar-se como vendedor): `POST` e `GET /api/vendedor/habilitacao`, `POST /api/arquivos`, estados da verificacao e da habilitacao.
 * US005 (autenticar e proteger): `login`, `logout`, `me`, dependencia `conta_autenticada`, limite de tentativas.
 * US008 (editar perfil): `GET` e `PATCH /api/perfil`, `PATCH /api/perfil/email`.
+* Sprint 2: US010 e US011 (`POST /api/vendedor/anuncios`, `GET /api/categorias`), US012 (`/midias`), US014 (`GET` e `PATCH /api/vendedor/anuncios/{id}`), US015 (`/pausar` e `/reativar`), US018 (`GET /api/anuncios`) e US019 (`GET /api/anuncios/{id}`).
 
-## 7. Decisoes em aberto
+## 8. Decisoes em aberto
 
 1. Registro devolve sessao ou manda para o login? (decidido: devolve)
 2. Upload de documentos PJ: dois passos, como proposto? Onde guardar os arquivos?
@@ -249,3 +326,5 @@ Qualquer rota futura de venda usa a dependencia `exige_vendedor_habilitado`: res
 5. Regra PJ de compra e venda (cliente).
 6. Alteracao de CPF e CNPJ: direta ou via `alteracao_cadastral`?
 7. Todo cadastro PJ ja nasce com habilitacao de vendedor PENDENTE. Confirmar com o cliente.
+8. Campos de cada lote (animais e graos/cafe), unidades e produtos iniciais (front e cliente).
+9. Anuncio nasce publicado, sem rascunho, nesta sprint. Confirmar com o cliente.

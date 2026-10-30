@@ -448,6 +448,24 @@ export function MyAdsPage({ onOpenDialog }: MyAdsPageProps) {
                         <Icon name="edit" /> Editar
                       </button>
 
+                      {/* Ação de Duplicar como Modelo (US-017) */}
+                      <button
+                        type="button"
+                        className="button button--ghost button--small my-ad-card__btn-clone"
+                        disabled={isBlockedModeration}
+                        title={
+                          isBlockedModeration
+                            ? "Anúncios bloqueados pela moderação não podem ser utilizados como modelo"
+                            : "Duplicar dados deste anúncio como modelo para novo lote"
+                        }
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          navigate(`/anunciar?copiarDe=${anuncio.id}`);
+                        }}
+                      >
+                        <Icon name="copy" /> Duplicar
+                      </button>
+
                       {/* Ação de Pausar / Reativar (US-015 + Governança) */}
                       {isPausedModeration || isInReview || isBlockedModeration ? (
                         <button

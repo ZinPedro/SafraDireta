@@ -2,12 +2,15 @@ import { getSession } from "../../context/session";
 import type { Session } from "../../context/session";
 import { GRAIN_CROP_LABELS, GRAIN_SUBTYPES } from "./ads.types";
 import type {
+  AdModelTemplate,
   AdStatus,
   AnimalLotAd,
   CreateAnimalAdInput,
   CreateGrainAdInput,
   GrainLotAd,
+  GrainPricingMode,
   MarketplaceAd,
+  PricingMode,
   UpdateAdInput,
 } from "./ads.types";
 import defaultFarmImage from "../../assets/images/farm-landscape.jpeg";
@@ -1187,6 +1190,113 @@ export function obterTodosAnunciosRaw(): MarketplaceAd[] {
 
 export function salvarTodosAnunciosRaw(anuncios: MarketplaceAd[]): boolean {
   return salvarNoStorage(anuncios);
+}
+
+/**
+ * Higieniza um anúncio existente para servir de modelo de criação (US-017).
+ * Remove ID, datas, fotos, mídias, documentos e permissões da US-013.
+ * Valida autorização de propriedade (ownership) e restrição de moderação.
+ */
+export function extrairModeloParaNovoAnuncio(
+  anuncioOriginal: MarketplaceAd,
+  vendedorIdAtual: string
+): AdModelTemplate | null {
+  // 1. Validação de Ownership (apenas o próprio vendedor pode clonar seus anúncios)
+  if (anuncioOriginal.vendedorId !== vendedorIdAtual) {
+    return null;
+  }
+
+  // 2. Bloqueio de anúncios sob penalidade de moderação
+  if (anuncioOriginal.status === "BLOQUEADO_MODERACAO") {
+    return null;
+  }
+
+  // 3. Payload higienizado por categoria
+  if (anuncioOriginal.categoria === "ANIMAL") {
+    const isPerHead =
+      Boolean(anuncioOriginal.precoPorCabeca) &&
+      Boolean(anuncioOriginal.quantidadeCabecas) &&
+      Boolean(anuncioOriginal.precoTotal) &&
+      Math.round(anuncioOriginal.precoPorCabeca * anuncioOriginal.quantidadeCabecas) ===
+        Math.round(anuncioOriginal.precoTotal);
+
+    const pricingMode: PricingMode = isPerHead ? "PER_HEAD" : "TOTAL";
+
+    return {
+      categoria: "ANIMAL",
+      titulo: anuncioOriginal.titulo,
+      descricao: anuncioOriginal.descricao,
+      cidade: anuncioOriginal.cidade,
+      uf: anuncioOriginal.uf,
+      farmName: anuncioOriginal.farmName,
+
+      // Dados Zootécnicos (Pecuária) - Mantém raça, espécie e finalidade estruturais
+      especie: anuncioOriginal.especie,
+      raca: anuncioOriginal.raca,
+      finalidade: anuncioOriginal.finalidade,
+      idadeMeses: anuncioOriginal.idadeMeses,
+
+      // Reset obrigatório de pesagens físicas, contagens e precificação (US-017)
+      quantidadeCabecas: undefined,
+      pesoMedioKg: undefined,
+      pesoMedioArroba: undefined,
+      pesoTotalKg: undefined,
+      pesoTotalArroba: undefined,
+      precoTotal: undefined,
+      precoPorCabeca: undefined,
+      precoPorArroba: undefined,
+      pricingMode,
+      pesoUnitMode: "KG",
+
+      // Reset obrigatório de mídias, documentos e dados de ciclo de vida
+      fotos: [],
+      video: undefined,
+      documentos: [],
+    };
+  }
+
+  // Categoria GRAOS
+  const isPerSack =
+    Boolean(anuncioOriginal.precoPorSaca) &&
+    Boolean(anuncioOriginal.quantidadeSacas) &&
+    Boolean(anuncioOriginal.precoTotal) &&
+    Math.round(anuncioOriginal.precoPorSaca * anuncioOriginal.quantidadeSacas) ===
+      Math.round(anuncioOriginal.precoTotal);
+
+  const grainPricingMode: GrainPricingMode = isPerSack ? "PER_SACK" : "TOTAL";
+
+  return {
+    categoria: "GRAOS",
+    titulo: anuncioOriginal.titulo,
+    descricao: anuncioOriginal.descricao,
+    cidade: anuncioOriginal.cidade,
+    uf: anuncioOriginal.uf,
+    farmName: anuncioOriginal.farmName,
+
+    // Dados Agronômicos (Grãos e Café) - Mantém dados estruturais de lavoura
+    cultura: anuncioOriginal.cultura,
+    culturaPersonalizada: anuncioOriginal.culturaPersonalizada,
+    subtipo: anuncioOriginal.subtipo,
+    safra: anuncioOriginal.safra,
+    embalagem: anuncioOriginal.embalagem,
+
+    // Reset obrigatório de amostragem física, umidade, laudos, balança e preços (US-017)
+    umidadePercentual: undefined,
+    quantidadeSacas: undefined,
+    pesoTotalToneladas: undefined,
+    pesoTotalKg: undefined,
+    laudoTecnico: undefined,
+    precoTotal: undefined,
+    precoPorSaca: undefined,
+    precoPorTonelada: undefined,
+    grainPricingMode,
+    volumeUnitMode: "SACAS",
+
+    // Reset obrigatório de mídias, documentos e dados de ciclo de vida
+    fotos: [],
+    video: undefined,
+    documentos: [],
+  };
 }
 
 export {

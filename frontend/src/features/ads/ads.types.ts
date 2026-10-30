@@ -178,6 +178,18 @@ export interface GrainLotAd {
 
 export type MarketplaceAd = AnimalLotAd | GrainLotAd;
 
+export type AdModelTemplate =
+  | (Partial<AnimalLotAd> & {
+      categoria: "ANIMAL";
+      pricingMode?: PricingMode;
+      pesoUnitMode?: "KG" | "ARROBA";
+    })
+  | (Partial<GrainLotAd> & {
+      categoria: "GRAOS";
+      grainPricingMode?: GrainPricingMode;
+      volumeUnitMode?: "SACAS" | "TONELADAS";
+    });
+
 export interface CreateAnimalAdInput {
   titulo: string;
   descricao?: string;

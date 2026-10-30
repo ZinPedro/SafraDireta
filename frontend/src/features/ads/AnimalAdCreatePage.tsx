@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useAuth } from "../../context/authContext";
 import { routes } from "../../data/site";
 import type { OpenDevelopmentDialog } from "../../data/site";
@@ -41,6 +41,7 @@ import {
   atualizarAnuncio,
   criarAnuncioAnimal,
   criarAnuncioGraos,
+  extrairModeloParaNovoAnuncio,
   obterAnuncioPorId,
 } from "./adsStorage";
 import { AdDocumentsSection } from "./AdDocumentsSection";
@@ -279,6 +280,13 @@ export function AnimalAdCreatePage({ onOpenDialog, mode = "create" }: AnimalAdCr
   const { id } = useParams<{ id: string }>();
   const isEditMode = mode === "edit";
 
+  // Parâmetros de URL e Suporte a Modelo (US-017)
+  const [searchParams, setSearchParams] = useSearchParams();
+  const copiarDeId = searchParams.get("copiarDe");
+  const [activeModelAd, setActiveModelAd] = useState<{ id: string; titulo: string } | null>(null);
+  const [cloneFeedback, setCloneFeedback] = useState<{ type: "error" | "info"; message: string } | null>(null);
+  const isLoadingModel = Boolean(!isEditMode && copiarDeId && !activeModelAd && !cloneFeedback);
+
   const [isLoadingAd, setIsLoadingAd] = useState(isEditMode);
   const [adNotFound, setAdNotFound] = useState(false);
   const [loadedAd, setLoadedAd] = useState<MarketplaceAd | null>(null);
@@ -418,6 +426,268 @@ export function AnimalAdCreatePage({ onOpenDialog, mode = "create" }: AnimalAdCr
       isMounted = false;
     };
   }, [isEditMode, id, session]);
+
+  // Carregamento de modelo para novo anúncio (US-017)
+  useEffect(() => {
+    if (isEditMode || !copiarDeId) return;
+    let isMounted = true;
+
+    obterAnuncioPorId(copiarDeId)
+      .then((adBase) => {
+        if (!isMounted) return;
+
+        if (!adBase) {
+          setCloneFeedback({
+            type: "error",
+            message: "O anúncio solicitado para modelo não foi encontrado.",
+          });
+          setSearchParams({}, { replace: true });
+          return;
+        }
+
+        if (!session || adBase.vendedorId !== session.conta.id) {
+          setCloneFeedback({
+            type: "error",
+            message: "Você só pode utilizar anúncios de sua própria autoria como modelo.",
+          });
+          setSearchParams({}, { replace: true });
+          return;
+        }
+
+        if (adBase.status === "BLOQUEADO_MODERACAO") {
+          setCloneFeedback({
+            type: "error",
+            message: "Este anúncio foi bloqueado pela moderação e não pode ser reutilizado como modelo.",
+          });
+          setSearchParams({}, { replace: true });
+          return;
+        }
+
+        const modelo = extrairModeloParaNovoAnuncio(adBase, session.conta.id);
+        if (!modelo) {
+          setCloneFeedback({
+            type: "error",
+            message: "Não foi possível carregar os dados deste anúncio como modelo.",
+          });
+          setSearchParams({}, { replace: true });
+          return;
+        }
+
+        // Aplica os dados do modelo no formulário
+        setModalidade(modelo.categoria || "ANIMAL");
+        setTitulo(modelo.titulo || "");
+        setDescricao(modelo.descricao || "");
+        setCidade(modelo.cidade || "");
+        setUf(modelo.uf || "");
+
+        // Reseta mídias e documentos obrigatoriamente (US-017)
+        setFotos([]);
+        setVideoFile(null);
+        setVideoUploadUrl("");
+        setVideoUploadName("");
+        setVideoYoutubeUrl("");
+        setDocumentos([]);
+
+        if (modelo.categoria === "ANIMAL") {
+          const matchBreed = BEEF_CATTLE_BREEDS.find((b) => b.value === modelo.raca);
+          if (matchBreed && matchBreed.value !== "OUTRA") {
+            setRacaSelect(modelo.raca || "");
+            setRacaCustom("");
+          } else {
+            setRacaSelect("OUTRA");
+            setRacaCustom(modelo.raca || "");
+          }
+
+          // US-017: Quantidade e peso em branco
+          setQuantidadeCabecas("");
+          setFinalidade(modelo.finalidade || "ENGORDA_ABATE");
+          if (modelo.idadeMeses) {
+            setIdadeMeses(modelo.idadeMeses);
+          } else {
+            setIdadeMeses("");
+          }
+
+          // US-017: Unidade de peso e precificação preservadas, valores em branco
+          setPesoUnitMode(modelo.pesoUnitMode || "KG");
+          setPesoInputValue("");
+          setPrecoTotal("");
+          setPrecoPorCabeca("");
+
+          if (modelo.pricingMode) {
+            setPricingMode(modelo.pricingMode);
+          } else if (
+            adBase.categoria === "ANIMAL" &&
+            adBase.precoPorCabeca &&
+            adBase.quantidadeCabecas &&
+            adBase.precoTotal &&
+            Math.round(adBase.precoPorCabeca * adBase.quantidadeCabecas) === Math.round(adBase.precoTotal)
+          ) {
+            setPricingMode("PER_HEAD");
+          } else {
+            setPricingMode("TOTAL");
+          }
+        } else {
+          // GRAOS
+          setCultura(modelo.cultura || "");
+          if (modelo.culturaPersonalizada) {
+            setCulturaPersonalizada(modelo.culturaPersonalizada);
+          } else {
+            setCulturaPersonalizada("");
+          }
+
+          if (modelo.cultura && modelo.cultura !== "OUTRO") {
+            const culturaValida = modelo.cultura as Exclude<GrainCrop, "OUTRO">;
+            const listaSubtipos = GRAIN_SUBTYPES[culturaValida];
+            const matchSubtipo = listaSubtipos ? listaSubtipos.find((s) => s.value === modelo.subtipo) : null;
+            if (matchSubtipo && matchSubtipo.value !== "OUTRO") {
+              setSubtipoSelect(modelo.subtipo || "");
+              setSubtipoCustom("");
+            } else {
+              setSubtipoSelect("OUTRO");
+              setSubtipoCustom(modelo.subtipo || "");
+            }
+          } else {
+            setSubtipoCustom(modelo.subtipo || "");
+          }
+
+          setSafra(modelo.safra || "2024/2025");
+          setEmbalagem(modelo.embalagem || "SACARIA");
+
+          // US-017: Reset de umidade, volumes e preços (em branco)
+          setUmidadePercentual("");
+          setVolumeUnitMode(modelo.volumeUnitMode || "SACAS");
+          setVolumeInputValue("");
+          setPrecoTotalGraos("");
+          setPrecoPorSaca("");
+
+          if (modelo.grainPricingMode) {
+            setGrainPricingMode(modelo.grainPricingMode);
+          } else if (
+            adBase.categoria === "GRAOS" &&
+            adBase.precoPorSaca &&
+            adBase.quantidadeSacas &&
+            adBase.precoTotal &&
+            Math.round(adBase.precoPorSaca * adBase.quantidadeSacas) === Math.round(adBase.precoTotal)
+          ) {
+            setGrainPricingMode("PER_SACK");
+          } else {
+            setGrainPricingMode("TOTAL");
+          }
+
+          // US-017: Reset obrigatório de todos os campos de laudos e qualidade técnica
+          setSojaImpurezasPct("");
+          setSojaAvariadosPct("");
+          setSojaQuebradosPct("");
+          setMilhoImpurezasPct("");
+          setMilhoArdidosPct("");
+          setMilhoQuebradosPct("");
+          setCafePeneira("");
+          setCafeCatacaoDefeitos("");
+          setCafePontuacaoSca("");
+          setTrigoPhKgHl("");
+          setTrigoForcaGlutenW("");
+          setTrigoFallingNumberSeg("");
+          setOutroObservacoesLaudo("");
+        }
+
+        setActiveModelAd({
+          id: adBase.id,
+          titulo: adBase.titulo,
+        });
+        setCloneFeedback(null);
+      })
+      .catch((err) => {
+        console.error("Erro ao carregar modelo de anúncio:", err);
+        if (isMounted) {
+          setCloneFeedback({
+            type: "error",
+            message: "Erro ao carregar o modelo de anúncio.",
+          });
+          setSearchParams({}, { replace: true });
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [isEditMode, copiarDeId, session, setSearchParams]);
+
+  function handleResetarModelo() {
+    setActiveModelAd(null);
+    setSearchParams({}, { replace: true });
+
+    // Reseta campos comuns
+    setTitulo("");
+    setDescricao("");
+    setErros({});
+
+    // Reseta pecuária
+    setRacaSelect("");
+    setRacaCustom("");
+    setQuantidadeCabecas("");
+    setFinalidade("ENGORDA_ABATE");
+    setIdadeMeses("");
+    setPesoUnitMode("KG");
+    setPesoInputValue("");
+    setPricingMode("TOTAL");
+    setPrecoTotal("");
+    setPrecoPorCabeca("");
+
+    // Reseta grãos
+    setCultura("");
+    setCulturaPersonalizada("");
+    setSubtipoSelect("");
+    setSubtipoCustom("");
+    setSafra("2024/2025");
+    setEmbalagem("SACARIA");
+    setUmidadePercentual("");
+    setVolumeUnitMode("SACAS");
+    setVolumeInputValue("");
+    setGrainPricingMode("TOTAL");
+    setPrecoTotalGraos("");
+    setPrecoPorSaca("");
+
+    setSojaImpurezasPct("");
+    setSojaAvariadosPct("");
+    setSojaQuebradosPct("");
+    setMilhoImpurezasPct("");
+    setMilhoArdidosPct("");
+    setMilhoQuebradosPct("");
+    setCafePeneira("");
+    setCafeCatacaoDefeitos("");
+    setCafePontuacaoSca("");
+    setTrigoPhKgHl("");
+    setTrigoForcaGlutenW("");
+    setTrigoFallingNumberSeg("");
+    setOutroObservacoesLaudo("");
+
+    // Reseta mídias e documentos
+    setFotos([]);
+    setVideoFile(null);
+    setVideoUploadUrl("");
+    setVideoUploadName("");
+    setVideoYoutubeUrl("");
+    setDocumentos([]);
+
+    // Restaura localização do perfil
+    if (session) {
+      try {
+        const raw = localStorage.getItem(`safradireta_mock_profile:${session.conta.id}`);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          setCidade((parsed?.seller?.city || parsed?.address?.cidade || "") as string);
+          setUf((parsed?.seller?.state || parsed?.address?.uf || "") as string);
+        }
+      } catch {
+        /* ignore */
+      }
+    }
+
+    setCloneFeedback({
+      type: "info",
+      message: "Modelo descartado. O formulário foi limpo para cadastro do zero.",
+    });
+  }
 
   const govStatus = session ? obterStatusGovernancaProdutor(session.conta.id) : null;
   const isBlockedSeller =
@@ -955,6 +1225,56 @@ export function AnimalAdCreatePage({ onOpenDialog, mode = "create" }: AnimalAdCr
               : "Publique as especificações agronômicas, safra, volume e condições comerciais da sua produção agrícola no mercado."}
           </p>
         </header>
+
+        {/* Notificações e Feedback de Cópia/Modelo (US-017) */}
+        {isLoadingModel && (
+          <div className="ad-loading-box" style={{ padding: "1.25rem", marginBottom: "1.5rem" }} aria-live="polite">
+            <Icon name="clock" className="ad-loading-spinner" />
+            <p>Carregando dados do modelo...</p>
+          </div>
+        )}
+
+        {cloneFeedback && (
+          <div className={`ad-alert ad-alert--${cloneFeedback.type === "error" ? "error" : "success"}`} role="alert">
+            <div className="ad-alert__content">
+              <Icon name={cloneFeedback.type === "error" ? "alert" : "check"} />
+              <span>{cloneFeedback.message}</span>
+            </div>
+            <button
+              type="button"
+              className="ad-alert__close"
+              onClick={() => setCloneFeedback(null)}
+              aria-label="Fechar notificação"
+            >
+              <Icon name="close" />
+            </button>
+          </div>
+        )}
+
+        {!isEditMode && activeModelAd && (
+          <div className="ad-clone-banner" role="status">
+            <div className="ad-clone-banner__content">
+              <div className="ad-clone-banner__icon" aria-hidden="true">
+                <Icon name="copy" />
+              </div>
+              <div className="ad-clone-banner__text">
+                <strong>📋 Criando novo anúncio a partir de um modelo</strong>
+                <p>
+                  Informações técnicas pré-preenchidas com base no anúncio{" "}
+                  <strong>&ldquo;{activeModelAd.titulo}&rdquo;</strong>. Revise os dados, adicione fotos do novo lote e clique em Publicar.
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              className="button button--ghost button--small ad-clone-banner__reset-btn"
+              onClick={handleResetarModelo}
+              title="Descartar modelo e preencher formulário do zero"
+            >
+              Limpar Modelo e Começar do Zero
+            </button>
+          </div>
+        )}
 
         {isEditMode && loadedAd?.status === "PAUSADO_MODERACAO" && (
           <div

@@ -1064,8 +1064,40 @@
   padding-top: 0.875rem;
   border-top: 1px solid #edf2eb;
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0.5rem;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.375rem;
+}
+
+.my-ad-card__footer .button {
+  padding: 0.375rem 0.5rem;
+  font-size: 0.78rem;
+  gap: 0.25rem;
+  min-height: 2.25rem;
+  white-space: nowrap;
+}
+
+.my-ad-card__footer .button .icon {
+  width: 14px;
+  height: 14px;
+}
+
+.my-ad-card__btn-clone {
+  border: 1px solid #d8e2d4;
+  color: #2f6b3a;
+  background: transparent;
+}
+
+.my-ad-card__btn-clone:hover:not(:disabled) {
+  background: #f0f7ef;
+  border-color: #2f6b3a;
+  color: #1e5631;
+}
+
+.my-ad-card__btn-clone:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  border-color: #e2e8df;
+  color: #889988;
 }
 
 /* --------------------------------------------------------------------------
@@ -4501,6 +4533,89 @@
 .my-ad-card__doc-request-badge .icon {
   width: 14px;
   height: 14px;
+}
+
+/* ==========================================================================
+   Banner de Modelo / Duplicação de Anúncio (US-017)
+   ========================================================================== */
+.ad-clone-banner {
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-left: 4px solid #16a34a;
+  border-radius: 10px;
+  padding: 1rem 1.25rem;
+  margin-bottom: 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  box-shadow: 0 2px 8px rgba(22, 163, 74, 0.08);
+}
+
+.ad-clone-banner__content {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.875rem;
+  flex: 1;
+}
+
+.ad-clone-banner__icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 8px;
+  background: #dcfce7;
+  color: #16a34a;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.ad-clone-banner__icon .icon {
+  width: 20px;
+  height: 20px;
+}
+
+.ad-clone-banner__text strong {
+  display: block;
+  font-size: 0.95rem;
+  color: #14532d;
+  margin-bottom: 0.25rem;
+}
+
+.ad-clone-banner__text p {
+  font-size: 0.875rem;
+  color: #166534;
+  line-height: 1.45;
+  margin: 0;
+}
+
+.ad-clone-banner__reset-btn {
+  white-space: nowrap;
+  font-size: 0.8125rem;
+  color: #166534;
+  border: 1px solid #bbf7d0;
+  background: #ffffff;
+  flex-shrink: 0;
+  transition: all 0.15s ease;
+}
+
+.ad-clone-banner__reset-btn:hover {
+  background: #fef2f2;
+  border-color: #fca5a5;
+  color: #991b1b;
+}
+
+@media (max-width: 640px) {
+  .ad-clone-banner {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .ad-clone-banner__reset-btn {
+    align-self: flex-start;
+    margin-top: 0.5rem;
+  }
 }
 
 

@@ -1195,6 +1195,20 @@ export function AdDetailPage({ onOpenDialog }: AdDetailPageProps) {
                       <Icon name="edit" /> Editar Informações do Lote
                     </Link>
                   )}
+                  {/* Ação de Duplicar como Modelo (US-017) */}
+                  <button
+                    type="button"
+                    className="button button--secondary button--full"
+                    disabled={anuncio.status === "BLOQUEADO_MODERACAO"}
+                    title={
+                      anuncio.status === "BLOQUEADO_MODERACAO"
+                        ? "Anúncios bloqueados pela moderação não podem ser utilizados como modelo"
+                        : "Usar informações técnicas deste lote como modelo para um novo anúncio"
+                    }
+                    onClick={() => navigate(`/anunciar?copiarDe=${anuncio.id}`)}
+                  >
+                    <Icon name="copy" /> Usar como Modelo para Novo Lote
+                  </button>
                   <button
                     type="button"
                     className="button button--outline button--full"

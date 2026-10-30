@@ -102,7 +102,7 @@ function Site() {
           <Route path={routes.createAd} element={<AnimalAdCreatePage onOpenDialog={openFeature} />} />
           <Route path={routes.myAds} element={<MyAdsPage onOpenDialog={openFeature} />} />
           <Route path={routes.adEdit} element={<AdEditPage onOpenDialog={openFeature} />} />
-          <Route path="/anuncios/:id" element={<AdDetailPage />} />
+          <Route path="/anuncios/:id" element={<AdDetailPage onOpenDialog={openFeature} />} />
           <Route path="/produtor/:id" element={<PublicProducerProfilePage />} />
           <Route
             path={routes.producers}

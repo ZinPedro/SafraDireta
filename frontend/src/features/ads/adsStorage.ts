@@ -82,12 +82,22 @@ function sanitizarAnunciosParaStorage(anuncios: MarketplaceAd[]): MarketplaceAd[
       videoLimpo = { ...videoLimpo, url: "" };
     }
 
+    // 5. Documentos: no localStorage mantemos metadados estruturados e limpamos URLs base64/blob
+    let documentosLimpos = anuncio.documentos;
+    if (documentosLimpos && documentosLimpos.length > 0) {
+      documentosLimpos = documentosLimpos.map((d) => ({
+        ...d,
+        url: isDataOrLargeUrl(d.url) ? undefined : d.url,
+      }));
+    }
+
     return {
       ...anuncio,
       vendedorAvatar,
       fotos: fotosLimpas && fotosLimpas.length > 0 ? fotosLimpas : undefined,
       imagemUrl: imagemUrlLimpa,
       video: videoLimpo,
+      documentos: documentosLimpos && documentosLimpos.length > 0 ? documentosLimpos : undefined,
     };
   });
 }
@@ -708,6 +718,7 @@ export async function criarAnuncioAnimal(
     uf: input.uf.trim().toUpperCase(),
     fotos,
     video: input.video,
+    documentos: input.documentos && input.documentos.length > 0 ? input.documentos : undefined,
     imagemUrl: imagemCapa,
     criadoEm: new Date().toISOString(),
     status: "ATIVO",
@@ -832,6 +843,7 @@ export async function criarAnuncioGraos(
     uf: input.uf.trim().toUpperCase(),
     fotos,
     video: input.video,
+    documentos: input.documentos && input.documentos.length > 0 ? input.documentos : undefined,
     imagemUrl: imagemCapa,
     criadoEm: new Date().toISOString(),
     status: "ATIVO",
@@ -988,6 +1000,8 @@ export async function atualizarAnuncio(
       uf: inputAnimal.uf ? inputAnimal.uf.trim().toUpperCase() : existente.uf,
       fotos,
       video,
+      documentos:
+        inputAnimal.documentos !== undefined ? inputAnimal.documentos : existente.documentos,
       imagemUrl: imagemCapa,
       status: proximoStatus,
       atualizadoEm: agora,
@@ -1064,6 +1078,8 @@ export async function atualizarAnuncio(
       uf: inputGraos.uf ? inputGraos.uf.trim().toUpperCase() : existente.uf,
       fotos,
       video,
+      documentos:
+        inputGraos.documentos !== undefined ? inputGraos.documentos : existente.documentos,
       imagemUrl: imagemCapa,
       status: proximoStatus,
       atualizadoEm: agora,
@@ -1172,4 +1188,18 @@ export function obterTodosAnunciosRaw(): MarketplaceAd[] {
 export function salvarTodosAnunciosRaw(anuncios: MarketplaceAd[]): boolean {
   return salvarNoStorage(anuncios);
 }
+
+export {
+  salvarDocumentoArquivoNoIndexedDB,
+  obterDocumentoArquivoDoIndexedDB,
+  removerDocumentoArquivoDoIndexedDB,
+  removerDocumentosDoAnuncioNoIndexedDB,
+  solicitarAcessoDocumentos,
+  obterSolicitacaoComprador,
+  listarSolicitacoesAnuncio,
+  responderSolicitacaoAcesso,
+  contarSolicitacoesPendentesAnuncio,
+  revogarAcessoDocumentos,
+} from "./adsDocumentStorage";
+
 

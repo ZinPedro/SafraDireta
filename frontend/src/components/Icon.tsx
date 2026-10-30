@@ -28,7 +28,8 @@ type IconName =
   | "check"
   | "alert"
   | "ban"
-  | "file";
+  | "file"
+  | "unlock";
 
 const paths: Record<IconName, string> = {
   back: "M19 12H5m6-6-6 6 6 6",
@@ -74,6 +75,8 @@ const paths: Record<IconName, string> = {
     "M18.36 5.64a9 9 0 1 1-12.73 0 9 9 0 0 1 12.73 0zM5.64 5.64l12.72 12.72",
   file:
     "M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M16 13H8M16 17H8M10 9H8",
+  unlock:
+    "M5 10h14v11H5ZM8 10V6a4 4 0 0 1 7.5-2M12 14v3",
 };
 
 export function Icon({

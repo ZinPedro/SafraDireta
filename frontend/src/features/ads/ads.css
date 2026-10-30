@@ -3269,5 +3269,1240 @@
   opacity: 1;
 }
 
+/* ==========================================================================
+   US-013: Documentação Comprobatória do Lote e Data Room Agro
+   ========================================================================== */
+
+/* Upload de Documentos no Formulário (AnimalAdCreatePage.tsx) */
+.ad-doc-upload-box {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  background: #fbfdfa;
+  border: 1px solid #e2e8f0;
+  border-radius: var(--radius-lg, 12px);
+  padding: 1.5rem;
+}
+
+.ad-doc-selector-row {
+  display: flex;
+  gap: 1rem;
+  align-items: flex-start;
+}
+
+.ad-doc-dropzone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 1.75rem 1.5rem;
+  border: 2px dashed #94a3b8;
+  border-radius: var(--radius-md, 10px);
+  background: #ffffff;
+  cursor: pointer;
+  text-align: center;
+  transition: all 0.2s ease-in-out;
+}
+
+.ad-doc-dropzone:hover,
+.ad-doc-dropzone--active {
+  border-color: #166534;
+  background: #f0fdf4;
+}
+
+.ad-doc-dropzone__content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.ad-doc-dropzone__icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: #e2e8f0;
+  color: #1e293b;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.ad-doc-dropzone:hover .ad-doc-dropzone__icon,
+.ad-doc-dropzone--active .ad-doc-dropzone__icon {
+  background: #166534;
+  color: #ffffff;
+}
+
+.ad-doc-dropzone__title {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.ad-doc-dropzone__hint {
+  font-size: 0.8125rem;
+  color: #64748b;
+}
+
+.ad-doc-limit-box {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.875rem 1rem;
+  background: #f0fdf4;
+  border: 1px solid #86efac;
+  border-radius: 8px;
+  color: #166534;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+/* Lista de Documentos Anexados */
+.ad-doc-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-top: 0.5rem;
+}
+
+.ad-doc-list__title {
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: #334155;
+  margin: 0;
+}
+
+.ad-doc-items {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+}
+
+.ad-doc-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.875rem 1rem;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.ad-doc-item__icon-wrap {
+  flex-shrink: 0;
+}
+
+.ad-doc-type-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+}
+
+.ad-doc-type-icon--pdf {
+  background: #fee2e2;
+  color: #b91c1c;
+  border: 1px solid #fca5a5;
+}
+
+.ad-doc-type-icon--img {
+  background: #eff6ff;
+  color: #1d4ed8;
+  border: 1px solid #bfdbfe;
+}
+
+.ad-doc-item__info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.ad-doc-item__badge-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.ad-doc-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.ad-doc-badge--type {
+  background: #f1f5f9;
+  color: #334155;
+  border: 1px solid #cbd5e1;
+}
+
+.ad-doc-badge--real {
+  background: #f0fdf4;
+  color: #166534;
+  border: 1px solid #86efac;
+}
+
+.ad-doc-badge--simulated {
+  background: #fef3c7;
+  color: #92400e;
+  border: 1px solid #fde68a;
+}
+
+.ad-doc-item__size {
+  font-size: 0.75rem;
+  color: #64748b;
+}
+
+.ad-doc-item__name {
+  font-size: 0.875rem;
+  color: #0f172a;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ad-doc-item__btn-remove {
+  flex-shrink: 0;
+}
+
+.ad-doc-security-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.625rem;
+  padding: 0.875rem 1rem;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  color: #1e40af;
+  font-size: 0.8125rem;
+  line-height: 1.45;
+}
+
+.ad-doc-security-note .icon {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+/* ==========================================================================
+   Seção de Documentação no Detalhe do Anúncio (AdDetailPage.tsx)
+   ========================================================================== */
+
+.ad-doc-section {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  margin-top: 1.5rem;
+}
+
+.ad-doc-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.ad-doc-count-badge {
+  background: #f0fdf4;
+  color: #166534;
+  border: 1px solid #86efac;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 0.8125rem;
+  font-weight: 700;
+}
+
+/* Banners de Estado do Data Room */
+.ad-doc-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.875rem;
+  padding: 1rem 1.25rem;
+  border-radius: 8px;
+  border-left: 4px solid;
+  line-height: 1.45;
+}
+
+.ad-doc-banner__icon {
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ad-doc-banner__text {
+  flex: 1;
+}
+
+.ad-doc-banner__text strong {
+  display: block;
+  font-size: 0.9375rem;
+  margin-bottom: 0.25rem;
+}
+
+.ad-doc-banner__text p {
+  margin: 0;
+  font-size: 0.875rem;
+}
+
+.ad-doc-banner__quote {
+  margin-top: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  background: rgba(255, 255, 255, 0.6);
+  border-radius: 6px;
+  font-style: italic;
+  font-size: 0.8125rem;
+}
+
+.ad-doc-banner--owner {
+  background: #f0fdf4;
+  border-left-color: #166534;
+  color: #14532d;
+}
+
+.ad-doc-banner--admin {
+  background: #faf5ff;
+  border-left-color: #7e22ce;
+  color: #581c87;
+}
+
+.ad-doc-banner--approved {
+  background: #f0fdf4;
+  border-left-color: #16a34a;
+  color: #14532d;
+}
+
+.ad-doc-banner--pending {
+  background: #fffbeb;
+  border-left-color: #d97706;
+  color: #92400e;
+}
+
+.ad-doc-banner--refused {
+  background: #fef2f2;
+  border-left-color: #dc2626;
+  color: #991b1b;
+}
+
+.ad-doc-banner--revoked {
+  background: #f8fafc;
+  border-left-color: #64748b;
+  color: #334155;
+}
+
+.ad-doc-banner--locked {
+  background: #f8fafc;
+  border-left-color: #2563eb;
+  color: #1e3a8a;
+}
+
+/* Grade de Cards de Documento */
+.ad-doc-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 1rem;
+}
+
+.ad-doc-card {
+  display: flex;
+  flex-direction: column;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 1rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  transition: all 0.2s ease;
+}
+
+.ad-doc-card--locked {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+}
+
+.ad-doc-card--unlocked {
+  background: #ffffff;
+  border-color: #86efac;
+}
+
+.ad-doc-card:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+.ad-doc-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.75rem;
+}
+
+.ad-doc-card__type-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+}
+
+.ad-doc-card__type-badge--pdf {
+  background: #fee2e2;
+  color: #b91c1c;
+  border: 1px solid #fca5a5;
+}
+
+.ad-doc-card__type-badge--img {
+  background: #eff6ff;
+  color: #1d4ed8;
+  border: 1px solid #bfdbfe;
+}
+
+.ad-doc-card__lock-icon {
+  color: #94a3b8;
+  display: flex;
+  align-items: center;
+}
+
+.ad-doc-card__lock-icon--unlocked {
+  color: #16a34a;
+}
+
+.ad-doc-card__body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin-bottom: 1rem;
+}
+
+.ad-doc-card__title {
+  font-size: 0.9375rem;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0;
+}
+
+.ad-doc-card__filename {
+  font-size: 0.8125rem;
+  color: #64748b;
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ad-doc-card__size {
+  font-size: 0.75rem;
+  color: #94a3b8;
+  font-weight: 500;
+}
+
+.ad-doc-card__footer {
+  margin-top: auto;
+}
+
+.ad-doc-btn-pending {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+  width: 100%;
+  padding: 0.5rem;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  border-radius: 6px;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #b45309;
+}
+
+.ad-doc-empty-seller {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 2rem 1.5rem;
+  background: #f8fafc;
+  border: 1px dashed #cbd5e1;
+  border-radius: 10px;
+  gap: 0.5rem;
+}
+
+.ad-doc-empty-seller__icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: #e2e8f0;
+  color: #64748b;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 0.25rem;
+}
+
+.ad-doc-empty-seller h4 {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #1e293b;
+  margin: 0;
+}
+
+.ad-doc-empty-seller p {
+  font-size: 0.875rem;
+  color: #64748b;
+  max-width: 460px;
+  margin: 0 0 0.5rem;
+}
+
+/* Painel de Solicitações do Vendedor */
+.ad-doc-seller-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1.5rem;
+  background: #fbfdfa;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  margin-top: 1rem;
+}
+
+.ad-doc-seller-panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.ad-doc-seller-panel__title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 1.0625rem;
+  font-weight: 700;
+  color: #166534;
+  margin: 0;
+}
+
+.ad-doc-seller-panel__subtitle {
+  font-size: 0.8125rem;
+  color: #64748b;
+  margin: 0.25rem 0 0;
+}
+
+.ad-doc-seller-panel__empty {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 1rem;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  color: #64748b;
+  font-size: 0.875rem;
+}
+
+.ad-doc-requests-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.ad-doc-request-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1rem 1.25rem;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.ad-doc-request-card--pendente {
+  border-left: 4px solid #d97706;
+}
+
+.ad-doc-request-card--aprovado {
+  border-left: 4px solid #16a34a;
+}
+
+.ad-doc-request-card--recusado {
+  border-left: 4px solid #dc2626;
+}
+
+.ad-doc-request-card--revogado {
+  border-left: 4px solid #94a3b8;
+}
+
+.ad-doc-request-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.ad-doc-request-card__buyer {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.ad-doc-request-card__buyer strong {
+  display: block;
+  font-size: 0.9375rem;
+  color: #0f172a;
+}
+
+.ad-doc-request-card__buyer-tag {
+  font-size: 0.75rem;
+  color: #64748b;
+}
+
+.ad-doc-request-card__status-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.ad-doc-status-badge {
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.ad-doc-status-badge--pendente {
+  background: #fffbeb;
+  color: #b45309;
+  border: 1px solid #fde68a;
+}
+
+.ad-doc-status-badge--aprovado {
+  background: #f0fdf4;
+  color: #166534;
+  border: 1px solid #86efac;
+}
+
+.ad-doc-status-badge--recusado {
+  background: #fef2f2;
+  color: #991b1b;
+  border: 1px solid #fca5a5;
+}
+
+.ad-doc-status-badge--revogado {
+  background: #f1f5f9;
+  color: #475569;
+  border: 1px solid #cbd5e1;
+}
+
+.ad-doc-request-card__date {
+  font-size: 0.75rem;
+  color: #94a3b8;
+}
+
+.ad-doc-request-card__message {
+  padding: 0.75rem 1rem;
+  background: #f8fafc;
+  border-radius: 6px;
+  border: 1px solid #e2e8f0;
+}
+
+.ad-doc-request-card__message-label {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #64748b;
+  margin-bottom: 0.25rem;
+  text-transform: uppercase;
+}
+
+.ad-doc-request-card__message-text {
+  margin: 0;
+  font-size: 0.875rem;
+  color: #1e293b;
+  font-style: italic;
+  line-height: 1.4;
+}
+
+.ad-doc-request-card__actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.25rem;
+}
+
+.ad-btn-revoke {
+  color: #b91c1c;
+  border-color: #fca5a5;
+}
+
+.ad-btn-revoke:hover {
+  background: #fef2f2;
+}
+
+/* ==========================================================================
+   Modais de Documentos (ViewAdDocumentModal & RequestAdAccessModal)
+   ========================================================================== */
+
+.ad-doc-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.75);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  padding: 1rem;
+}
+
+.ad-doc-modal-card {
+  background: #ffffff;
+  border-radius: 12px;
+  box-shadow: 0 20px 45px rgba(0, 0, 0, 0.25);
+  border: 1px solid #d8e2dc;
+  width: 95vw !important;
+  max-width: 920px !important;
+  max-height: 94vh;
+  display: flex;
+  flex-direction: column;
+  padding: 0 !important;
+  overflow: hidden;
+}
+
+.ad-doc-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 1.25rem 1.5rem 0.85rem;
+  border-bottom: 1px solid #d8e2dc;
+  background: #fbfdfc;
+  gap: 1rem;
+}
+
+.ad-doc-modal-header__info {
+  flex: 1;
+  min-width: 0;
+}
+
+.ad-doc-tag {
+  display: inline-block;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #2d6a4f;
+  margin-bottom: 0.25rem;
+}
+
+.ad-doc-modal-title {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #1b4332;
+  margin: 0.15rem 0 0.25rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ad-doc-modal-meta {
+  font-size: 0.8125rem;
+  color: #40514e;
+  margin: 0;
+  line-height: 1.4;
+}
+
+.ad-doc-modal-header__actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
+.ad-doc-download-btn {
+  font-size: 0.8125rem !important;
+  padding: 0.35rem 0.75rem !important;
+  color: #1b4332 !important;
+  border-color: #2d6a4f !important;
+  font-weight: 600;
+  background: #ffffff;
+  border-radius: 6px;
+  transition: all 0.15s ease;
+}
+
+.ad-doc-download-btn:hover {
+  background: #e9f5ee;
+  border-color: #1b4332 !important;
+}
+
+.ad-doc-modal-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  border: 1px solid #d8e2dc;
+  background: #ffffff;
+  color: #52665a;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.ad-doc-modal-close:hover {
+  background: #fee2e2;
+  border-color: #fca5a5;
+  color: #b91c1c;
+}
+
+/* Abas de Navegação entre Documentos do Lote */
+.ad-doc-tabs {
+  display: flex;
+  gap: 0.4rem;
+  padding: 0.6rem 1.5rem;
+  background: #f0f5f2;
+  border-bottom: 1px solid #d8e2dc;
+  overflow-x: auto;
+}
+
+.ad-doc-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.45rem 0.85rem;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: #2d6a4f;
+  font-weight: 600;
+  font-size: 0.8125rem;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+}
+
+.ad-doc-tab .icon {
+  width: 14px;
+  height: 14px;
+  color: #2d6a4f;
+  flex-shrink: 0;
+}
+
+.ad-doc-tab:hover {
+  background: rgba(45, 106, 79, 0.08);
+}
+
+.ad-doc-tab.is-active {
+  background: #ffffff;
+  color: #1b4332;
+  border-color: #cbd5ce;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+}
+
+.ad-doc-tab.is-active .icon {
+  color: #1b4332;
+}
+
+.ad-doc-tab__label {
+  font-weight: 700;
+}
+
+.ad-doc-tab__filename {
+  font-size: 0.72rem;
+  color: #64748b;
+  font-weight: normal;
+}
+
+/* Barra de Ferramentas (Toolbar) */
+.ad-doc-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5rem 1.5rem;
+  background: #ffffff;
+  border-bottom: 1px solid #e1e8e4;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  min-height: 44px;
+}
+
+.ad-doc-toolbar__left {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.ad-doc-badge--pdf {
+  background: #b91c1c;
+  color: #ffffff;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.ad-doc-badge--img {
+  background: #1d4ed8;
+  color: #ffffff;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.ad-doc-filename {
+  font-size: 0.8125rem;
+  color: #2f3e35;
+  background: #f0f4f1;
+  padding: 2px 6px;
+  border-radius: 4px;
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ad-doc-size {
+  font-size: 0.8125rem;
+  color: #64748b;
+}
+
+.ad-doc-real-badge {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #137333;
+  background: #e6f4ea;
+  border: 1px solid #a8dab5;
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+
+.ad-doc-toolbar__right {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.ad-doc-tool-btn {
+  padding: 0.25rem 0.55rem !important;
+  font-size: 0.75rem !important;
+}
+
+.ad-doc-tool-zoom {
+  font-size: 0.8125rem;
+  font-weight: 700;
+  color: #1b4332;
+  min-width: 44px;
+  text-align: center;
+}
+
+/* Viewport com Scroll Suave e Folha Centralizada */
+.ad-doc-modal-viewport {
+  flex: 1;
+  background: #e9eee9;
+  padding: 1.5rem;
+  overflow: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 480px;
+  max-height: calc(88vh - 220px);
+}
+
+.ad-doc-iframe {
+  border: 1px solid #c9d5cd;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+  width: 100%;
+  height: calc(85vh - 240px);
+  min-height: 500px;
+}
+
+.ad-doc-image-wrap {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: auto;
+}
+
+.ad-doc-image {
+  max-width: 100%;
+  max-height: calc(80vh - 240px);
+  object-fit: contain;
+  border-radius: 6px;
+  border: 1px solid #cbd5ce;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.18);
+  background: #ffffff;
+}
+
+.ad-doc-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  color: #52665a;
+  padding: 3rem 1rem;
+}
+
+/* Card de Erro Limpo (Zero Documentos Fictícios) */
+.ad-doc-error-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 36px 24px;
+  background: #ffffff;
+  border: 1.5px dashed #cbd5ce;
+  border-radius: 12px;
+  max-width: 520px;
+  margin: 1.5rem auto;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.05);
+}
+
+.ad-doc-error-icon {
+  font-size: 2.75rem;
+  margin-bottom: 12px;
+  display: inline-block;
+}
+
+.ad-doc-error-card h4 {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #1b4332;
+  margin: 0 0 8px;
+}
+
+.ad-doc-error-card p {
+  font-size: 0.875rem;
+  color: #4b5563;
+  line-height: 1.55;
+  margin: 0 0 12px;
+}
+
+.ad-doc-error-card p code {
+  background: #f1f5f9;
+  color: #1e293b;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.8125rem;
+}
+
+.ad-doc-error-hint {
+  font-size: 0.8rem;
+  color: #6b7280;
+  font-style: italic;
+  margin-bottom: 16px;
+}
+
+.ad-doc-error-actions {
+  display: flex;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+/* Rodapé do Modal */
+.ad-doc-modal-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1.5rem;
+  border-top: 1px solid #d8e2dc;
+  background: #ffffff;
+}
+
+.ad-doc-security-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.775rem;
+  color: #52665a;
+  font-weight: 500;
+}
+
+.ad-doc-security-status .icon {
+  width: 14px;
+  height: 14px;
+  color: #2d6a4f;
+}
+
+/* Modal de Solicitação de Acesso (RequestAdAccessModal) */
+.ad-doc-modal-card--request {
+  max-width: 560px;
+}
+
+.ad-doc-request-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.875rem;
+  padding: 1.5rem;
+  border-bottom: 1px solid #e2e8f0;
+  background: #f8fafc;
+}
+
+.ad-doc-request-header__icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: #eff6ff;
+  color: #1e40af;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.ad-doc-request-form {
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  overflow-y: auto;
+}
+
+.ad-doc-request-info-box {
+  padding: 1rem;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+}
+
+.ad-doc-request-info-box__title {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: #1e40af;
+  margin: 0 0 0.375rem;
+}
+
+.ad-doc-request-info-box__text {
+  font-size: 0.8125rem;
+  color: #1e3a8a;
+  margin: 0;
+  line-height: 1.4;
+}
+
+.ad-doc-request-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+  margin-top: 0.625rem;
+}
+
+.ad-doc-request-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 2px 8px;
+  background: #ffffff;
+  border: 1px solid #bfdbfe;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #1e40af;
+}
+
+.ad-doc-request-buyer-card {
+  padding: 0.75rem 1rem;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.ad-doc-request-buyer-label {
+  font-size: 0.75rem;
+  color: #64748b;
+  text-transform: uppercase;
+  font-weight: 600;
+}
+
+.ad-doc-request-buyer-info strong {
+  display: block;
+  font-size: 0.875rem;
+  color: #0f172a;
+}
+
+.ad-doc-request-buyer-info span {
+  font-size: 0.8125rem;
+  color: #64748b;
+}
+
+.ad-doc-request-form .form-field-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 0.35rem;
+  font-size: 0.75rem;
+  color: #64748b;
+}
+
+.ad-doc-request-form .form-field-hint {
+  font-size: 0.75rem;
+  color: #64748b;
+  line-height: 1.35;
+}
+
+.ad-doc-request-form .form-field-counter {
+  font-size: 0.75rem;
+  color: #64748b;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.ad-doc-request-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  margin-top: 0.5rem;
+}
+
+/* Badge no Card de Meus Anúncios (MyAdsPage) */
+.my-ad-card__doc-request-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 3px 8px;
+  background: #fef3c7;
+  color: #92400e;
+  border: 1px solid #fde68a;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  margin-bottom: 0.375rem;
+}
+
+.my-ad-card__doc-request-badge .icon {
+  width: 14px;
+  height: 14px;
+}
+
+
 
 

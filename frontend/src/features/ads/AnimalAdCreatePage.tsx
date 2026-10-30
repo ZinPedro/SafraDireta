@@ -24,6 +24,7 @@ import {
   obterYoutubeEmbedUrl,
 } from "./ads.types";
 import type {
+  AdDocumentItem,
   AdVideoItem,
   AnimalPurpose,
   CoffeeScreen,
@@ -42,6 +43,7 @@ import {
   criarAnuncioGraos,
   obterAnuncioPorId,
 } from "./adsStorage";
+import { AdDocumentsSection } from "./AdDocumentsSection";
 import defaultFarmImage from "../../assets/images/farm-landscape.jpeg";
 import harvestSunsetImage from "../../assets/images/harvest-sunset.jpeg";
 import "./ads.css";
@@ -265,6 +267,9 @@ export function AnimalAdCreatePage({ onOpenDialog, mode = "create" }: AnimalAdCr
     }
   }
 
+  // Estados de Documentação Comprobatória (US-013)
+  const [documentos, setDocumentos] = useState<AdDocumentItem[]>([]);
+
   // Estados de controle
   const [erros, setErros] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -318,6 +323,10 @@ export function AnimalAdCreatePage({ onOpenDialog, mode = "create" }: AnimalAdCr
             setVideoMode("YOUTUBE");
             setVideoYoutubeUrl(ad.video.url);
           }
+        }
+
+        if (ad.documentos && ad.documentos.length > 0) {
+          setDocumentos(ad.documentos);
         }
 
         if (ad.categoria === "ANIMAL") {
@@ -779,6 +788,7 @@ export function AnimalAdCreatePage({ onOpenDialog, mode = "create" }: AnimalAdCr
           uf,
           fotos: fotos.length > 0 ? fotos : undefined,
           video: videoPayload,
+          documentos: documentos.length > 0 ? documentos : undefined,
         };
 
         if (isEditMode && id) {
@@ -860,6 +870,7 @@ export function AnimalAdCreatePage({ onOpenDialog, mode = "create" }: AnimalAdCr
           uf,
           fotos: fotos.length > 0 ? fotos : undefined,
           video: videoPayload,
+          documentos: documentos.length > 0 ? documentos : undefined,
         };
 
         if (isEditMode && id) {
@@ -2384,10 +2395,18 @@ export function AnimalAdCreatePage({ onOpenDialog, mode = "create" }: AnimalAdCr
             </div>
           </section>
 
-          {/* BLOCO 4: Precificação e Localização */}
+          {/* BLOCO 4: Documentação Comprobatória do Lote (US-013) */}
+          <AdDocumentsSection
+            documentos={documentos}
+            onChangeDocumentos={setDocumentos}
+            modalidade={modalidade}
+            anuncioId={id}
+          />
+
+          {/* BLOCO 5: Precificação e Localização */}
           <section className="ad-form-section" aria-labelledby="section-preco">
             <h2 id="section-preco" className="ad-form-section__title">
-              <Icon name="location" /> 4. Precificação Comercial e Localização
+              <Icon name="location" /> 5. Precificação Comercial e Localização
             </h2>
 
             {modalidade === "ANIMAL" ? (

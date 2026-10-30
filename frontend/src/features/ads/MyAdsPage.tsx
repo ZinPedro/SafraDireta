@@ -9,7 +9,7 @@ import { SellerBlockedView } from "../admin/SellerBlockedView";
 import { obterStatusGovernancaProdutor } from "../admin/adminStorage";
 import { GRAIN_PACKAGING_LABELS, obterFotoCapa, obterTagsAnuncio } from "./ads.types";
 import type { MarketplaceAd } from "./ads.types";
-import { alternarStatusAnuncio, listarMeusAnuncios } from "./adsStorage";
+import { alternarStatusAnuncio, contarSolicitacoesPendentesAnuncio, listarMeusAnuncios } from "./adsStorage";
 import "./ads.css";
 
 interface MyAdsPageProps {
@@ -256,6 +256,7 @@ export function MyAdsPage({ onOpenDialog }: MyAdsPageProps) {
               const isInReview = anuncio.status === "EM_REVISAO";
               const isBlockedModeration = anuncio.status === "BLOQUEADO_MODERACAO";
               const isInactive = anuncio.status !== "ATIVO";
+              const pedidosPendentes = contarSolicitacoesPendentesAnuncio(anuncio.id);
 
               return (
                 <article
@@ -318,6 +319,17 @@ export function MyAdsPage({ onOpenDialog }: MyAdsPageProps) {
                     <div className="my-ad-card__category-tag">
                       {tag1} · {tag2}
                     </div>
+                    {pedidosPendentes > 0 && (
+                      <div
+                        className="my-ad-card__doc-request-badge"
+                        title="Solicitações de documentos aguardando sua autorização"
+                      >
+                        <Icon name="file" /> {pedidosPendentes}{" "}
+                        {pedidosPendentes === 1
+                          ? "pedido de documento"
+                          : "pedidos de documentos"}
+                      </div>
+                    )}
                     <h3 className="my-ad-card__title">{anuncio.titulo}</h3>
 
                     {/* Banner Contextual de Moderação / Revisão */}

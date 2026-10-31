@@ -19,7 +19,8 @@ export type AdStatus =
   | "PAUSADO_MODERACAO"
   | "EM_REVISAO"
   | "BLOQUEADO_MODERACAO"
-  | "VENDIDO";
+  | "VENDIDO"
+  | "CANCELADO";
 
 export type GrainCrop = "CAFE" | "SOJA" | "MILHO" | "TRIGO" | "OUTRO";
 
@@ -30,6 +31,46 @@ export interface AdVideoItem {
   url: string; // URL do blob local ou URL do YouTube
   fileBlob?: Blob;
   fileName?: string;
+}
+
+export type AdDocumentType =
+  // Pecuária
+  | "GTA"
+  | "LAUDO_SANITARIO"
+  | "REGISTRO_GENEALOGICO"
+  | "EXAME_ANDROLOGICO"
+  // Grãos e Café
+  | "LAUDO_CLASSIFICACAO"
+  | "LAUDO_SCA_CAFE"
+  | "CERTIFICACAO_SUSTENTAVEL"
+  | "NOTA_FISCAL_SEMENTE"
+  // Geral
+  | "OUTRO";
+
+export interface AdDocumentItem {
+  id: string;
+  tipo: AdDocumentType;
+  nomeArquivo: string;
+  tamanhoBytes: number;
+  mimeType: string;
+  url?: string; // Data URL ou Blob URL transitória
+  criadoEm: string;
+}
+
+export type DocumentAccessStatus = "PENDENTE" | "APROVADO" | "RECUSADO" | "REVOGADO" | "CANCELADO";
+
+export interface AdDocumentAccessRequest {
+  id: string;
+  anuncioId: string;
+  compradorId: string;
+  compradorNome: string;
+  compradorCidadeUf?: string;
+  compradorTipo?: "PF" | "PJ";
+  mensagem: string; // Obrigatória
+  status: DocumentAccessStatus;
+  motivoRecusa?: string;
+  solicitadoEm: string;
+  respondidoEm?: string;
 }
 
 export interface AnimalLotAd {
@@ -57,6 +98,7 @@ export interface AnimalLotAd {
   uf: string;
   fotos?: string[];
   video?: AdVideoItem;
+  documentos?: AdDocumentItem[];
   imagemUrl: string;
   criadoEm: string;
   atualizadoEm?: string;
@@ -64,6 +106,9 @@ export interface AnimalLotAd {
   motivoModeracao?: string;
   moderadoEm?: string;
   seloVerificado?: boolean;
+  encerradoEm?: string;
+  motivoEncerramento?: string;
+  observacoesEncerramento?: string;
 }
 
 export type CoffeeScreen =
@@ -126,6 +171,7 @@ export interface GrainLotAd {
   uf: string;
   fotos?: string[];
   video?: AdVideoItem;
+  documentos?: AdDocumentItem[];
   imagemUrl: string;
   criadoEm: string;
   atualizadoEm?: string;
@@ -133,9 +179,46 @@ export interface GrainLotAd {
   motivoModeracao?: string;
   moderadoEm?: string;
   seloVerificado?: boolean;
+  encerradoEm?: string;
+  motivoEncerramento?: string;
+  observacoesEncerramento?: string;
 }
 
 export type MarketplaceAd = AnimalLotAd | GrainLotAd;
+
+export interface EncerramentoAnuncioPayload {
+  tipo: "VENDIDO" | "CANCELADO";
+  motivo: string;
+  observacoes?: string;
+  desvincularDocumentos?: boolean;
+}
+
+export const MOTIVOS_ENCERRAMENTO_VENDIDO = [
+  "Venda externa (Frigorífico / Indústria)",
+  "Venda para outro produtor / vizinho",
+  "Negociação intermediada pelo SafraDireta",
+  "Outro destino comercial",
+] as const;
+
+export const MOTIVOS_ENCERRAMENTO_CANCELADO = [
+  "Retenção na propriedade (recria / confinamento / silo)",
+  "Perda física ou descarte sanitário",
+  "Desistência comercial (mercado desfavorável)",
+  "Erro de cadastro / Duplicidade",
+  "Outro motivo",
+] as const;
+
+export type AdModelTemplate =
+  | (Partial<AnimalLotAd> & {
+      categoria: "ANIMAL";
+      pricingMode?: PricingMode;
+      pesoUnitMode?: "KG" | "ARROBA";
+    })
+  | (Partial<GrainLotAd> & {
+      categoria: "GRAOS";
+      grainPricingMode?: GrainPricingMode;
+      volumeUnitMode?: "SACAS" | "TONELADAS";
+    });
 
 export interface CreateAnimalAdInput {
   titulo: string;
@@ -153,6 +236,7 @@ export interface CreateAnimalAdInput {
   uf: string;
   fotos?: string[];
   video?: AdVideoItem;
+  documentos?: AdDocumentItem[];
 }
 
 export interface CreateGrainAdInput {
@@ -174,6 +258,7 @@ export interface CreateGrainAdInput {
   uf: string;
   fotos?: string[];
   video?: AdVideoItem;
+  documentos?: AdDocumentItem[];
 }
 
 export type UpdateAdInput =
@@ -517,3 +602,90 @@ export function comprimirImagemParaUpload(
     reader.readAsDataURL(file);
   });
 }
+
+export const ANIMAL_DOCUMENT_TYPES: { value: AdDocumentType; label: string; descricao: string }[] = [
+  {
+    value: "GTA",
+    label: "Guia de Trânsito Animal (GTA)",
+    descricao: "Documento oficial do MAPA / Defesa Agropecuária para transporte e sanidade",
+  },
+  {
+    value: "LAUDO_SANITARIO",
+    label: "Atestado / Laudo Sanitário",
+    descricao: "Comprovações de vacinação (Brucelose, Tuberculose, Febre Aftosa)",
+  },
+  {
+    value: "REGISTRO_GENEALOGICO",
+    label: "RGD / Registro Genealógico",
+    descricao: "Certificado de associação de raça (ABCZ, ANCP, etc.)",
+  },
+  {
+    value: "EXAME_ANDROLOGICO",
+    label: "Exame Andrológico",
+    descricao: "Laudo reprodutivo e de fertilidade para touros e matrizes",
+  },
+  {
+    value: "OUTRO",
+    label: "Outro Documento Zootécnico / Fiscal",
+    descricao: "Laudos complementares, notas fiscais ou exames adicionais",
+  },
+];
+
+export const GRAIN_DOCUMENT_TYPES: { value: AdDocumentType; label: string; descricao: string }[] = [
+  {
+    value: "LAUDO_CLASSIFICACAO",
+    label: "Laudo de Classificação Vegetal",
+    descricao: "Laudo oficial emitido por classificador credenciado no MAPA (umidade, impurezas)",
+  },
+  {
+    value: "LAUDO_SCA_CAFE",
+    label: "Laudo SCA (Cafés Especiais)",
+    descricao: "Análise sensorial de xícara e pontuação SCA (Specialty Coffee Association)",
+  },
+  {
+    value: "CERTIFICACAO_SUSTENTAVEL",
+    label: "Certificação Sustentável / Selo",
+    descricao: "Certificados socioambientais (Orgânico, Rainforest Alliance, Fairtrade)",
+  },
+  {
+    value: "NOTA_FISCAL_SEMENTE",
+    label: "NF de Origem da Semente",
+    descricao: "Comprovação fiscal e genética de semente fiscalizada/certificada",
+  },
+  {
+    value: "OUTRO",
+    label: "Outro Laudo Técnico / Agronômico",
+    descricao: "Laudos de solo, defensivos, talhão ou notas fiscais complementares",
+  },
+];
+
+export const AD_DOCUMENT_LABELS: Record<AdDocumentType, string> = {
+  GTA: "Guia de Trânsito Animal (GTA)",
+  LAUDO_SANITARIO: "Atestado / Laudo Sanitário",
+  REGISTRO_GENEALOGICO: "Registro Genealógico (RGD)",
+  EXAME_ANDROLOGICO: "Exame Andrológico",
+  LAUDO_CLASSIFICACAO: "Laudo de Classificação Vegetal",
+  LAUDO_SCA_CAFE: "Laudo de Qualidade SCA",
+  CERTIFICACAO_SUSTENTAVEL: "Certificação Socioambiental",
+  NOTA_FISCAL_SEMENTE: "Nota Fiscal de Semente Certificada",
+  OUTRO: "Outro Documento",
+};
+
+export const AD_DOCUMENT_SHORT_LABELS: Record<AdDocumentType, string> = {
+  GTA: "GTA",
+  LAUDO_SANITARIO: "Sanitário",
+  REGISTRO_GENEALOGICO: "RGD",
+  EXAME_ANDROLOGICO: "Andrológico",
+  LAUDO_CLASSIFICACAO: "Classificação",
+  LAUDO_SCA_CAFE: "Laudo SCA",
+  CERTIFICACAO_SUSTENTAVEL: "Certificado",
+  NOTA_FISCAL_SEMENTE: "NF Semente",
+  OUTRO: "Outro",
+};
+
+export function formatarTamanhoArquivo(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+

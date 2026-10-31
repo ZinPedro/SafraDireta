@@ -2,6 +2,7 @@ import { type FormEvent, useEffect, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "../../context/authContext";
 import { ADMIN_SECRET_SLUG, routes } from "../../data/site";
+import type { OpenDevelopmentDialog } from "../../data/site";
 import { Icon } from "../../components/Icon";
 import { Avatar } from "../../components/Avatar";
 import farmImage from "../../assets/images/farm-landscape.jpeg";
@@ -9,20 +10,44 @@ import { liberarAnuncioModeracao, pausarAnuncioModeracao } from "../admin/adminS
 import "../admin/admin.css";
 import { formatPhone, phoneDigits } from "../profile/profile";
 import {
+  AD_DOCUMENT_LABELS,
+  AD_DOCUMENT_SHORT_LABELS,
   COFFEE_SCREEN_LABELS,
   GRAIN_CROP_LABELS,
   GRAIN_PACKAGING_LABELS,
   PURPOSE_LABELS,
   SPECIES_LABELS,
+  formatarTamanhoArquivo,
   obterTagsAnuncio,
   obterYoutubeEmbedUrl,
 } from "./ads.types";
-import type { MarketplaceAd } from "./ads.types";
-import { alternarStatusAnuncio, obterAnuncioPorId, obterPerfilProdutorPublico } from "./adsStorage";
+import type {
+  AdDocumentAccessRequest,
+  AdDocumentItem,
+  DocumentAccessStatus,
+  EncerramentoAnuncioPayload,
+  MarketplaceAd,
+} from "./ads.types";
+import {
+  alternarStatusAnuncio,
+  encerrarAnuncio,
+  obterAnuncioPorId,
+  obterPerfilProdutorPublico,
+  obterSolicitacaoComprador,
+  listarSolicitacoesAnuncio,
+  responderSolicitacaoAcesso,
+} from "./adsStorage";
 import type { PublicProducerProfile } from "./adsStorage";
+import { ViewAdDocumentModal } from "./ViewAdDocumentModal";
+import { RequestAdAccessModal } from "./RequestAdAccessModal";
+import { CloseAdModal } from "./CloseAdModal";
 import "./ads.css";
 
-export function AdDetailPage() {
+interface AdDetailPageProps {
+  onOpenDialog?: OpenDevelopmentDialog;
+}
+
+export function AdDetailPage({ onOpenDialog }: AdDetailPageProps) {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const location = useLocation();
@@ -39,6 +64,16 @@ export function AdDetailPage() {
   const [activeToast, setActiveToast] = useState<string | null>(toastMessage || null);
   const [showAdminPauseModal, setShowAdminPauseModal] = useState(false);
   const [adminPauseReason, setAdminPauseReason] = useState("");
+  const [isCloseModalOpen, setIsCloseModalOpen] = useState(false);
+
+  // Estados de Documentos e Data Room (US-013)
+  const [selectedDocToView, setSelectedDocToView] = useState<AdDocumentItem | null>(null);
+  const [isViewDocModalOpen, setIsViewDocModalOpen] = useState(false);
+  const [isRequestAccessModalOpen, setIsRequestAccessModalOpen] = useState(false);
+  const [buyerRequest, setBuyerRequest] = useState<AdDocumentAccessRequest | null>(null);
+  const [sellerRequests, setSellerRequests] = useState<AdDocumentAccessRequest[]>([]);
+  const [isProcessingRequest, setIsProcessingRequest] = useState(false);
+  const [docFeedbackToast, setDocFeedbackToast] = useState<string | null>(null);
 
   const fotos = anuncio?.fotos && anuncio.fotos.length > 0 ? anuncio.fotos : [anuncio?.imagemUrl || ""];
 
@@ -104,6 +139,28 @@ export function AdDetailPage() {
     }
   }
 
+  async function handleConfirmarEncerramento(payload: EncerramentoAnuncioPayload) {
+    if (!anuncio || !session) return;
+    try {
+      const atualizado = await encerrarAnuncio(anuncio.id, payload, session);
+      setAnuncio(atualizado);
+      setIsCloseModalOpen(false);
+      setActiveToast(
+        payload.tipo === "VENDIDO"
+          ? "Lote finalizado com sucesso! Marcado como Comercializado / Vendido."
+          : "Lote finalizado com sucesso! Marcado como Cancelado / Retirado."
+      );
+      recarregarSolicitacoes();
+    } catch (err) {
+      console.error("Erro ao encerrar anúncio:", err);
+      alert(
+        err instanceof Error
+          ? err.message
+          : "Não foi possível encerrar a disponibilidade do anúncio."
+      );
+    }
+  }
+
   function handleAdminConfirmPause(e: FormEvent) {
     e.preventDefault();
     if (!anuncio || adminPauseReason.trim().length < 10) return;
@@ -122,6 +179,61 @@ export function AdDetailPage() {
     if (atualizado) setAnuncio(atualizado);
     setActiveToast("Lote liberado pela Moderação e republicado no Mercado!");
   }
+
+  const recarregarSolicitacoes = () => {
+    if (!anuncio?.id || !session) return;
+    if (session.conta.id === anuncio.vendedorId) {
+      void listarSolicitacoesAnuncio(anuncio.id).then(setSellerRequests);
+    } else {
+      void obterSolicitacaoComprador(anuncio.id, session.conta.id).then(setBuyerRequest);
+    }
+  };
+
+  useEffect(() => {
+    if (!anuncio?.id || !session) return;
+    let isMounted = true;
+    const adId = anuncio.id;
+    const userId = session.conta.id;
+    const isOwnerUser = userId === anuncio.vendedorId;
+
+    if (isOwnerUser) {
+      void listarSolicitacoesAnuncio(adId).then((reqs) => {
+        if (isMounted) setSellerRequests(reqs);
+      });
+    } else {
+      void obterSolicitacaoComprador(adId, userId).then((req) => {
+        if (isMounted) setBuyerRequest(req);
+      });
+    }
+
+    return () => {
+      isMounted = false;
+    };
+  }, [anuncio?.id, anuncio?.vendedorId, session]);
+
+  const handleResponderSolicitacao = async (
+    solicitacaoId: string,
+    novoStatus: DocumentAccessStatus
+  ) => {
+    try {
+      setIsProcessingRequest(true);
+      const atualizada = await responderSolicitacaoAcesso(solicitacaoId, novoStatus);
+      setSellerRequests((prev) =>
+        prev.map((r) => (r.id === solicitacaoId ? atualizada : r))
+      );
+      setDocFeedbackToast(
+        novoStatus === "APROVADO"
+          ? "Acesso concedido com sucesso para este comprador! Todos os documentos do lote foram liberados."
+          : novoStatus === "RECUSADO"
+          ? "Solicitação recusada. O comprador não terá acesso aos documentos."
+          : "Acesso revogado com sucesso. O comprador não poderá mais visualizar os documentos."
+      );
+    } catch (err) {
+      console.error("Erro ao responder solicitação:", err);
+    } finally {
+      setIsProcessingRequest(false);
+    }
+  };
 
   if (isLoading) {
     return (
@@ -154,6 +266,9 @@ export function AdDetailPage() {
 
   const isOwner = Boolean(session && session.conta.id === anuncio.vendedorId);
   const isAdmin = session?.conta.tipo === "ADMIN";
+  const isApprovedBuyer = Boolean(buyerRequest && buyerRequest.status === "APROVADO");
+  const hasUnlockedAccess = Boolean(isOwner || isAdmin || isApprovedBuyer);
+  const isClosed = anuncio.status === "VENDIDO" || anuncio.status === "CANCELADO";
   const [tag1, tag2] = obterTagsAnuncio(anuncio);
 
   const hasVideo = Boolean(anuncio.video?.url);
@@ -182,6 +297,53 @@ export function AdDetailPage() {
             >
               <Icon name="close" />
             </button>
+          </div>
+        )}
+
+        {/* Banner de Lote Encerrado (US-016) */}
+        {isClosed && (
+          <div
+            className={`ad-alert ${anuncio.status === "VENDIDO" ? "ad-alert--success" : "ad-alert--paused"}`}
+            role="status"
+          >
+            <div className="ad-alert__content">
+              <Icon name={anuncio.status === "VENDIDO" ? "check" : "box"} />
+              <div>
+                <strong>
+                  {anuncio.status === "VENDIDO"
+                    ? "📦 Lote Comercializado / Vendido"
+                    : "📦 Lote Cancelado / Retirado"}
+                </strong>
+                <p>
+                  {anuncio.encerradoEm
+                    ? `Finalizado em ${new Date(anuncio.encerradoEm).toLocaleDateString("pt-BR")}`
+                    : "Finalizado pelo produtor rural."}
+                  {anuncio.motivoEncerramento ? ` · Motivo: ${anuncio.motivoEncerramento}` : ""}
+                </p>
+                {isOwner && anuncio.observacoesEncerramento && (
+                  <p
+                    className="ad-alert__internal-notes"
+                    style={{
+                      marginTop: "0.35rem",
+                      fontStyle: "italic",
+                      fontSize: "0.875rem",
+                    }}
+                  >
+                    Nota interna da fazenda: &ldquo;{anuncio.observacoesEncerramento}&rdquo;
+                  </p>
+                )}
+                {!isOwner && (
+                  <p>
+                    Este lote foi formalmente finalizado pelo produtor rural e não aceita novos contatos comerciais nem pedidos de documentos.
+                  </p>
+                )}
+              </div>
+            </div>
+            {!isOwner && (
+              <Link to={routes.market} className="button button--primary button--small">
+                Explorar Outros Lotes no Mercado
+              </Link>
+            )}
           </div>
         )}
 
@@ -648,6 +810,398 @@ export function AdDetailPage() {
                 </div>
               </section>
             )}
+
+            {/* Seção de Documentação Comprobatória (Data Room Agro - US-013) */}
+            {((anuncio.documentos && anuncio.documentos.length > 0) || isOwner) && (
+              <section className="ad-detail-section ad-doc-section" aria-labelledby="heading-documentacao">
+                <div className="ad-doc-section-header">
+                  <div>
+                    <h2 id="heading-documentacao" className="ad-detail-section__title">
+                      <Icon name="file" /> Documentação Comprobatória do Lote
+                    </h2>
+                    <p className="ad-detail-section__subtitle">
+                      Laudos sanitários, registros e guias oficiais com custódia segura no Data Room SafraDireta.
+                    </p>
+                  </div>
+                  {anuncio.documentos && anuncio.documentos.length > 0 && (
+                    <span className="ad-doc-count-badge">
+                      {anuncio.documentos.length} documento(s)
+                    </span>
+                  )}
+                </div>
+
+                {docFeedbackToast && (
+                  <div className="ad-alert ad-alert--success" role="status" style={{ marginBottom: "1rem" }}>
+                    <Icon name="check" />
+                    <span>{docFeedbackToast}</span>
+                    <button
+                      type="button"
+                      className="ad-alert__close"
+                      onClick={() => setDocFeedbackToast(null)}
+                      aria-label="Fechar alerta"
+                    >
+                      <Icon name="close" />
+                    </button>
+                  </div>
+                )}
+
+                {/* Banner de Estado do Acesso */}
+                {hasUnlockedAccess ? (
+                  <div className={`ad-doc-banner ${isOwner ? "ad-doc-banner--owner" : isAdmin ? "ad-doc-banner--admin" : "ad-doc-banner--approved"}`}>
+                    <div className="ad-doc-banner__icon">
+                      <Icon name={isAdmin ? "shield" : "unlock"} />
+                    </div>
+                    <div className="ad-doc-banner__text">
+                      <strong>
+                        {isOwner
+                          ? "Painel do Vendedor: Documentação Liberada"
+                          : isAdmin
+                          ? "Auditoria Administrativa: Acesso Geral Liberado"
+                          : "Acesso Autorizado pelo Produtor Rural"}
+                      </strong>
+                      <p>
+                        {isOwner
+                          ? "Você tem acesso total aos documentos anexados. Gerencie as solicitações de compradores interessados no painel abaixo."
+                          : isAdmin
+                          ? "Você possui credenciais administrativas de governança e pode auditar os laudos deste anúncio."
+                          : "Sua solicitação de interesse foi aceita pelo produtor. Você pode visualizar os arquivos completos no leitor integrado."}
+                      </p>
+                    </div>
+                  </div>
+                ) : buyerRequest?.status === "PENDENTE" ? (
+                  <div className="ad-doc-banner ad-doc-banner--pending">
+                    <div className="ad-doc-banner__icon">
+                      <Icon name="clock" />
+                    </div>
+                    <div className="ad-doc-banner__text">
+                      <strong>Solicitação de Acesso em Análise</strong>
+                      <p>
+                        Seu pedido foi enviado ao produtor em{" "}
+                        {new Date(buyerRequest.solicitadoEm).toLocaleDateString("pt-BR")}. Assim que o vendedor
+                        aprovar, os arquivos serão destravados imediatamente nesta página.
+                      </p>
+                      <div className="ad-doc-banner__quote">
+                        Sua mensagem: &ldquo;{buyerRequest.mensagem}&rdquo;
+                      </div>
+                    </div>
+                  </div>
+                ) : buyerRequest?.status === "RECUSADO" ? (
+                  <div className="ad-doc-banner ad-doc-banner--refused">
+                    <div className="ad-doc-banner__icon">
+                      <Icon name="ban" />
+                    </div>
+                    <div className="ad-doc-banner__text">
+                      <strong>Acesso Não Autorizado pelo Vendedor</strong>
+                      <p>
+                        O produtor optou por não disponibilizar os arquivos para esta solicitação. Caso deseje, envie uma nova mensagem detalhando seu interesse comercial.
+                      </p>
+                      <button
+                        type="button"
+                        className="button button--secondary button--small"
+                        style={{ marginTop: "0.5rem" }}
+                        onClick={() => setIsRequestAccessModalOpen(true)}
+                      >
+                        Enviar Nova Solicitação
+                      </button>
+                    </div>
+                  </div>
+                ) : buyerRequest?.status === "REVOGADO" ? (
+                  <div className="ad-doc-banner ad-doc-banner--revoked">
+                    <div className="ad-doc-banner__icon">
+                      <Icon name="lock" />
+                    </div>
+                    <div className="ad-doc-banner__text">
+                      <strong>Permissão de Acesso Revogada</strong>
+                      <p>
+                        O acesso aos documentos deste lote foi suspenso pelo produtor rural. Para retomar as negociações, envie uma nova solicitação.
+                      </p>
+                      <button
+                        type="button"
+                        className="button button--secondary button--small"
+                        style={{ marginTop: "0.5rem" }}
+                        onClick={() => setIsRequestAccessModalOpen(true)}
+                      >
+                        Solicitar Reabertura de Acesso
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="ad-doc-banner ad-doc-banner--locked">
+                    <div className="ad-doc-banner__icon">
+                      <Icon name="lock" />
+                    </div>
+                    <div className="ad-doc-banner__text">
+                      <strong>Documentação Protegida (Data Room Agro)</strong>
+                      <p>
+                        Por motivos de privacidade fiscal e sanitária do produtor, a visualização dos laudos oficiais requer solicitação prévia com identificação do comprador e interesse comercial no lote.
+                      </p>
+                      <div style={{ marginTop: "0.5rem" }}>
+                        {session ? (
+                          <button
+                            type="button"
+                            className="button button--primary button--small"
+                            onClick={() => setIsRequestAccessModalOpen(true)}
+                          >
+                            <Icon name="lock" /> Solicitar Acesso aos Documentos
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            className="button button--outline button--small"
+                            onClick={() => onOpenDialog?.("login")}
+                          >
+                            <Icon name="lock" /> Fazer Login para Solicitar Acesso
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Grade de Documentos */}
+                {anuncio.documentos && anuncio.documentos.length > 0 ? (
+                  <div className="ad-doc-grid">
+                    {anuncio.documentos.map((doc) => {
+                      const isPdfFile =
+                        doc.mimeType === "application/pdf" ||
+                        doc.nomeArquivo.toLowerCase().endsWith(".pdf");
+                      return (
+                        <div
+                          key={doc.id}
+                          className={`ad-doc-card ${hasUnlockedAccess ? "ad-doc-card--unlocked" : "ad-doc-card--locked"}`}
+                        >
+                          <div className="ad-doc-card__header">
+                            <span
+                              className={`ad-doc-card__type-badge ${isPdfFile ? "ad-doc-card__type-badge--pdf" : "ad-doc-card__type-badge--img"}`}
+                            >
+                              {AD_DOCUMENT_SHORT_LABELS[doc.tipo] || doc.tipo}
+                            </span>
+                            <span
+                              className={`ad-doc-card__lock-icon ${hasUnlockedAccess ? "ad-doc-card__lock-icon--unlocked" : ""}`}
+                              title={hasUnlockedAccess ? "Documento desbloqueado" : "Documento protegido"}
+                            >
+                              <Icon name={hasUnlockedAccess ? "unlock" : "lock"} />
+                            </span>
+                          </div>
+
+                          <div className="ad-doc-card__body">
+                            <h4 className="ad-doc-card__title">
+                              {AD_DOCUMENT_LABELS[doc.tipo] || doc.tipo}
+                            </h4>
+                            <p className="ad-doc-card__filename" title={doc.nomeArquivo}>
+                              {doc.nomeArquivo}
+                            </p>
+                            <span className="ad-doc-card__size">
+                              {formatarTamanhoArquivo(doc.tamanhoBytes)}
+                            </span>
+                          </div>
+
+                          <div className="ad-doc-card__footer">
+                            {hasUnlockedAccess ? (
+                              <button
+                                type="button"
+                                className="button button--primary button--small button--full"
+                                onClick={() => {
+                                  setSelectedDocToView(doc);
+                                  setIsViewDocModalOpen(true);
+                                }}
+                              >
+                                <Icon name="eye" /> Visualizar Documento
+                              </button>
+                            ) : isClosed ? (
+                              <button
+                                type="button"
+                                className="button button--outline button--small button--full"
+                                disabled
+                                title="Lote fora de mercado. Solicitações de documentos encerradas."
+                              >
+                                <Icon name="lock" /> Lote Encerrado
+                              </button>
+                            ) : session ? (
+                              <button
+                                type="button"
+                                className="button button--outline button--small button--full"
+                                onClick={() => setIsRequestAccessModalOpen(true)}
+                                disabled={buyerRequest?.status === "PENDENTE"}
+                              >
+                                {buyerRequest?.status === "PENDENTE" ? (
+                                  <>
+                                    <Icon name="clock" /> Aguardando Liberação
+                                  </>
+                                ) : (
+                                  <>
+                                    <Icon name="lock" /> Solicitar Acesso
+                                  </>
+                                )}
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                className="button button--outline button--small button--full"
+                                onClick={() => onOpenDialog?.("login")}
+                              >
+                                <Icon name="lock" /> Entrar para Solicitar
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  /* Vendedor sem documentos anexados */
+                  <div className="ad-doc-empty-seller">
+                    <div className="ad-doc-empty-seller__icon">
+                      <Icon name="file" />
+                    </div>
+                    <h4>Nenhum documento anexado a este lote</h4>
+                    <p>
+                      Lotes com Guia de Trânsito Animal (GTA), laudos sanitários e certificados geram mais confiança e fecham negócios mais rápido.
+                    </p>
+                    {!isClosed && (
+                      <Link
+                        to={`/anuncios/${anuncio.id}/editar`}
+                        className="button button--primary button--small"
+                      >
+                        <Icon name="edit" /> Editar Anúncio para Anexar Documentos
+                      </Link>
+                    )}
+                  </div>
+                )}
+
+                {/* PAINEL DO VENDEDOR: Solicitações de Acesso ao Lote */}
+                {isOwner && (
+                  <div className="ad-doc-seller-panel">
+                    <div className="ad-doc-seller-panel__header">
+                      <div>
+                        <h3 className="ad-doc-seller-panel__title">
+                          <Icon name="user" /> Solicitações de Acesso ao Lote ({sellerRequests.length})
+                        </h3>
+                        <p className="ad-doc-seller-panel__subtitle">
+                          Avalie os compradores interessados e autorize a liberação de todos os documentos do anúncio de uma só vez.
+                        </p>
+                      </div>
+                    </div>
+
+                    {sellerRequests.length === 0 ? (
+                      <div className="ad-doc-seller-panel__empty">
+                        <Icon name="clock" />
+                        <p>Nenhum comprador solicitou acesso aos documentos deste lote até o momento.</p>
+                      </div>
+                    ) : (
+                      <div className="ad-doc-requests-list">
+                        {sellerRequests.map((req) => (
+                          <div
+                            key={req.id}
+                            className={`ad-doc-request-card ad-doc-request-card--${req.status.toLowerCase()}`}
+                          >
+                            <div className="ad-doc-request-card__header">
+                              <div className="ad-doc-request-card__buyer">
+                                <Avatar name={req.compradorNome} size={36} />
+                                <div>
+                                  <strong>{req.compradorNome}</strong>
+                                  <span className="ad-doc-request-card__buyer-tag">
+                                    {req.compradorTipo === "PJ" ? "Empresa / PJ" : "Pessoa Física"}
+                                    {req.compradorCidadeUf ? ` · ${req.compradorCidadeUf}` : ""}
+                                  </span>
+                                </div>
+                              </div>
+
+                              <div className="ad-doc-request-card__status-wrap">
+                                <span className={`ad-doc-status-badge ad-doc-status-badge--${req.status.toLowerCase()}`}>
+                                  {req.status === "PENDENTE" && "⏳ Pendente"}
+                                  {req.status === "APROVADO" && "✅ Acesso Liberado"}
+                                  {req.status === "RECUSADO" && "❌ Recusado"}
+                                  {req.status === "REVOGADO" && "🚫 Revogado"}
+                                  {req.status === "CANCELADO" && "⏹ Finalizado"}
+                                </span>
+                                <span className="ad-doc-request-card__date">
+                                  {new Date(req.solicitadoEm).toLocaleString("pt-BR", {
+                                    day: "2-digit",
+                                    month: "2-digit",
+                                    year: "numeric",
+                                    hour: "2-digit",
+                                    minute: "2-digit",
+                                  })}
+                                </span>
+                              </div>
+                            </div>
+
+                            <div className="ad-doc-request-card__message">
+                              <span className="ad-doc-request-card__message-label">
+                                Justificativa Comercial:
+                              </span>
+                              <p className="ad-doc-request-card__message-text">
+                                &ldquo;{req.mensagem}&rdquo;
+                              </p>
+                              {req.motivoRecusa && (
+                                <p className="ad-doc-request-card__refusal-reason">
+                                  Motivo: <em>{req.motivoRecusa}</em>
+                                </p>
+                              )}
+                            </div>
+
+                            <div className="ad-doc-request-card__actions">
+                              {!isClosed && req.status === "PENDENTE" && (
+                                <>
+                                  <button
+                                    type="button"
+                                    className="button button--primary button--small"
+                                    onClick={() => handleResponderSolicitacao(req.id, "APROVADO")}
+                                    disabled={isProcessingRequest}
+                                  >
+                                    <Icon name="check" /> Autorizar Acesso ao Lote
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="button button--secondary button--small"
+                                    onClick={() => handleResponderSolicitacao(req.id, "RECUSADO")}
+                                    disabled={isProcessingRequest}
+                                  >
+                                    <Icon name="close" /> Recusar
+                                  </button>
+                                </>
+                              )}
+
+                              {!isClosed && req.status === "APROVADO" && (
+                                <button
+                                  type="button"
+                                  className="button button--secondary button--small ad-btn-revoke"
+                                  onClick={() => handleResponderSolicitacao(req.id, "REVOGADO")}
+                                  disabled={isProcessingRequest}
+                                  title="Interromper acesso deste comprador aos documentos"
+                                >
+                                  <Icon name="lock" /> Revogar Acesso
+                                </button>
+                              )}
+
+                              {!isClosed && (req.status === "RECUSADO" || req.status === "REVOGADO") && (
+                                <button
+                                  type="button"
+                                  className="button button--secondary button--small"
+                                  onClick={() => handleResponderSolicitacao(req.id, "APROVADO")}
+                                  disabled={isProcessingRequest}
+                                >
+                                  <Icon name="check" /> Reautorizar Acesso
+                                </button>
+                              )}
+
+                              {isClosed && (
+                                <span className="ad-doc-request-card__closed-notice">
+                                  {req.status === "CANCELADO"
+                                    ? req.motivoRecusa || "Solicitação finalizada com o encerramento do lote."
+                                    : "Acesso a documentos expirado com o encerramento do lote."}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </section>
+            )}
           </div>
 
           {/* Coluna Direita: Preço, Produtor e Ação Comercial */}
@@ -710,43 +1264,153 @@ export function AdDetailPage() {
               {/* Botões de Ação */}
               {isOwner ? (
                 <div className="ad-owner-box">
-                  <div className="ad-owner-badge">
-                    <Icon name="user" />{" "}
-                    {anuncio.status === "PAUSADO"
-                      ? "Seu anúncio (Pausado)"
-                      : anuncio.status === "PAUSADO_MODERACAO"
-                      ? "Seu anúncio (Pausado pela Moderação)"
-                      : anuncio.status === "EM_REVISAO"
-                      ? "Seu anúncio (Em Revisão)"
-                      : anuncio.status === "BLOQUEADO_MODERACAO"
-                      ? "Seu anúncio (Bloqueado)"
-                      : "Seu anúncio publicado"}
+                  {anuncio.status === "VENDIDO" ? (
+                    <div className="ad-owner-badge ad-owner-badge--active">
+                      <Icon name="check" /> Seu Lote Comercializado
+                    </div>
+                  ) : anuncio.status === "CANCELADO" ? (
+                    <div className="ad-owner-badge ad-owner-badge--closed">
+                      <Icon name="close" /> Seu Lote Cancelado / Retirado
+                    </div>
+                  ) : anuncio.status === "PAUSADO" ? (
+                    <div className="ad-owner-badge ad-owner-badge--paused">
+                      <Icon name="pause" /> Seu Lote Pausado no Mercado
+                    </div>
+                  ) : anuncio.status === "PAUSADO_MODERACAO" ? (
+                    <div className="ad-owner-badge ad-owner-badge--paused">
+                      <Icon name="pause" /> Seu Lote Pausado pela Moderação
+                    </div>
+                  ) : anuncio.status === "EM_REVISAO" ? (
+                    <div className="ad-owner-badge ad-owner-badge--paused">
+                      <Icon name="clock" /> Seu Lote em Revisão
+                    </div>
+                  ) : anuncio.status === "BLOQUEADO_MODERACAO" ? (
+                    <div className="ad-owner-badge ad-owner-badge--closed">
+                      <Icon name="ban" /> Seu Lote Bloqueado
+                    </div>
+                  ) : (
+                    <div className="ad-owner-badge ad-owner-badge--active">
+                      <Icon name="check" /> Seu Lote Ativo no Mercado
+                    </div>
+                  )}
+
+                  {isClosed ? (
+                    <>
+                      <div className="ad-owner-closed-note">
+                        🔒 Edição bloqueada para lotes encerrados
+                      </div>
+                      <button
+                        type="button"
+                        className="button button--primary button--full"
+                        title="Usar este lote encerrado como modelo para um novo anúncio"
+                        onClick={() => navigate(`/anunciar?copiarDe=${anuncio.id}`)}
+                      >
+                        <Icon name="copy" /> Usar como Modelo para Novo Lote
+                      </button>
+                    </>
+                  ) : anuncio.status === "PAUSADO" ? (
+                    <>
+                      <button
+                        type="button"
+                        className="button button--primary button--full"
+                        onClick={handleReativarAnuncio}
+                        disabled={isReactivating}
+                      >
+                        <Icon name="play" /> {isReactivating ? "Reativando..." : "Reativar Anúncio Agora"}
+                      </button>
+                      <Link
+                        to={`/anuncios/${anuncio.id}/editar`}
+                        className="button button--secondary button--full ad-owner-edit-btn"
+                      >
+                        <Icon name="edit" /> Editar Informações
+                      </Link>
+                      <button
+                        type="button"
+                        className="button button--outline button--full ad-owner-close-btn"
+                        onClick={() => setIsCloseModalOpen(true)}
+                        title="Encerrar disponibilidade comercial deste lote"
+                      >
+                        <Icon name="box" /> Encerrar Disponibilidade
+                      </button>
+                      <button
+                        type="button"
+                        className="button button--secondary button--full"
+                        title="Usar informações técnicas deste lote como modelo para um novo anúncio"
+                        onClick={() => navigate(`/anunciar?copiarDe=${anuncio.id}`)}
+                      >
+                        <Icon name="copy" /> Usar como Modelo para Novo Lote
+                      </button>
+                    </>
+                  ) : anuncio.status === "ATIVO" ? (
+                    <>
+                      <Link
+                        to={`/anuncios/${anuncio.id}/editar`}
+                        className="button button--primary button--full ad-owner-edit-btn"
+                      >
+                        <Icon name="edit" /> Editar Informações do Lote
+                      </Link>
+                      <button
+                        type="button"
+                        className="button button--outline button--full ad-owner-close-btn"
+                        onClick={() => setIsCloseModalOpen(true)}
+                        title="Encerrar disponibilidade comercial deste lote"
+                      >
+                        <Icon name="box" /> Encerrar Disponibilidade
+                      </button>
+                      <button
+                        type="button"
+                        className="button button--secondary button--full"
+                        title="Usar informações técnicas deste lote como modelo para um novo anúncio"
+                        onClick={() => navigate(`/anunciar?copiarDe=${anuncio.id}`)}
+                      >
+                        <Icon name="copy" /> Usar como Modelo para Novo Lote
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      {anuncio.status !== "BLOQUEADO_MODERACAO" ? (
+                        <>
+                          <Link
+                            to={`/anuncios/${anuncio.id}/editar`}
+                            className="button button--primary button--full ad-owner-edit-btn"
+                          >
+                            <Icon name="edit" /> Editar Informações do Lote
+                          </Link>
+                          <button
+                            type="button"
+                            className="button button--secondary button--full"
+                            title="Usar informações técnicas deste lote como modelo para um novo anúncio"
+                            onClick={() => navigate(`/anunciar?copiarDe=${anuncio.id}`)}
+                          >
+                            <Icon name="copy" /> Usar como Modelo para Novo Lote
+                          </button>
+                        </>
+                      ) : (
+                        <div className="ad-owner-closed-note">
+                          🚫 Anúncio bloqueado pela moderação
+                        </div>
+                      )}
+                    </>
+                  )}
+
+                  <Link to={routes.myAds} className="ad-owner-box__link">
+                    ← Gerenciar em Meus Anúncios
+                  </Link>
+                </div>
+              ) : isClosed ? (
+                <div className="ad-buyer-closed-box">
+                  <div className="ad-buyer-closed-icon" aria-hidden="true">
+                    <Icon name="box" />
                   </div>
-                  {anuncio.status === "PAUSADO" && (
-                    <button
-                      type="button"
-                      className="button button--primary button--full"
-                      onClick={handleReativarAnuncio}
-                      disabled={isReactivating}
-                    >
-                      <Icon name="play" /> {isReactivating ? "Reativando..." : "Reativar Anúncio Agora"}
-                    </button>
-                  )}
-                  {anuncio.status !== "BLOQUEADO_MODERACAO" && (
-                    <Link
-                      to={`/anuncios/${anuncio.id}/editar`}
-                      className={`button ${anuncio.status === "PAUSADO" ? "button--outline" : "button--primary"} button--full ad-owner-edit-btn`}
-                    >
-                      <Icon name="edit" /> Editar Informações do Lote
-                    </Link>
-                  )}
-                  <button
-                    type="button"
-                    className="button button--outline button--full"
-                    onClick={() => navigate(routes.myAds)}
-                  >
-                    Gerenciar em Meus Anúncios
-                  </button>
+                  <h3>Lote Fora de Mercado</h3>
+                  <p>
+                    Este lote foi formalmente finalizado pelo produtor rural (
+                    {anuncio.status === "VENDIDO" ? "comercializado" : "retirado"}
+                    ) e não aceita novos contatos comerciais.
+                  </p>
+                  <Link to={routes.market} className="button button--primary button--full">
+                    Explorar outros lotes no Mercado
+                  </Link>
                 </div>
               ) : anuncio.status !== "ATIVO" ? (
                 <div className="ad-buyer-paused-box">
@@ -1040,6 +1704,45 @@ export function AdDetailPage() {
             </div>
           )}
         </div>
+      )}
+
+      {/* Modal de Visualização de Documento do Lote (US-013) */}
+      {selectedDocToView && anuncio && (
+        <ViewAdDocumentModal
+          isOpen={isViewDocModalOpen}
+          onClose={() => {
+            setIsViewDocModalOpen(false);
+            setSelectedDocToView(null);
+          }}
+          documentos={anuncio.documentos && anuncio.documentos.length > 0 ? anuncio.documentos : [selectedDocToView]}
+          documentoInicialId={selectedDocToView.id}
+          anuncio={anuncio}
+        />
+      )}
+
+      {/* Modal de Solicitação de Acesso aos Documentos (US-013) */}
+      {anuncio && (
+        <RequestAdAccessModal
+          isOpen={isRequestAccessModalOpen}
+          onClose={() => setIsRequestAccessModalOpen(false)}
+          anuncio={anuncio}
+          onSuccess={() => {
+            recarregarSolicitacoes();
+            setDocFeedbackToast(
+              "Solicitação de acesso enviada ao produtor com sucesso! Você será notificado assim que for avaliada."
+            );
+          }}
+        />
+      )}
+
+      {/* Modal de Encerramento do Lote (US-016) */}
+      {isCloseModalOpen && anuncio && (
+        <CloseAdModal
+          isOpen={isCloseModalOpen}
+          onClose={() => setIsCloseModalOpen(false)}
+          anuncio={anuncio}
+          onConfirm={handleConfirmarEncerramento}
+        />
       )}
     </div>
   );

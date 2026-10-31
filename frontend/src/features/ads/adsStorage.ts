@@ -2,12 +2,16 @@ import { getSession } from "../../context/session";
 import type { Session } from "../../context/session";
 import { GRAIN_CROP_LABELS, GRAIN_SUBTYPES } from "./ads.types";
 import type {
+  AdModelTemplate,
   AdStatus,
   AnimalLotAd,
   CreateAnimalAdInput,
   CreateGrainAdInput,
+  EncerramentoAnuncioPayload,
   GrainLotAd,
+  GrainPricingMode,
   MarketplaceAd,
+  PricingMode,
   UpdateAdInput,
 } from "./ads.types";
 import defaultFarmImage from "../../assets/images/farm-landscape.jpeg";
@@ -17,9 +21,14 @@ import {
   salvarMidiasNoIndexedDB,
 } from "./adsMediaStorage";
 import {
+  removerDocumentosDoAnuncioNoIndexedDB,
+  revogarAcessosAoEncerrarAnuncio,
+} from "./adsDocumentStorage";
+import {
   adaptarAnuncioDaApiParaFrontend,
   apiCriarAnuncioBackend,
   apiEditarAnuncioBackend,
+  apiEncerrarAnuncioBackend,
   apiListarCatalogoPublico,
   apiObterAnuncioDono,
   apiObterAnuncioPublico,
@@ -82,12 +91,22 @@ function sanitizarAnunciosParaStorage(anuncios: MarketplaceAd[]): MarketplaceAd[
       videoLimpo = { ...videoLimpo, url: "" };
     }
 
+    // 5. Documentos: no localStorage mantemos metadados estruturados e limpamos URLs base64/blob
+    let documentosLimpos = anuncio.documentos;
+    if (documentosLimpos && documentosLimpos.length > 0) {
+      documentosLimpos = documentosLimpos.map((d) => ({
+        ...d,
+        url: isDataOrLargeUrl(d.url) ? undefined : d.url,
+      }));
+    }
+
     return {
       ...anuncio,
       vendedorAvatar,
       fotos: fotosLimpas && fotosLimpas.length > 0 ? fotosLimpas : undefined,
       imagemUrl: imagemUrlLimpa,
       video: videoLimpo,
+      documentos: documentosLimpos && documentosLimpos.length > 0 ? documentosLimpos : undefined,
     };
   });
 }
@@ -335,11 +354,31 @@ export async function listarMeusAnuncios(vendedorId: string): Promise<Marketplac
           const apiAd = await apiObterAnuncioDono(ad.id, session.token);
           if (apiAd) {
             const statusAtualizado: AdStatus =
-              apiAd.estadoComercial === "ATIVO" || apiAd.estadoComercial === "PAUSADO"
+              apiAd.estadoComercial === "ATIVO" ||
+              apiAd.estadoComercial === "PAUSADO" ||
+              apiAd.estadoComercial === "VENDIDO" ||
+              apiAd.estadoComercial === "CANCELADO"
                 ? apiAd.estadoComercial
                 : ad.status;
-            if (ad.status !== statusAtualizado) {
+
+            const isLocalEncerrado = ad.status === "VENDIDO" || ad.status === "CANCELADO";
+            if (!isLocalEncerrado && ad.status !== statusAtualizado) {
               ad.status = statusAtualizado;
+              alterouStorage = true;
+            }
+            if (apiAd.encerradoEm && ad.encerradoEm !== apiAd.encerradoEm) {
+              ad.encerradoEm = apiAd.encerradoEm;
+              alterouStorage = true;
+            }
+            if (apiAd.motivoEncerramento && ad.motivoEncerramento !== apiAd.motivoEncerramento) {
+              ad.motivoEncerramento = apiAd.motivoEncerramento;
+              alterouStorage = true;
+            }
+            if (
+              apiAd.observacoesEncerramento &&
+              ad.observacoesEncerramento !== apiAd.observacoesEncerramento
+            ) {
+              ad.observacoesEncerramento = apiAd.observacoesEncerramento;
               alterouStorage = true;
             }
           }
@@ -355,7 +394,7 @@ export async function listarMeusAnuncios(vendedorId: string): Promise<Marketplac
   }
 
   const hidratados = anuncios
-    .filter((a) => a.vendedorId === vendedorId && a.status !== "VENDIDO")
+    .filter((a) => a.vendedorId === vendedorId)
     .map((a) => hidratarAnuncioComPerfil(a))
     .sort((a, b) => new Date(b.criadoEm).getTime() - new Date(a.criadoEm).getTime());
 
@@ -708,6 +747,7 @@ export async function criarAnuncioAnimal(
     uf: input.uf.trim().toUpperCase(),
     fotos,
     video: input.video,
+    documentos: input.documentos && input.documentos.length > 0 ? input.documentos : undefined,
     imagemUrl: imagemCapa,
     criadoEm: new Date().toISOString(),
     status: "ATIVO",
@@ -832,6 +872,7 @@ export async function criarAnuncioGraos(
     uf: input.uf.trim().toUpperCase(),
     fotos,
     video: input.video,
+    documentos: input.documentos && input.documentos.length > 0 ? input.documentos : undefined,
     imagemUrl: imagemCapa,
     criadoEm: new Date().toISOString(),
     status: "ATIVO",
@@ -876,6 +917,10 @@ export async function atualizarAnuncio(
   const existente = anuncios[index];
   if (existente.vendedorId !== session.conta.id) {
     throw new Error("Acesso não autorizado para editar este anúncio.");
+  }
+
+  if (existente.status === "VENDIDO" || existente.status === "CANCELADO") {
+    throw new Error("Lotes encerrados (vendidos ou cancelados) não podem ser editados.");
   }
 
   if (session?.token) {
@@ -988,6 +1033,8 @@ export async function atualizarAnuncio(
       uf: inputAnimal.uf ? inputAnimal.uf.trim().toUpperCase() : existente.uf,
       fotos,
       video,
+      documentos:
+        inputAnimal.documentos !== undefined ? inputAnimal.documentos : existente.documentos,
       imagemUrl: imagemCapa,
       status: proximoStatus,
       atualizadoEm: agora,
@@ -1064,6 +1111,8 @@ export async function atualizarAnuncio(
       uf: inputGraos.uf ? inputGraos.uf.trim().toUpperCase() : existente.uf,
       fotos,
       video,
+      documentos:
+        inputGraos.documentos !== undefined ? inputGraos.documentos : existente.documentos,
       imagemUrl: imagemCapa,
       status: proximoStatus,
       atualizadoEm: agora,
@@ -1108,6 +1157,10 @@ export async function alternarStatusAnuncio(
   const existente = anuncios[index];
   if (existente.vendedorId !== session.conta.id && session.conta.tipo !== "ADMIN") {
     throw new Error("Acesso não autorizado para alterar o status deste anúncio.");
+  }
+
+  if (existente.status === "VENDIDO" || existente.status === "CANCELADO") {
+    throw new Error("Lotes encerrados são definitivos e não podem ser reativados ou pausados.");
   }
 
   if (
@@ -1165,6 +1218,112 @@ export async function alternarStatusAnuncio(
   return hidratado;
 }
 
+export async function encerrarAnuncio(
+  id: string,
+  payload: EncerramentoAnuncioPayload,
+  session: Session
+): Promise<MarketplaceAd> {
+  await new Promise((resolve) => setTimeout(resolve, 120));
+  const anuncios = carregarDoStorage();
+  let index = anuncios.findIndex((a) => a.id === id);
+  if (index === -1) {
+    if (session?.token) {
+      try {
+        const apiAd = await apiObterAnuncioDono(id, session.token);
+        if (apiAd) {
+          const adaptado = adaptarAnuncioDaApiParaFrontend(apiAd);
+          anuncios.push(adaptado);
+          index = anuncios.length - 1;
+        }
+      } catch {
+        /* fallback */
+      }
+    }
+  }
+  if (index === -1) {
+    throw new Error("Anúncio não localizado no sistema.");
+  }
+
+  const existente = anuncios[index];
+  if (existente.vendedorId !== session.conta.id && session.conta.tipo !== "ADMIN") {
+    throw new Error("Acesso não autorizado para encerrar este anúncio.");
+  }
+
+  if (existente.status === "VENDIDO" || existente.status === "CANCELADO") {
+    throw new Error("Este anúncio já foi formalmente encerrado e seu estado é definitivo.");
+  }
+
+  if (
+    existente.status !== "ATIVO" &&
+    existente.status !== "PAUSADO" &&
+    session.conta.tipo !== "ADMIN"
+  ) {
+    throw new Error("Apenas anúncios ativos ou pausados podem ser encerrados.");
+  }
+
+  if (session?.token) {
+    try {
+      await apiEncerrarAnuncioBackend(id, payload, session.token);
+    } catch (apiErr) {
+      console.warn("Aviso: encerramento na API backend falhou, prosseguindo com mock local:", apiErr);
+    }
+  }
+
+  const agora = new Date().toISOString();
+
+  // Se solicitado pelo produtor, desvincula os documentos do lote
+  let docsAtualizados = existente.documentos;
+  if (payload.desvincularDocumentos) {
+    docsAtualizados = undefined;
+    try {
+      await removerDocumentosDoAnuncioNoIndexedDB(id);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  // Revoga acessos concedidos e cancela solicitações pendentes (LGPD)
+  try {
+    await revogarAcessosAoEncerrarAnuncio(id);
+  } catch (err) {
+    console.warn("Aviso ao revogar acessos a documentos do lote encerrado:", err);
+  }
+
+  const anuncioAtualizado: MarketplaceAd = {
+    ...existente,
+    status: payload.tipo,
+    encerradoEm: agora,
+    motivoEncerramento: payload.motivo,
+    observacoesEncerramento: payload.observacoes?.trim() || undefined,
+    documentos: docsAtualizados,
+    atualizadoEm: agora,
+  };
+
+  anuncios[index] = anuncioAtualizado;
+  const salvou = salvarNoStorage(anuncios);
+  if (!salvou) {
+    throw new Error("Não foi possível persistir o encerramento do anúncio no armazenamento local.");
+  }
+
+  const hidratado = hidratarAnuncioComPerfil(anuncioAtualizado);
+  try {
+    const midias = await obterMidiasDoIndexedDB(id);
+    if (midias) {
+      if (midias.fotos && midias.fotos.length > 0) {
+        hidratado.fotos = midias.fotos;
+        hidratado.imagemUrl = midias.fotos[0];
+      }
+      if (midias.video) {
+        hidratado.video = midias.video;
+      }
+    }
+  } catch {
+    /* fallback seguro */
+  }
+
+  return hidratado;
+}
+
 export function obterTodosAnunciosRaw(): MarketplaceAd[] {
   return carregarDoStorage().map((a) => hidratarAnuncioComPerfil(a));
 }
@@ -1172,4 +1331,125 @@ export function obterTodosAnunciosRaw(): MarketplaceAd[] {
 export function salvarTodosAnunciosRaw(anuncios: MarketplaceAd[]): boolean {
   return salvarNoStorage(anuncios);
 }
+
+/**
+ * Higieniza um anúncio existente para servir de modelo de criação (US-017).
+ * Remove ID, datas, fotos, mídias, documentos e permissões da US-013.
+ * Valida autorização de propriedade (ownership) e restrição de moderação.
+ */
+export function extrairModeloParaNovoAnuncio(
+  anuncioOriginal: MarketplaceAd,
+  vendedorIdAtual: string
+): AdModelTemplate | null {
+  // 1. Validação de Ownership (apenas o próprio vendedor pode clonar seus anúncios)
+  if (anuncioOriginal.vendedorId !== vendedorIdAtual) {
+    return null;
+  }
+
+  // 2. Bloqueio de anúncios sob penalidade de moderação
+  if (anuncioOriginal.status === "BLOQUEADO_MODERACAO") {
+    return null;
+  }
+
+  // 3. Payload higienizado por categoria
+  if (anuncioOriginal.categoria === "ANIMAL") {
+    const isPerHead =
+      Boolean(anuncioOriginal.precoPorCabeca) &&
+      Boolean(anuncioOriginal.quantidadeCabecas) &&
+      Boolean(anuncioOriginal.precoTotal) &&
+      Math.round(anuncioOriginal.precoPorCabeca * anuncioOriginal.quantidadeCabecas) ===
+        Math.round(anuncioOriginal.precoTotal);
+
+    const pricingMode: PricingMode = isPerHead ? "PER_HEAD" : "TOTAL";
+
+    return {
+      categoria: "ANIMAL",
+      titulo: anuncioOriginal.titulo,
+      descricao: anuncioOriginal.descricao,
+      cidade: anuncioOriginal.cidade,
+      uf: anuncioOriginal.uf,
+      farmName: anuncioOriginal.farmName,
+
+      // Dados Zootécnicos (Pecuária) - Mantém raça, espécie e finalidade estruturais
+      especie: anuncioOriginal.especie,
+      raca: anuncioOriginal.raca,
+      finalidade: anuncioOriginal.finalidade,
+      idadeMeses: anuncioOriginal.idadeMeses,
+
+      // Reset obrigatório de pesagens físicas, contagens e precificação (US-017)
+      quantidadeCabecas: undefined,
+      pesoMedioKg: undefined,
+      pesoMedioArroba: undefined,
+      pesoTotalKg: undefined,
+      pesoTotalArroba: undefined,
+      precoTotal: undefined,
+      precoPorCabeca: undefined,
+      precoPorArroba: undefined,
+      pricingMode,
+      pesoUnitMode: "KG",
+
+      // Reset obrigatório de mídias, documentos e dados de ciclo de vida
+      fotos: [],
+      video: undefined,
+      documentos: [],
+    };
+  }
+
+  // Categoria GRAOS
+  const isPerSack =
+    Boolean(anuncioOriginal.precoPorSaca) &&
+    Boolean(anuncioOriginal.quantidadeSacas) &&
+    Boolean(anuncioOriginal.precoTotal) &&
+    Math.round(anuncioOriginal.precoPorSaca * anuncioOriginal.quantidadeSacas) ===
+      Math.round(anuncioOriginal.precoTotal);
+
+  const grainPricingMode: GrainPricingMode = isPerSack ? "PER_SACK" : "TOTAL";
+
+  return {
+    categoria: "GRAOS",
+    titulo: anuncioOriginal.titulo,
+    descricao: anuncioOriginal.descricao,
+    cidade: anuncioOriginal.cidade,
+    uf: anuncioOriginal.uf,
+    farmName: anuncioOriginal.farmName,
+
+    // Dados Agronômicos (Grãos e Café) - Mantém dados estruturais de lavoura
+    cultura: anuncioOriginal.cultura,
+    culturaPersonalizada: anuncioOriginal.culturaPersonalizada,
+    subtipo: anuncioOriginal.subtipo,
+    safra: anuncioOriginal.safra,
+    embalagem: anuncioOriginal.embalagem,
+
+    // Reset obrigatório de amostragem física, umidade, laudos, balança e preços (US-017)
+    umidadePercentual: undefined,
+    quantidadeSacas: undefined,
+    pesoTotalToneladas: undefined,
+    pesoTotalKg: undefined,
+    laudoTecnico: undefined,
+    precoTotal: undefined,
+    precoPorSaca: undefined,
+    precoPorTonelada: undefined,
+    grainPricingMode,
+    volumeUnitMode: "SACAS",
+
+    // Reset obrigatório de mídias, documentos e dados de ciclo de vida
+    fotos: [],
+    video: undefined,
+    documentos: [],
+  };
+}
+
+export {
+  salvarDocumentoArquivoNoIndexedDB,
+  obterDocumentoArquivoDoIndexedDB,
+  removerDocumentoArquivoDoIndexedDB,
+  removerDocumentosDoAnuncioNoIndexedDB,
+  solicitarAcessoDocumentos,
+  obterSolicitacaoComprador,
+  listarSolicitacoesAnuncio,
+  responderSolicitacaoAcesso,
+  contarSolicitacoesPendentesAnuncio,
+  revogarAcessoDocumentos,
+} from "./adsDocumentStorage";
+
 

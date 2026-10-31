@@ -60,7 +60,7 @@ function Site() {
     setDialogFeature(feature);
   }
   const mainRef = useRef<HTMLElement>(null);
-  const previousLocationKey = useRef(location.key);
+  const previousPathname = useRef(location.pathname);
 
   useEffect(() => {
     if (location.pathname.startsWith("/anuncios/") && location.pathname.endsWith("/editar")) {
@@ -73,12 +73,15 @@ function Site() {
       document.title =
         pageTitles[location.pathname] ?? "Página não encontrada | SafraDireta";
     }
-    if (previousLocationKey.current !== location.key) {
+
+    // Só reseta o scroll e move o foco para o <main> ao navegar entre páginas distintas (pathname diferente).
+    // NUNCA executar quando apenas a query string de filtros/busca (?q=..., ?categoria=...) for alterada.
+    if (previousPathname.current !== location.pathname) {
       window.scrollTo({ top: 0, behavior: "instant" });
       mainRef.current?.focus({ preventScroll: true });
-      previousLocationKey.current = location.key;
+      previousPathname.current = location.pathname;
     }
-  }, [location.pathname, location.key]);
+  }, [location.pathname]);
 
   return (
     <>

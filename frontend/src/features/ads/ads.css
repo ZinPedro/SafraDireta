@@ -1130,6 +1130,169 @@
   max-width: 640px;
 }
 
+/* ==========================================================================
+   US-020: Barra de Busca por Palavra-Chave no Mercado
+   ========================================================================== */
+.market-search-section {
+  margin-bottom: 1.75rem;
+}
+
+.market-search-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  background: #ffffff;
+  border: 1.5px solid var(--color-border, #d8e2d4);
+  border-radius: 12px;
+  padding: 0 1rem;
+  height: 52px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.03);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.market-search-bar:focus-within {
+  border-color: var(--color-primary, #1e5631);
+  box-shadow: 0 0 0 3px rgba(30, 86, 49, 0.12), 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+.market-search-bar__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-muted, #556b55);
+  flex-shrink: 0;
+}
+
+.market-search-bar__icon .icon {
+  width: 20px;
+  height: 20px;
+}
+
+.market-search-bar__input {
+  flex: 1;
+  border: none;
+  background: transparent;
+  outline: none;
+  font-size: 1rem;
+  color: var(--color-text, #1a2e1a);
+  font-family: inherit;
+  width: 100%;
+}
+
+.market-search-bar__input::placeholder {
+  color: var(--color-text-muted, #7a8f7a);
+  font-weight: 400;
+}
+
+.market-search-bar__clear {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  color: var(--color-text-muted, #7a8f7a);
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  cursor: pointer;
+  padding: 0;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+
+.market-search-bar__clear:hover {
+  background: rgba(0, 0, 0, 0.06);
+  color: var(--color-text, #1a2e1a);
+}
+
+.market-search-bar__clear:focus-visible {
+  outline: 2px solid var(--color-primary, #1e5631);
+  outline-offset: 1px;
+}
+
+.market-search-bar__clear .icon {
+  width: 16px;
+  height: 16px;
+}
+
+.market-count-label__search-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.market-search-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  background: rgba(30, 86, 49, 0.08);
+  color: var(--color-primary, #1e5631);
+  border: 1px solid rgba(30, 86, 49, 0.2);
+  border-radius: 16px;
+  padding: 0.2rem 0.625rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.market-search-chip__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  color: var(--color-primary, #1e5631);
+  cursor: pointer;
+  padding: 0;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  transition: opacity 0.15s ease, background-color 0.15s ease;
+}
+
+.market-search-chip__btn:hover {
+  background: rgba(30, 86, 49, 0.15);
+}
+
+.market-search-chip__btn .icon {
+  width: 12px;
+  height: 12px;
+}
+
+.market-empty-box--search {
+  max-width: 620px;
+}
+
+.market-empty-box__icon-wrapper {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: rgba(30, 86, 49, 0.08);
+  color: var(--color-primary, #1e5631);
+  margin-bottom: 1.25rem;
+}
+
+.market-empty-box__icon-wrapper .icon {
+  width: 28px;
+  height: 28px;
+}
+
+.market-empty-box--search h2 {
+  font-size: 1.5rem;
+  color: var(--color-text, #1a2e1a);
+  margin-bottom: 0.75rem;
+}
+
+.market-empty-box--search p {
+  color: var(--color-text-muted, #556b55);
+  font-size: 1rem;
+  line-height: 1.5;
+  margin-bottom: 1.75rem;
+}
+
 .market-filter-bar {
   display: flex;
   justify-content: space-between;

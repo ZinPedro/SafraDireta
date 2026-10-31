@@ -1,6 +1,12 @@
 import { getSession } from "../../context/session";
 import type { Session } from "../../context/session";
-import { GRAIN_CROP_LABELS, GRAIN_SUBTYPES } from "./ads.types";
+import {
+  GRAIN_CROP_LABELS,
+  GRAIN_PACKAGING_LABELS,
+  GRAIN_SUBTYPES,
+  SPECIES_LABELS,
+  obterTagsAnuncio,
+} from "./ads.types";
 import type {
   AdModelTemplate,
   AdStatus,
@@ -257,12 +263,60 @@ export function sincronizarProdutorNosAnuncios(
   }
 }
 
-export async function listarAnunciosMercado(): Promise<MarketplaceAd[]> {
+/**
+ * Normaliza uma string para comparação textual insensível a maiúsculas e diacríticos/acentos.
+ */
+export function normalizarTextoBusca(texto?: string | null): string {
+  if (!texto) return "";
+  return texto
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim();
+}
+
+/**
+ * Avalia se um anúncio do catálogo corresponde ao termo de pesquisa informado (US-020).
+ * Executa divisão em múltiplos tokens (busca conjuntiva/AND) e pesquisa nos campos:
+ * título, descrição, município, UF, fazenda, produtor, raça/cultura,
+ * espécie/subtipo, finalidade/safra, embalagem e tags visuais do lote.
+ */
+export function correspondeBuscaAnuncio(anuncio: MarketplaceAd, termoBusca: string): boolean {
+  const termoNormalizado = normalizarTextoBusca(termoBusca);
+  if (!termoNormalizado) return true;
+
+  const tokens = termoNormalizado.split(/\s+/).filter(Boolean);
+  if (tokens.length === 0) return true;
+
+  const camposPesquisaveis = [
+    anuncio.titulo,
+    anuncio.descricao,
+    anuncio.cidade,
+    anuncio.uf,
+    anuncio.farmName,
+    anuncio.vendedorNome,
+    anuncio.categoria === "ANIMAL" ? anuncio.raca : anuncio.subtipo,
+    anuncio.categoria === "ANIMAL" ? anuncio.especie : anuncio.cultura,
+    anuncio.categoria === "ANIMAL" ? SPECIES_LABELS[anuncio.especie] : GRAIN_CROP_LABELS[anuncio.cultura],
+    anuncio.categoria === "ANIMAL" ? anuncio.finalidade : anuncio.safra,
+    anuncio.categoria === "GRAOS" ? anuncio.embalagem : undefined,
+    anuncio.categoria === "GRAOS" ? GRAIN_PACKAGING_LABELS[anuncio.embalagem] : undefined,
+    anuncio.categoria === "GRAOS" ? anuncio.culturaPersonalizada : undefined,
+    ...obterTagsAnuncio(anuncio),
+  ]
+    .filter(Boolean)
+    .map((c) => normalizarTextoBusca(c))
+    .join(" ");
+
+  return tokens.every((token) => camposPesquisaveis.includes(token));
+}
+
+export async function listarAnunciosMercado(termoBusca?: string): Promise<MarketplaceAd[]> {
   await new Promise((resolve) => setTimeout(resolve, 80));
 
   let apiItens: MarketplaceAd[] = [];
   try {
-    const catalogo = await apiListarCatalogoPublico();
+    const catalogo = await apiListarCatalogoPublico(termoBusca ? { q: termoBusca } : undefined);
     if (catalogo?.itens && Array.isArray(catalogo.itens)) {
       apiItens = catalogo.itens.map((item) => adaptarAnuncioDaApiParaFrontend(item));
     }
@@ -298,6 +352,10 @@ export async function listarAnunciosMercado(): Promise<MarketplaceAd[]> {
       return anuncio;
     })
   );
+
+  if (termoBusca && termoBusca.trim()) {
+    return resultado.filter((a) => correspondeBuscaAnuncio(a, termoBusca));
+  }
 
   return resultado;
 }

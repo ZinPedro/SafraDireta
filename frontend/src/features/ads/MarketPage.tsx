@@ -1,21 +1,68 @@
-import { useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useEffect, useRef, useState } from "react";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../../context/authContext";
 import { routes } from "../../data/site";
 import { Icon } from "../../components/Icon";
 import { GRAIN_PACKAGING_LABELS, obterFotoCapa, obterTagsAnuncio } from "./ads.types";
 import type { MarketplaceAd } from "./ads.types";
-import { listarAnunciosMercado } from "./adsStorage";
+import { correspondeBuscaAnuncio, listarAnunciosMercado } from "./adsStorage";
 import "./ads.css";
 
 export function MarketPage() {
   const { session } = useAuth();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  const urlQuery = searchParams.get("q") || "";
+  const [searchTerm, setSearchTerm] = useState(urlQuery);
+  const [debouncedTerm, setDebouncedTerm] = useState(urlQuery);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
   const [anuncios, setAnuncios] = useState<MarketplaceAd[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [filtroCategoria, setFiltroCategoria] = useState<"TODOS" | "ANIMAL" | "GRAOS">("TODOS");
 
   const isSeller = session?.vendedorEstado === "HABILITADO";
+
+  // Sincroniza estado se a navegação do navegador alterar a URL (ex: Voltar / Avançar)
+  useEffect(() => {
+    const handlePopState = () => {
+      const q = new URLSearchParams(window.location.search).get("q") || "";
+      setSearchTerm(q);
+      setDebouncedTerm(q);
+    };
+    window.addEventListener("popstate", handlePopState);
+    return () => {
+      window.removeEventListener("popstate", handlePopState);
+    };
+  }, []);
+
+  // Debounce de ~350ms para atualização do filtro e sincronização com URL
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedTerm(searchTerm);
+      const trimmed = searchTerm.trim();
+
+      setSearchParams(
+        (prevParams) => {
+          const currentQ = prevParams.get("q") || "";
+          if (currentQ === trimmed) {
+            return prevParams; // Não altera se o valor já for igual
+          }
+          const next = new URLSearchParams(prevParams);
+          if (trimmed) {
+            next.set("q", trimmed);
+          } else {
+            next.delete("q");
+          }
+          return next;
+        },
+        { replace: true }
+      );
+    }, 350);
+
+    return () => clearTimeout(timer);
+  }, [searchTerm, setSearchParams]);
 
   useEffect(() => {
     let isMounted = true;
@@ -32,10 +79,47 @@ export function MarketPage() {
     };
   }, []);
 
-  const anunciosFiltrados =
-    filtroCategoria === "TODOS"
-      ? anuncios
-      : anuncios.filter((a) => a.categoria === filtroCategoria);
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setDebouncedTerm(searchTerm);
+    const currentQ = searchParams.get("q") || "";
+    const trimmed = searchTerm.trim();
+    if (currentQ !== trimmed) {
+      setSearchParams(
+        (prevParams) => {
+          const next = new URLSearchParams(prevParams);
+          if (trimmed) {
+            next.set("q", trimmed);
+          } else {
+            next.delete("q");
+          }
+          return next;
+        },
+        { replace: true }
+      );
+    }
+  };
+
+  const handleClearSearch = () => {
+    setSearchTerm("");
+    setDebouncedTerm("");
+    setSearchParams(
+      (prevParams) => {
+        const next = new URLSearchParams(prevParams);
+        next.delete("q");
+        return next;
+      },
+      { replace: true }
+    );
+    searchInputRef.current?.focus();
+  };
+
+  const anunciosFiltrados = anuncios.filter((anuncio) => {
+    const passaCategoria =
+      filtroCategoria === "TODOS" || anuncio.categoria === filtroCategoria;
+    const passaBusca = correspondeBuscaAnuncio(anuncio, debouncedTerm);
+    return passaCategoria && passaBusca;
+  });
 
   return (
     <div className="market-page">
@@ -59,6 +143,40 @@ export function MarketPage() {
             </div>
           )}
         </header>
+
+        {/* Barra de Pesquisa por Palavra-Chave (US-020) */}
+        <div className="market-search-section">
+          <form
+            className="market-search-bar"
+            role="search"
+            onSubmit={handleSubmit}
+            aria-label="Buscar anúncios no mercado"
+          >
+            <div className="market-search-bar__icon" aria-hidden="true">
+              <Icon name="search" />
+            </div>
+            <input
+              ref={searchInputRef}
+              type="text"
+              className="market-search-bar__input"
+              placeholder="Buscar por lote, raça, cultura, cidade ou palavra-chave..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              aria-label="Buscar anúncios por palavra-chave"
+            />
+            {searchTerm && (
+              <button
+                type="button"
+                className="market-search-bar__clear"
+                onClick={handleClearSearch}
+                title="Limpar pesquisa"
+                aria-label="Limpar campo de pesquisa"
+              >
+                <Icon name="close" />
+              </button>
+            )}
+          </form>
+        </div>
 
         {/* Barra de Filtros e Categorias */}
         <div className="market-filter-bar">
@@ -87,8 +205,31 @@ export function MarketPage() {
           </div>
 
           <div className="market-count-label">
-            Exibindo <strong>{anunciosFiltrados.length}</strong>{" "}
-            {anunciosFiltrados.length === 1 ? "oferta" : "ofertas"}
+            {debouncedTerm.trim() ? (
+              <span className="market-count-label__search-wrap">
+                <span>
+                  Exibindo <strong>{anunciosFiltrados.length}</strong>{" "}
+                  {anunciosFiltrados.length === 1 ? "oferta" : "ofertas"} para
+                </span>
+                <span className="market-search-chip">
+                  &ldquo;{debouncedTerm.trim()}&rdquo;
+                  <button
+                    type="button"
+                    className="market-search-chip__btn"
+                    onClick={handleClearSearch}
+                    title="Remover filtro de busca"
+                    aria-label="Remover filtro de busca"
+                  >
+                    <Icon name="close" />
+                  </button>
+                </span>
+              </span>
+            ) : (
+              <span>
+                Exibindo <strong>{anunciosFiltrados.length}</strong>{" "}
+                {anunciosFiltrados.length === 1 ? "oferta" : "ofertas"}
+              </span>
+            )}
           </div>
         </div>
 
@@ -99,20 +240,39 @@ export function MarketPage() {
             <p>Carregando ofertas do mercado...</p>
           </div>
         ) : anunciosFiltrados.length === 0 ? (
-          <div className="market-empty-box">
-            <Icon name="box" />
-            <h2>Nenhum lote encontrado nesta categoria</h2>
-            <p>Seja o primeiro a anunciar lotes nesta categoria no SafraDireta.</p>
-            {isSeller ? (
-              <Link to={routes.createAd} className="button button--primary">
-                Anunciar Lote Agora
-              </Link>
-            ) : (
-              <Link to={routes.sellerUpgrade} className="button button--outline">
-                Habilitar como Produtor
-              </Link>
-            )}
-          </div>
+          debouncedTerm.trim() ? (
+            <div className="market-empty-box market-empty-box--search" role="status">
+              <div className="market-empty-box__icon-wrapper" aria-hidden="true">
+                <Icon name="search" />
+              </div>
+              <h2>Nenhum lote encontrado para &ldquo;{debouncedTerm.trim()}&rdquo;</h2>
+              <p>
+                Não encontramos ofertas correspondentes à sua pesquisa. Tente palavras-chave mais genéricas, revise a ortografia ou limpe a busca.
+              </p>
+              <button
+                type="button"
+                className="button button--primary button--large"
+                onClick={handleClearSearch}
+              >
+                Limpar busca e ver todos os lotes
+              </button>
+            </div>
+          ) : (
+            <div className="market-empty-box">
+              <Icon name="box" />
+              <h2>Nenhum lote encontrado nesta categoria</h2>
+              <p>Seja o primeiro a anunciar lotes nesta categoria no SafraDireta.</p>
+              {isSeller ? (
+                <Link to={routes.createAd} className="button button--primary">
+                  Anunciar Lote Agora
+                </Link>
+              ) : (
+                <Link to={routes.sellerUpgrade} className="button button--outline">
+                  Habilitar como Produtor
+                </Link>
+              )}
+            </div>
+          )
         ) : (
           <div className="market-grid">
             {anunciosFiltrados.map((anuncio) => {

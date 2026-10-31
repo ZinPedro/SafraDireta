@@ -7,9 +7,19 @@ import { AccessRestricted } from "../../components/AccessRestricted";
 import { Icon } from "../../components/Icon";
 import { SellerBlockedView } from "../admin/SellerBlockedView";
 import { obterStatusGovernancaProdutor } from "../admin/adminStorage";
-import { GRAIN_PACKAGING_LABELS, obterFotoCapa, obterTagsAnuncio } from "./ads.types";
-import type { MarketplaceAd } from "./ads.types";
-import { alternarStatusAnuncio, contarSolicitacoesPendentesAnuncio, listarMeusAnuncios } from "./adsStorage";
+import {
+  alternarStatusAnuncio,
+  contarSolicitacoesPendentesAnuncio,
+  encerrarAnuncio,
+  listarMeusAnuncios,
+} from "./adsStorage";
+import {
+  GRAIN_PACKAGING_LABELS,
+  obterFotoCapa,
+  obterTagsAnuncio,
+} from "./ads.types";
+import type { EncerramentoAnuncioPayload, MarketplaceAd } from "./ads.types";
+import { CloseAdModal } from "./CloseAdModal";
 import "./ads.css";
 
 interface MyAdsPageProps {
@@ -22,8 +32,9 @@ export function MyAdsPage({ onOpenDialog }: MyAdsPageProps) {
   const location = useLocation();
   const [anuncios, setAnuncios] = useState<MarketplaceAd[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [filtroStatus, setFiltroStatus] = useState<"TODOS" | "ATIVO" | "PAUSADO">("TODOS");
+  const [filtroStatus, setFiltroStatus] = useState<"TODOS" | "ATIVO" | "PAUSADO" | "ENCERRADO">("TODOS");
   const [adToPause, setAdToPause] = useState<MarketplaceAd | null>(null);
+  const [adToClose, setAdToClose] = useState<MarketplaceAd | null>(null);
   const [isTogglingStatus, setIsTogglingStatus] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(() => {
     const state = location.state as { toastMessage?: string } | null;
@@ -105,6 +116,30 @@ export function MyAdsPage({ onOpenDialog }: MyAdsPageProps) {
     }
   }
 
+  async function handleConfirmarEncerramento(payload: EncerramentoAnuncioPayload) {
+    if (!adToClose || !session) return;
+    try {
+      setIsTogglingStatus(true);
+      const atualizado = await encerrarAnuncio(adToClose.id, payload, session);
+      setAnuncios((prev) => prev.map((a) => (a.id === atualizado.id ? atualizado : a)));
+      setAdToClose(null);
+      setToastMessage(
+        payload.tipo === "VENDIDO"
+          ? "Lote encerrado com sucesso! Marcado como Comercializado / Vendido."
+          : "Lote encerrado com sucesso! Marcado como Cancelado / Retirado."
+      );
+    } catch (err) {
+      console.error("Erro ao encerrar anúncio:", err);
+      alert(
+        err instanceof Error
+          ? err.message
+          : "Não foi possível encerrar o anúncio. Tente novamente."
+      );
+    } finally {
+      setIsTogglingStatus(false);
+    }
+  }
+
   if (session && isBlockedSeller) {
     const estadoBloqueio =
       session.vendedorEstado === "BANIDO" || govStatus?.estado === "BANIDO"
@@ -132,11 +167,30 @@ export function MyAdsPage({ onOpenDialog }: MyAdsPageProps) {
 
   const total = anuncios.length;
   const totalAtivos = anuncios.filter((a) => a.status === "ATIVO").length;
-  const totalPausados = anuncios.filter((a) => a.status !== "ATIVO").length;
+  const totalPausados = anuncios.filter(
+    (a) =>
+      a.status === "PAUSADO" ||
+      a.status === "PAUSADO_MODERACAO" ||
+      a.status === "EM_REVISAO" ||
+      a.status === "BLOQUEADO_MODERACAO"
+  ).length;
+  const totalEncerrados = anuncios.filter(
+    (a) => a.status === "VENDIDO" || a.status === "CANCELADO"
+  ).length;
 
   const anunciosFiltrados = anuncios.filter((anuncio) => {
     if (filtroStatus === "ATIVO") return anuncio.status === "ATIVO";
-    if (filtroStatus === "PAUSADO") return anuncio.status !== "ATIVO";
+    if (filtroStatus === "PAUSADO") {
+      return (
+        anuncio.status === "PAUSADO" ||
+        anuncio.status === "PAUSADO_MODERACAO" ||
+        anuncio.status === "EM_REVISAO" ||
+        anuncio.status === "BLOQUEADO_MODERACAO"
+      );
+    }
+    if (filtroStatus === "ENCERRADO") {
+      return anuncio.status === "VENDIDO" || anuncio.status === "CANCELADO";
+    }
     return true;
   });
 
@@ -205,6 +259,15 @@ export function MyAdsPage({ onOpenDialog }: MyAdsPageProps) {
             >
               Pausados <span className="my-ad-tab__badge">{totalPausados}</span>
             </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={filtroStatus === "ENCERRADO"}
+              className={`my-ad-tab ${filtroStatus === "ENCERRADO" ? "my-ad-tab--active" : ""}`}
+              onClick={() => setFiltroStatus("ENCERRADO")}
+            >
+              Encerrados <span className="my-ad-tab__badge">{totalEncerrados}</span>
+            </button>
           </div>
         )}
 
@@ -226,6 +289,16 @@ export function MyAdsPage({ onOpenDialog }: MyAdsPageProps) {
             <Link to={routes.createAd} className="button button--primary button--large">
               + Criar Primeiro Anúncio
             </Link>
+          </div>
+        ) : filtroStatus === "ENCERRADO" && totalEncerrados === 0 ? (
+          <div className="my-ads-empty my-ads-empty--tab">
+            <div className="my-ads-empty__icon-wrapper my-ads-empty__icon-wrapper--archive" aria-hidden="true">
+              <Icon name="box" className="my-ads-empty__icon" />
+            </div>
+            <h2>Nenhum anúncio encerrado</h2>
+            <p>
+              Seus lotes vendidos ou cancelados ficarão arquivados aqui para consulta histórica e reutilização de dados.
+            </p>
           </div>
         ) : filtroStatus === "PAUSADO" && totalPausados === 0 ? (
           <div className="my-ads-empty my-ads-empty--tab">
@@ -251,17 +324,20 @@ export function MyAdsPage({ onOpenDialog }: MyAdsPageProps) {
           <div className="my-ads-grid">
             {anunciosFiltrados.map((anuncio) => {
               const [tag1, tag2] = obterTagsAnuncio(anuncio);
+              const isSold = anuncio.status === "VENDIDO";
+              const isCanceled = anuncio.status === "CANCELADO";
+              const isClosed = isSold || isCanceled;
               const isPausedVoluntary = anuncio.status === "PAUSADO";
               const isPausedModeration = anuncio.status === "PAUSADO_MODERACAO";
               const isInReview = anuncio.status === "EM_REVISAO";
               const isBlockedModeration = anuncio.status === "BLOQUEADO_MODERACAO";
               const isInactive = anuncio.status !== "ATIVO";
-              const pedidosPendentes = contarSolicitacoesPendentesAnuncio(anuncio.id);
+              const pedidosPendentes = isClosed ? 0 : contarSolicitacoesPendentesAnuncio(anuncio.id);
 
               return (
                 <article
                   key={anuncio.id}
-                  className={`my-ad-card ${isInactive ? "my-ad-card--paused" : ""}`}
+                  className={`my-ad-card ${isClosed ? "my-ad-card--closed" : isInactive ? "my-ad-card--paused" : ""}`}
                   onClick={() => navigate(`/anuncios/${anuncio.id}`)}
                   tabIndex={0}
                   role="button"
@@ -293,7 +369,15 @@ export function MyAdsPage({ onOpenDialog }: MyAdsPageProps) {
                     )}
 
                     {/* Status do Anúncio (Canto Inferior Direito) */}
-                    {isPausedModeration ? (
+                    {isSold ? (
+                      <span className="my-ad-card__status-badge my-ad-card__status-badge--sold">
+                        <Icon name="check" /> Vendido
+                      </span>
+                    ) : isCanceled ? (
+                      <span className="my-ad-card__status-badge my-ad-card__status-badge--canceled">
+                        <Icon name="close" /> Cancelado
+                      </span>
+                    ) : isPausedModeration ? (
                       <span className="my-ad-card__status-badge my-ad-card__status-badge--moderation">
                         <Icon name="pause" /> Pausado pela Moderação
                       </span>
@@ -331,6 +415,25 @@ export function MyAdsPage({ onOpenDialog }: MyAdsPageProps) {
                       </div>
                     )}
                     <h3 className="my-ad-card__title">{anuncio.titulo}</h3>
+
+                    {/* Banner de Encerramento (US-016) */}
+                    {isClosed && (
+                      <div className="my-ad-card__closed-meta" onClick={(e) => e.stopPropagation()}>
+                        <div className="my-ad-card__closed-meta-row">
+                          <Icon name="box" />
+                          <span>
+                            <strong>{isSold ? "Comercializado / Vendido" : "Cancelado / Retirado"}</strong>
+                            {anuncio.encerradoEm ? ` em ${new Date(anuncio.encerradoEm).toLocaleDateString("pt-BR")}` : ""}
+                            {anuncio.motivoEncerramento ? ` · ${anuncio.motivoEncerramento}` : ""}
+                          </span>
+                        </div>
+                        {anuncio.observacoesEncerramento && (
+                          <p className="my-ad-card__closed-notes">
+                            &ldquo;{anuncio.observacoesEncerramento}&rdquo;
+                          </p>
+                        )}
+                      </div>
+                    )}
 
                     {/* Banner Contextual de Moderação / Revisão */}
                     {isPausedModeration && (
@@ -439,10 +542,19 @@ export function MyAdsPage({ onOpenDialog }: MyAdsPageProps) {
                       <button
                         type="button"
                         className="button button--outline button--small my-ad-card__btn-edit"
-                        disabled={isBlockedModeration}
+                        disabled={isBlockedModeration || isClosed}
+                        title={
+                          isClosed
+                            ? "Lotes encerrados não aceitam edição de valores"
+                            : isBlockedModeration
+                            ? "Anúncio bloqueado pela moderação"
+                            : "Editar informações deste anúncio"
+                        }
                         onClick={(e) => {
                           e.stopPropagation();
-                          navigate(`/anuncios/${anuncio.id}/editar`);
+                          if (!isClosed && !isBlockedModeration) {
+                            navigate(`/anuncios/${anuncio.id}/editar`);
+                          }
                         }}
                       >
                         <Icon name="edit" /> Editar
@@ -456,6 +568,8 @@ export function MyAdsPage({ onOpenDialog }: MyAdsPageProps) {
                         title={
                           isBlockedModeration
                             ? "Anúncios bloqueados pela moderação não podem ser utilizados como modelo"
+                            : isClosed
+                            ? "Usar este lote encerrado como modelo para novo lote"
                             : "Duplicar dados deste anúncio como modelo para novo lote"
                         }
                         onClick={(e) => {
@@ -466,43 +580,60 @@ export function MyAdsPage({ onOpenDialog }: MyAdsPageProps) {
                         <Icon name="copy" /> Duplicar
                       </button>
 
+                      {/* Ação de Encerrar Lote (US-016) - visível em Ativo ou Pausado */}
+                      {!isClosed && !isBlockedModeration && (
+                        <button
+                          type="button"
+                          className="button button--outline button--small my-ad-card__btn-close-ad"
+                          title="Encerrar disponibilidade deste lote (comercializado ou cancelado)"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setAdToClose(anuncio);
+                          }}
+                        >
+                          <Icon name="box" /> Encerrar
+                        </button>
+                      )}
+
                       {/* Ação de Pausar / Reativar (US-015 + Governança) */}
-                      {isPausedModeration || isInReview || isBlockedModeration ? (
-                        <button
-                          type="button"
-                          className="button button--primary button--small my-ad-card__btn-resume"
-                          onClick={(e) => e.stopPropagation()}
-                          disabled
-                          title="Anúncios sob moderação não podem ser reativados diretamente pelo vendedor. Edite o lote para enviar para revisão."
-                        >
-                          <Icon name="play" /> Reativar
-                        </button>
-                      ) : isPausedVoluntary ? (
-                        <button
-                          type="button"
-                          className="button button--primary button--small my-ad-card__btn-resume"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleReativarAnuncio(anuncio.id);
-                          }}
-                          disabled={isTogglingStatus}
-                          title="Reativar exibição do lote no Mercado"
-                        >
-                          <Icon name="play" /> Reativar
-                        </button>
-                      ) : (
-                        <button
-                          type="button"
-                          className="button button--outline button--small my-ad-card__btn-pause"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setAdToPause(anuncio);
-                          }}
-                          disabled={isTogglingStatus}
-                          title="Pausar exibição do lote no Mercado"
-                        >
-                          <Icon name="pause" /> Pausar
-                        </button>
+                      {!isClosed && (
+                        isPausedModeration || isInReview || isBlockedModeration ? (
+                          <button
+                            type="button"
+                            className="button button--primary button--small my-ad-card__btn-resume"
+                            onClick={(e) => e.stopPropagation()}
+                            disabled
+                            title="Anúncios sob moderação não podem ser reativados diretamente pelo vendedor. Edite o lote para enviar para revisão."
+                          >
+                            <Icon name="play" /> Reativar
+                          </button>
+                        ) : isPausedVoluntary ? (
+                          <button
+                            type="button"
+                            className="button button--primary button--small my-ad-card__btn-resume"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleReativarAnuncio(anuncio.id);
+                            }}
+                            disabled={isTogglingStatus}
+                            title="Reativar exibição do lote no Mercado"
+                          >
+                            <Icon name="play" /> Reativar
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            className="button button--outline button--small my-ad-card__btn-pause"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setAdToPause(anuncio);
+                            }}
+                            disabled={isTogglingStatus}
+                            title="Pausar exibição do lote no Mercado"
+                          >
+                            <Icon name="pause" /> Pausar
+                          </button>
+                        )
                       )}
                     </div>
                   </div>
@@ -512,6 +643,16 @@ export function MyAdsPage({ onOpenDialog }: MyAdsPageProps) {
           </div>
         )}
       </div>
+
+      {/* Modal de Encerramento de Lote (US-016) */}
+      {adToClose && (
+        <CloseAdModal
+          isOpen={Boolean(adToClose)}
+          onClose={() => setAdToClose(null)}
+          anuncio={adToClose}
+          onConfirm={handleConfirmarEncerramento}
+        />
+      )}
 
       {/* Modal de Confirmação de Pausa (US-015) */}
       {adToPause && (

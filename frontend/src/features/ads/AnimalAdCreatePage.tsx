@@ -765,6 +765,49 @@ export function AnimalAdCreatePage({ onOpenDialog, mode = "create" }: AnimalAdCr
     );
   }
 
+  if (
+    isEditMode &&
+    loadedAd &&
+    (loadedAd.status === "VENDIDO" || loadedAd.status === "CANCELADO")
+  ) {
+    return (
+      <div className="ad-create-page">
+        <div className="container">
+          <div className="ad-not-found">
+            <div
+              className="ad-modal-icon-wrapper ad-modal-icon-wrapper--amber"
+              style={{ margin: "0 auto 1.5rem" }}
+              aria-hidden="true"
+            >
+              <Icon name="box" />
+            </div>
+            <h2>Lote Encerrado — Edição Bloqueada</h2>
+            <p>
+              Este lote está marcado como{" "}
+              <strong>
+                {loadedAd.status === "VENDIDO"
+                  ? "Comercializado / Vendido"
+                  : "Cancelado / Retirado"}
+              </strong>
+              . Lotes com disponibilidade encerrada são permanentes e não aceitam alterações de preço, quantidade ou especificações.
+            </p>
+            <div style={{ display: "flex", gap: "1rem", justifyContent: "center", marginTop: "1.5rem" }}>
+              <Link to={routes.myAds} className="button button--secondary">
+                Voltar aos Meus Anúncios
+              </Link>
+              <Link
+                to={`/anunciar?copiarDe=${loadedAd.id}`}
+                className="button button--primary"
+              >
+                <Icon name="copy" /> Usar como Modelo para Novo Lote
+              </Link>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   function handleSelectModalidade(novaModalidade: "ANIMAL" | "GRAOS") {
     if (novaModalidade === modalidade) return;
     setModalidade(novaModalidade);

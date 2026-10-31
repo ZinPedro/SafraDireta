@@ -25,10 +25,12 @@ import type {
   AdDocumentAccessRequest,
   AdDocumentItem,
   DocumentAccessStatus,
+  EncerramentoAnuncioPayload,
   MarketplaceAd,
 } from "./ads.types";
 import {
   alternarStatusAnuncio,
+  encerrarAnuncio,
   obterAnuncioPorId,
   obterPerfilProdutorPublico,
   obterSolicitacaoComprador,
@@ -38,6 +40,7 @@ import {
 import type { PublicProducerProfile } from "./adsStorage";
 import { ViewAdDocumentModal } from "./ViewAdDocumentModal";
 import { RequestAdAccessModal } from "./RequestAdAccessModal";
+import { CloseAdModal } from "./CloseAdModal";
 import "./ads.css";
 
 interface AdDetailPageProps {
@@ -61,6 +64,7 @@ export function AdDetailPage({ onOpenDialog }: AdDetailPageProps) {
   const [activeToast, setActiveToast] = useState<string | null>(toastMessage || null);
   const [showAdminPauseModal, setShowAdminPauseModal] = useState(false);
   const [adminPauseReason, setAdminPauseReason] = useState("");
+  const [isCloseModalOpen, setIsCloseModalOpen] = useState(false);
 
   // Estados de Documentos e Data Room (US-013)
   const [selectedDocToView, setSelectedDocToView] = useState<AdDocumentItem | null>(null);
@@ -132,6 +136,28 @@ export function AdDetailPage({ onOpenDialog }: AdDetailPageProps) {
       alert("Não foi possível reativar o anúncio. Tente novamente.");
     } finally {
       setIsReactivating(false);
+    }
+  }
+
+  async function handleConfirmarEncerramento(payload: EncerramentoAnuncioPayload) {
+    if (!anuncio || !session) return;
+    try {
+      const atualizado = await encerrarAnuncio(anuncio.id, payload, session);
+      setAnuncio(atualizado);
+      setIsCloseModalOpen(false);
+      setActiveToast(
+        payload.tipo === "VENDIDO"
+          ? "Lote finalizado com sucesso! Marcado como Comercializado / Vendido."
+          : "Lote finalizado com sucesso! Marcado como Cancelado / Retirado."
+      );
+      recarregarSolicitacoes();
+    } catch (err) {
+      console.error("Erro ao encerrar anúncio:", err);
+      alert(
+        err instanceof Error
+          ? err.message
+          : "Não foi possível encerrar a disponibilidade do anúncio."
+      );
     }
   }
 
@@ -242,6 +268,7 @@ export function AdDetailPage({ onOpenDialog }: AdDetailPageProps) {
   const isAdmin = session?.conta.tipo === "ADMIN";
   const isApprovedBuyer = Boolean(buyerRequest && buyerRequest.status === "APROVADO");
   const hasUnlockedAccess = Boolean(isOwner || isAdmin || isApprovedBuyer);
+  const isClosed = anuncio.status === "VENDIDO" || anuncio.status === "CANCELADO";
   const [tag1, tag2] = obterTagsAnuncio(anuncio);
 
   const hasVideo = Boolean(anuncio.video?.url);
@@ -270,6 +297,53 @@ export function AdDetailPage({ onOpenDialog }: AdDetailPageProps) {
             >
               <Icon name="close" />
             </button>
+          </div>
+        )}
+
+        {/* Banner de Lote Encerrado (US-016) */}
+        {isClosed && (
+          <div
+            className={`ad-alert ${anuncio.status === "VENDIDO" ? "ad-alert--success" : "ad-alert--paused"}`}
+            role="status"
+          >
+            <div className="ad-alert__content">
+              <Icon name={anuncio.status === "VENDIDO" ? "check" : "box"} />
+              <div>
+                <strong>
+                  {anuncio.status === "VENDIDO"
+                    ? "📦 Lote Comercializado / Vendido"
+                    : "📦 Lote Cancelado / Retirado"}
+                </strong>
+                <p>
+                  {anuncio.encerradoEm
+                    ? `Finalizado em ${new Date(anuncio.encerradoEm).toLocaleDateString("pt-BR")}`
+                    : "Finalizado pelo produtor rural."}
+                  {anuncio.motivoEncerramento ? ` · Motivo: ${anuncio.motivoEncerramento}` : ""}
+                </p>
+                {isOwner && anuncio.observacoesEncerramento && (
+                  <p
+                    className="ad-alert__internal-notes"
+                    style={{
+                      marginTop: "0.35rem",
+                      fontStyle: "italic",
+                      fontSize: "0.875rem",
+                    }}
+                  >
+                    Nota interna da fazenda: &ldquo;{anuncio.observacoesEncerramento}&rdquo;
+                  </p>
+                )}
+                {!isOwner && (
+                  <p>
+                    Este lote foi formalmente finalizado pelo produtor rural e não aceita novos contatos comerciais nem pedidos de documentos.
+                  </p>
+                )}
+              </div>
+            </div>
+            {!isOwner && (
+              <Link to={routes.market} className="button button--primary button--small">
+                Explorar Outros Lotes no Mercado
+              </Link>
+            )}
           </div>
         )}
 
@@ -934,6 +1008,15 @@ export function AdDetailPage({ onOpenDialog }: AdDetailPageProps) {
                               >
                                 <Icon name="eye" /> Visualizar Documento
                               </button>
+                            ) : isClosed ? (
+                              <button
+                                type="button"
+                                className="button button--outline button--small button--full"
+                                disabled
+                                title="Lote fora de mercado. Solicitações de documentos encerradas."
+                              >
+                                <Icon name="lock" /> Lote Encerrado
+                              </button>
                             ) : session ? (
                               <button
                                 type="button"
@@ -975,12 +1058,14 @@ export function AdDetailPage({ onOpenDialog }: AdDetailPageProps) {
                     <p>
                       Lotes com Guia de Trânsito Animal (GTA), laudos sanitários e certificados geram mais confiança e fecham negócios mais rápido.
                     </p>
-                    <Link
-                      to={`/anuncios/${anuncio.id}/editar`}
-                      className="button button--primary button--small"
-                    >
-                      <Icon name="edit" /> Editar Anúncio para Anexar Documentos
-                    </Link>
+                    {!isClosed && (
+                      <Link
+                        to={`/anuncios/${anuncio.id}/editar`}
+                        className="button button--primary button--small"
+                      >
+                        <Icon name="edit" /> Editar Anúncio para Anexar Documentos
+                      </Link>
+                    )}
                   </div>
                 )}
 
@@ -1028,6 +1113,7 @@ export function AdDetailPage({ onOpenDialog }: AdDetailPageProps) {
                                   {req.status === "APROVADO" && "✅ Acesso Liberado"}
                                   {req.status === "RECUSADO" && "❌ Recusado"}
                                   {req.status === "REVOGADO" && "🚫 Revogado"}
+                                  {req.status === "CANCELADO" && "⏹ Finalizado"}
                                 </span>
                                 <span className="ad-doc-request-card__date">
                                   {new Date(req.solicitadoEm).toLocaleString("pt-BR", {
@@ -1048,10 +1134,15 @@ export function AdDetailPage({ onOpenDialog }: AdDetailPageProps) {
                               <p className="ad-doc-request-card__message-text">
                                 &ldquo;{req.mensagem}&rdquo;
                               </p>
+                              {req.motivoRecusa && (
+                                <p className="ad-doc-request-card__refusal-reason">
+                                  Motivo: <em>{req.motivoRecusa}</em>
+                                </p>
+                              )}
                             </div>
 
                             <div className="ad-doc-request-card__actions">
-                              {req.status === "PENDENTE" && (
+                              {!isClosed && req.status === "PENDENTE" && (
                                 <>
                                   <button
                                     type="button"
@@ -1072,7 +1163,7 @@ export function AdDetailPage({ onOpenDialog }: AdDetailPageProps) {
                                 </>
                               )}
 
-                              {req.status === "APROVADO" && (
+                              {!isClosed && req.status === "APROVADO" && (
                                 <button
                                   type="button"
                                   className="button button--secondary button--small ad-btn-revoke"
@@ -1084,7 +1175,7 @@ export function AdDetailPage({ onOpenDialog }: AdDetailPageProps) {
                                 </button>
                               )}
 
-                              {(req.status === "RECUSADO" || req.status === "REVOGADO") && (
+                              {!isClosed && (req.status === "RECUSADO" || req.status === "REVOGADO") && (
                                 <button
                                   type="button"
                                   className="button button--secondary button--small"
@@ -1093,6 +1184,14 @@ export function AdDetailPage({ onOpenDialog }: AdDetailPageProps) {
                                 >
                                   <Icon name="check" /> Reautorizar Acesso
                                 </button>
+                              )}
+
+                              {isClosed && (
+                                <span className="ad-doc-request-card__closed-notice">
+                                  {req.status === "CANCELADO"
+                                    ? req.motivoRecusa || "Solicitação finalizada com o encerramento do lote."
+                                    : "Acesso a documentos expirado com o encerramento do lote."}
+                                </span>
                               )}
                             </div>
                           </div>
@@ -1165,57 +1264,153 @@ export function AdDetailPage({ onOpenDialog }: AdDetailPageProps) {
               {/* Botões de Ação */}
               {isOwner ? (
                 <div className="ad-owner-box">
-                  <div className="ad-owner-badge">
-                    <Icon name="user" />{" "}
-                    {anuncio.status === "PAUSADO"
-                      ? "Seu anúncio (Pausado)"
-                      : anuncio.status === "PAUSADO_MODERACAO"
-                      ? "Seu anúncio (Pausado pela Moderação)"
-                      : anuncio.status === "EM_REVISAO"
-                      ? "Seu anúncio (Em Revisão)"
-                      : anuncio.status === "BLOQUEADO_MODERACAO"
-                      ? "Seu anúncio (Bloqueado)"
-                      : "Seu anúncio publicado"}
+                  {anuncio.status === "VENDIDO" ? (
+                    <div className="ad-owner-badge ad-owner-badge--active">
+                      <Icon name="check" /> Seu Lote Comercializado
+                    </div>
+                  ) : anuncio.status === "CANCELADO" ? (
+                    <div className="ad-owner-badge ad-owner-badge--closed">
+                      <Icon name="close" /> Seu Lote Cancelado / Retirado
+                    </div>
+                  ) : anuncio.status === "PAUSADO" ? (
+                    <div className="ad-owner-badge ad-owner-badge--paused">
+                      <Icon name="pause" /> Seu Lote Pausado no Mercado
+                    </div>
+                  ) : anuncio.status === "PAUSADO_MODERACAO" ? (
+                    <div className="ad-owner-badge ad-owner-badge--paused">
+                      <Icon name="pause" /> Seu Lote Pausado pela Moderação
+                    </div>
+                  ) : anuncio.status === "EM_REVISAO" ? (
+                    <div className="ad-owner-badge ad-owner-badge--paused">
+                      <Icon name="clock" /> Seu Lote em Revisão
+                    </div>
+                  ) : anuncio.status === "BLOQUEADO_MODERACAO" ? (
+                    <div className="ad-owner-badge ad-owner-badge--closed">
+                      <Icon name="ban" /> Seu Lote Bloqueado
+                    </div>
+                  ) : (
+                    <div className="ad-owner-badge ad-owner-badge--active">
+                      <Icon name="check" /> Seu Lote Ativo no Mercado
+                    </div>
+                  )}
+
+                  {isClosed ? (
+                    <>
+                      <div className="ad-owner-closed-note">
+                        🔒 Edição bloqueada para lotes encerrados
+                      </div>
+                      <button
+                        type="button"
+                        className="button button--primary button--full"
+                        title="Usar este lote encerrado como modelo para um novo anúncio"
+                        onClick={() => navigate(`/anunciar?copiarDe=${anuncio.id}`)}
+                      >
+                        <Icon name="copy" /> Usar como Modelo para Novo Lote
+                      </button>
+                    </>
+                  ) : anuncio.status === "PAUSADO" ? (
+                    <>
+                      <button
+                        type="button"
+                        className="button button--primary button--full"
+                        onClick={handleReativarAnuncio}
+                        disabled={isReactivating}
+                      >
+                        <Icon name="play" /> {isReactivating ? "Reativando..." : "Reativar Anúncio Agora"}
+                      </button>
+                      <Link
+                        to={`/anuncios/${anuncio.id}/editar`}
+                        className="button button--secondary button--full ad-owner-edit-btn"
+                      >
+                        <Icon name="edit" /> Editar Informações
+                      </Link>
+                      <button
+                        type="button"
+                        className="button button--outline button--full ad-owner-close-btn"
+                        onClick={() => setIsCloseModalOpen(true)}
+                        title="Encerrar disponibilidade comercial deste lote"
+                      >
+                        <Icon name="box" /> Encerrar Disponibilidade
+                      </button>
+                      <button
+                        type="button"
+                        className="button button--secondary button--full"
+                        title="Usar informações técnicas deste lote como modelo para um novo anúncio"
+                        onClick={() => navigate(`/anunciar?copiarDe=${anuncio.id}`)}
+                      >
+                        <Icon name="copy" /> Usar como Modelo para Novo Lote
+                      </button>
+                    </>
+                  ) : anuncio.status === "ATIVO" ? (
+                    <>
+                      <Link
+                        to={`/anuncios/${anuncio.id}/editar`}
+                        className="button button--primary button--full ad-owner-edit-btn"
+                      >
+                        <Icon name="edit" /> Editar Informações do Lote
+                      </Link>
+                      <button
+                        type="button"
+                        className="button button--outline button--full ad-owner-close-btn"
+                        onClick={() => setIsCloseModalOpen(true)}
+                        title="Encerrar disponibilidade comercial deste lote"
+                      >
+                        <Icon name="box" /> Encerrar Disponibilidade
+                      </button>
+                      <button
+                        type="button"
+                        className="button button--secondary button--full"
+                        title="Usar informações técnicas deste lote como modelo para um novo anúncio"
+                        onClick={() => navigate(`/anunciar?copiarDe=${anuncio.id}`)}
+                      >
+                        <Icon name="copy" /> Usar como Modelo para Novo Lote
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      {anuncio.status !== "BLOQUEADO_MODERACAO" ? (
+                        <>
+                          <Link
+                            to={`/anuncios/${anuncio.id}/editar`}
+                            className="button button--primary button--full ad-owner-edit-btn"
+                          >
+                            <Icon name="edit" /> Editar Informações do Lote
+                          </Link>
+                          <button
+                            type="button"
+                            className="button button--secondary button--full"
+                            title="Usar informações técnicas deste lote como modelo para um novo anúncio"
+                            onClick={() => navigate(`/anunciar?copiarDe=${anuncio.id}`)}
+                          >
+                            <Icon name="copy" /> Usar como Modelo para Novo Lote
+                          </button>
+                        </>
+                      ) : (
+                        <div className="ad-owner-closed-note">
+                          🚫 Anúncio bloqueado pela moderação
+                        </div>
+                      )}
+                    </>
+                  )}
+
+                  <Link to={routes.myAds} className="ad-owner-box__link">
+                    ← Gerenciar em Meus Anúncios
+                  </Link>
+                </div>
+              ) : isClosed ? (
+                <div className="ad-buyer-closed-box">
+                  <div className="ad-buyer-closed-icon" aria-hidden="true">
+                    <Icon name="box" />
                   </div>
-                  {anuncio.status === "PAUSADO" && (
-                    <button
-                      type="button"
-                      className="button button--primary button--full"
-                      onClick={handleReativarAnuncio}
-                      disabled={isReactivating}
-                    >
-                      <Icon name="play" /> {isReactivating ? "Reativando..." : "Reativar Anúncio Agora"}
-                    </button>
-                  )}
-                  {anuncio.status !== "BLOQUEADO_MODERACAO" && (
-                    <Link
-                      to={`/anuncios/${anuncio.id}/editar`}
-                      className={`button ${anuncio.status === "PAUSADO" ? "button--outline" : "button--primary"} button--full ad-owner-edit-btn`}
-                    >
-                      <Icon name="edit" /> Editar Informações do Lote
-                    </Link>
-                  )}
-                  {/* Ação de Duplicar como Modelo (US-017) */}
-                  <button
-                    type="button"
-                    className="button button--secondary button--full"
-                    disabled={anuncio.status === "BLOQUEADO_MODERACAO"}
-                    title={
-                      anuncio.status === "BLOQUEADO_MODERACAO"
-                        ? "Anúncios bloqueados pela moderação não podem ser utilizados como modelo"
-                        : "Usar informações técnicas deste lote como modelo para um novo anúncio"
-                    }
-                    onClick={() => navigate(`/anunciar?copiarDe=${anuncio.id}`)}
-                  >
-                    <Icon name="copy" /> Usar como Modelo para Novo Lote
-                  </button>
-                  <button
-                    type="button"
-                    className="button button--outline button--full"
-                    onClick={() => navigate(routes.myAds)}
-                  >
-                    Gerenciar em Meus Anúncios
-                  </button>
+                  <h3>Lote Fora de Mercado</h3>
+                  <p>
+                    Este lote foi formalmente finalizado pelo produtor rural (
+                    {anuncio.status === "VENDIDO" ? "comercializado" : "retirado"}
+                    ) e não aceita novos contatos comerciais.
+                  </p>
+                  <Link to={routes.market} className="button button--primary button--full">
+                    Explorar outros lotes no Mercado
+                  </Link>
                 </div>
               ) : anuncio.status !== "ATIVO" ? (
                 <div className="ad-buyer-paused-box">
@@ -1537,6 +1732,16 @@ export function AdDetailPage({ onOpenDialog }: AdDetailPageProps) {
               "Solicitação de acesso enviada ao produtor com sucesso! Você será notificado assim que for avaliada."
             );
           }}
+        />
+      )}
+
+      {/* Modal de Encerramento do Lote (US-016) */}
+      {isCloseModalOpen && anuncio && (
+        <CloseAdModal
+          isOpen={isCloseModalOpen}
+          onClose={() => setIsCloseModalOpen(false)}
+          anuncio={anuncio}
+          onConfirm={handleConfirmarEncerramento}
         />
       )}
     </div>

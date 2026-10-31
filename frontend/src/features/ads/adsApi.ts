@@ -302,9 +302,28 @@ export function adaptarAnuncioDaApiParaFrontend(
     ATIVO: "ATIVO",
     PAUSADO: "PAUSADO",
     VENDIDO: "VENDIDO",
+    CANCELADO: "CANCELADO",
     RASCUNHO: "PAUSADO",
   };
-  const status: AdStatus = statusMap[apiAd.estadoComercial] || "ATIVO";
+
+  const isFallbackEncerrado =
+    fallbackLocal?.status === "VENDIDO" || fallbackLocal?.status === "CANCELADO";
+
+  const status: AdStatus = isFallbackEncerrado
+    ? fallbackLocal.status
+    : statusMap[apiAd.estadoComercial] || "ATIVO";
+
+  const encerradoEm = isFallbackEncerrado
+    ? fallbackLocal?.encerradoEm || apiAd.encerradoEm
+    : apiAd.encerradoEm || fallbackLocal?.encerradoEm;
+
+  const motivoEncerramento = isFallbackEncerrado
+    ? fallbackLocal?.motivoEncerramento || apiAd.motivoEncerramento
+    : apiAd.motivoEncerramento || fallbackLocal?.motivoEncerramento;
+
+  const observacoesEncerramento = isFallbackEncerrado
+    ? fallbackLocal?.observacoesEncerramento || apiAd.observacoesEncerramento
+    : apiAd.observacoesEncerramento || fallbackLocal?.observacoesEncerramento;
 
   if (isAnimal) {
     let raca = BREED_BACK_TO_FRONT[apiAd.raca] || apiAd.raca || "Nelore";
@@ -352,6 +371,9 @@ export function adaptarAnuncioDaApiParaFrontend(
       atualizadoEm: apiAd.atualizadoEm,
       status,
       seloVerificado: true,
+      encerradoEm,
+      motivoEncerramento,
+      observacoesEncerramento,
     };
     return animalAd;
   } else {
@@ -409,6 +431,9 @@ export function adaptarAnuncioDaApiParaFrontend(
       atualizadoEm: apiAd.atualizadoEm,
       status,
       seloVerificado: true,
+      encerradoEm,
+      motivoEncerramento,
+      observacoesEncerramento,
     };
     return grainAd;
   }
@@ -548,3 +573,29 @@ export async function apiEditarAnuncioBackend(
   }
   return resp.json();
 }
+
+export async function apiEncerrarAnuncioBackend(
+  anuncioId: string,
+  payload: {
+    tipo: "VENDIDO" | "CANCELADO";
+    motivo: string;
+    observacoes?: string;
+    desvincularDocumentos?: boolean;
+  },
+  token: string
+): Promise<Record<string, any>> {
+  const resp = await fetch(`/api/vendedor/anuncios/${anuncioId}/encerrar`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(payload),
+  });
+  if (!resp.ok) {
+    const errorBody = await resp.json().catch(() => null);
+    throw new Error(errorBody?.erro?.mensagem || `Erro ao encerrar anúncio (HTTP ${resp.status})`);
+  }
+  return resp.json();
+}
+

@@ -19,7 +19,8 @@ export type AdStatus =
   | "PAUSADO_MODERACAO"
   | "EM_REVISAO"
   | "BLOQUEADO_MODERACAO"
-  | "VENDIDO";
+  | "VENDIDO"
+  | "CANCELADO";
 
 export type GrainCrop = "CAFE" | "SOJA" | "MILHO" | "TRIGO" | "OUTRO";
 
@@ -56,7 +57,7 @@ export interface AdDocumentItem {
   criadoEm: string;
 }
 
-export type DocumentAccessStatus = "PENDENTE" | "APROVADO" | "RECUSADO" | "REVOGADO";
+export type DocumentAccessStatus = "PENDENTE" | "APROVADO" | "RECUSADO" | "REVOGADO" | "CANCELADO";
 
 export interface AdDocumentAccessRequest {
   id: string;
@@ -67,6 +68,7 @@ export interface AdDocumentAccessRequest {
   compradorTipo?: "PF" | "PJ";
   mensagem: string; // Obrigatória
   status: DocumentAccessStatus;
+  motivoRecusa?: string;
   solicitadoEm: string;
   respondidoEm?: string;
 }
@@ -104,6 +106,9 @@ export interface AnimalLotAd {
   motivoModeracao?: string;
   moderadoEm?: string;
   seloVerificado?: boolean;
+  encerradoEm?: string;
+  motivoEncerramento?: string;
+  observacoesEncerramento?: string;
 }
 
 export type CoffeeScreen =
@@ -174,9 +179,34 @@ export interface GrainLotAd {
   motivoModeracao?: string;
   moderadoEm?: string;
   seloVerificado?: boolean;
+  encerradoEm?: string;
+  motivoEncerramento?: string;
+  observacoesEncerramento?: string;
 }
 
 export type MarketplaceAd = AnimalLotAd | GrainLotAd;
+
+export interface EncerramentoAnuncioPayload {
+  tipo: "VENDIDO" | "CANCELADO";
+  motivo: string;
+  observacoes?: string;
+  desvincularDocumentos?: boolean;
+}
+
+export const MOTIVOS_ENCERRAMENTO_VENDIDO = [
+  "Venda externa (Frigorífico / Indústria)",
+  "Venda para outro produtor / vizinho",
+  "Negociação intermediada pelo SafraDireta",
+  "Outro destino comercial",
+] as const;
+
+export const MOTIVOS_ENCERRAMENTO_CANCELADO = [
+  "Retenção na propriedade (recria / confinamento / silo)",
+  "Perda física ou descarte sanitário",
+  "Desistência comercial (mercado desfavorável)",
+  "Erro de cadastro / Duplicidade",
+  "Outro motivo",
+] as const;
 
 export type AdModelTemplate =
   | (Partial<AnimalLotAd> & {

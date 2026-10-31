@@ -319,3 +319,36 @@ export async function revogarAcessoDocumentos(
   return responderSolicitacaoAcesso(solicitacaoId, "REVOGADO");
 }
 
+export async function revogarAcessosAoEncerrarAnuncio(anuncioId: string): Promise<void> {
+  const todas = listarTodasSolicitacoesStorage();
+  const agora = new Date().toISOString();
+  let alterou = false;
+
+  const atualizadas = todas.map((s) => {
+    if (s.anuncioId !== anuncioId) return s;
+    if (s.status === "APROVADO") {
+      alterou = true;
+      return {
+        ...s,
+        status: "REVOGADO" as DocumentAccessStatus,
+        respondidoEm: agora,
+      };
+    }
+    if (s.status === "PENDENTE") {
+      alterou = true;
+      return {
+        ...s,
+        status: "CANCELADO" as DocumentAccessStatus,
+        motivoRecusa: "Lote encerrado pelo produtor — negociação finalizada",
+        respondidoEm: agora,
+      };
+    }
+    return s;
+  });
+
+  if (alterou) {
+    salvarTodasSolicitacoesStorage(atualizadas);
+  }
+}
+
+

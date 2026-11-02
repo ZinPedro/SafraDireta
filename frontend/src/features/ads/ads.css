@@ -5622,6 +5622,424 @@
   cursor: not-allowed;
 }
 
+/* ==========================================================================
+   US-023 — Filtros de Preço e Peso (Painel Suspenso, Métricas e Tags)
+   ========================================================================== */
+
+/* Linha de Utilidades */
+.market-utility-bar {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.market-count-text {
+  font-size: 0.875rem;
+  color: var(--color-text-muted, #556b55);
+}
+
+.market-count-text strong {
+  color: var(--color-text, #1a2e1a);
+}
+
+/* Botão Acionador de Filtros */
+.market-filter-btn-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4375rem 0.875rem;
+  background: #ffffff;
+  border: 1px solid var(--color-border, #d6ccbe);
+  border-radius: 20px;
+  color: var(--color-text, #1a2e1a);
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  user-select: none;
+}
+
+.market-filter-btn-trigger:hover {
+  background: var(--color-cream-100, #f8f6f0);
+  border-color: #b5a999;
+}
+
+.market-filter-btn-trigger--active {
+  border-color: var(--color-primary, #1e5631);
+  background: #f0f7ef;
+  color: var(--color-primary, #1e5631);
+}
+
+.market-filter-btn-trigger--open {
+  border-color: var(--color-primary, #1e5631);
+  box-shadow: 0 0 0 3px rgba(30, 86, 49, 0.12);
+}
+
+.market-filter-btn-icon {
+  width: 16px;
+  height: 16px;
+  color: var(--color-primary, #1e5631);
+}
+
+.market-filter-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-primary, #1e5631);
+  color: #ffffff;
+  border-radius: 9999px;
+  padding: 1px 7px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  min-width: 18px;
+  line-height: 1.3;
+}
+
+.market-filter-btn-chevron {
+  width: 14px;
+  height: 14px;
+  color: var(--color-text-muted, #556b55);
+  transition: transform 0.2s ease;
+}
+
+.market-filter-btn-chevron--rotated {
+  transform: rotate(180deg);
+}
+
+/* Painel Suspenso de Filtros Numéricos */
+.market-filter-panel {
+  margin-top: 1rem;
+  background: #ffffff;
+  border: 1px solid var(--color-border, #d6ccbe);
+  border-top: 3px solid var(--color-primary, #1e5631);
+  border-radius: var(--radius-md, 12px);
+  padding: 1.25rem 1.5rem;
+  box-shadow: 0 8px 24px rgba(26, 46, 26, 0.08);
+  animation: fadeInDown 0.2s ease-out;
+}
+
+.market-filter-panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 0.875rem;
+  margin-bottom: 1.25rem;
+  border-bottom: 1px solid var(--color-border, #e5ded4);
+}
+
+.market-filter-panel__title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 1rem;
+  color: var(--color-primary, #1e5631);
+}
+
+.market-filter-panel__title .icon {
+  width: 18px;
+  height: 18px;
+}
+
+.market-filter-panel__title strong {
+  font-weight: 700;
+}
+
+.market-filter-panel__close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--color-text-muted, #556b55);
+  padding: 4px;
+  border-radius: 50%;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.market-filter-panel__close:hover {
+  background: rgba(0, 0, 0, 0.06);
+  color: var(--color-text, #1a2e1a);
+}
+
+.market-filter-panel__close .icon {
+  width: 18px;
+  height: 18px;
+}
+
+.market-filter-panel__body {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.75rem;
+}
+
+@media (max-width: 768px) {
+  .market-filter-panel__body {
+    grid-template-columns: 1fr;
+    gap: 1.25rem;
+  }
+}
+
+.market-filter-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+}
+
+.market-filter-group__header {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.market-filter-group__label {
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: var(--color-text, #1a2e1a);
+}
+
+.market-filter-group__hint {
+  font-size: 0.75rem;
+  color: var(--color-text-muted, #667e66);
+}
+
+.market-range-inputs {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+}
+
+.market-range-sep {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--color-text-muted, #705b49);
+  white-space: nowrap;
+}
+
+.market-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex: 1;
+}
+
+.market-number-input {
+  width: 100%;
+  height: 2.5rem;
+  padding: 0.375rem 0.75rem;
+  background: #ffffff;
+  border: 1px solid var(--color-border, #ccd9c8);
+  border-radius: 8px;
+  font-size: 0.875rem;
+  color: var(--color-text, #1a2e1a);
+  transition: all 0.15s ease;
+  font-variant-numeric: tabular-nums;
+}
+
+.market-input-wrapper:has(.market-input-prefix) .market-number-input {
+  padding-left: 2rem;
+}
+
+.market-input-wrapper:has(.market-input-suffix) .market-number-input {
+  padding-right: 2.5rem;
+}
+
+.market-number-input:focus {
+  outline: none;
+  border-color: var(--color-primary, #1e5631);
+  box-shadow: 0 0 0 3px rgba(30, 86, 49, 0.12);
+}
+
+.market-number-input--error {
+  border-color: #dc2626 !important;
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.1) !important;
+}
+
+.market-input-prefix {
+  position: absolute;
+  left: 0.625rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--color-text-muted, #667e66);
+  pointer-events: none;
+}
+
+.market-input-suffix {
+  position: absolute;
+  right: 0.625rem;
+  font-size: 0.775rem;
+  font-weight: 600;
+  color: var(--color-text-muted, #667e66);
+  pointer-events: none;
+}
+
+/* Seletor Segmentado de Métricas */
+.market-metric-selector {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+  margin-bottom: 0.25rem;
+}
+
+.market-metric-chip {
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.25rem 0.625rem;
+  border-radius: 9999px;
+  border: 1px solid var(--color-border, #ccd9c8);
+  background: #fbf9f5;
+  color: #374151;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+
+.market-metric-chip:hover {
+  background: #f0f7ef;
+  border-color: #a8c4a0;
+  color: var(--color-primary, #1e5631);
+}
+
+.market-metric-chip--active {
+  background: var(--color-primary, #1e5631) !important;
+  color: #ffffff !important;
+  border-color: var(--color-primary, #1e5631) !important;
+  box-shadow: 0 1px 3px rgba(30, 86, 49, 0.2);
+}
+
+.market-filter-error {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-size: 0.75rem;
+  color: #dc2626;
+  margin: 0.25rem 0 0;
+}
+
+.market-filter-error .icon {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
+/* Rodapé do Painel */
+.market-filter-panel__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 1rem;
+  margin-top: 1.25rem;
+  border-top: 1px solid var(--color-border, #e5ded4);
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.market-filter-panel__footer-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+}
+
+/* Tags de Filtros Ativos e Limpar Todos */
+.market-active-filters {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  flex-wrap: wrap;
+  margin-top: 0.875rem;
+  padding: 0.5rem 0.875rem;
+  background: #fbf9f5;
+  border: 1px solid #ebd9c5;
+  border-radius: 8px;
+  animation: fadeInDown 0.2s ease-out;
+}
+
+.market-active-filters__label {
+  font-size: 0.8125rem;
+  font-weight: 700;
+  color: var(--color-text-secondary, #705b49);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+.market-active-filters__list {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.market-filter-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.25rem 0.625rem;
+  background: #ffffff;
+  border: 1px solid #c8d6c4;
+  border-radius: 9999px;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--color-text, #1a2e1a);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.market-filter-pill__icon {
+  font-size: 0.875rem;
+  line-height: 1;
+}
+
+.market-filter-pill__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--color-text-muted, #556b55);
+  padding: 0;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.market-filter-pill__btn:hover {
+  background: rgba(0, 0, 0, 0.08);
+  color: var(--color-text, #1a2e1a);
+}
+
+.market-filter-pill__btn .icon {
+  width: 12px;
+  height: 12px;
+}
+
+.market-clear-all-btn {
+  background: transparent;
+  border: none;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #991b1b;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  transition: all 0.15s ease;
+}
+
+.market-clear-all-btn:hover {
+  color: #7f1d1d;
+  background: #fef2f2;
+}
+
+/* Empty State para Filtros Numéricos */
+.market-empty-box--filters .market-empty-box__icon-wrapper {
+  background: #ecfdf5;
+  color: #059669;
+}
+
 
 
 

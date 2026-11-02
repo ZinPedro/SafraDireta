@@ -8,6 +8,91 @@ import type { GrainCrop, MarketplaceAd } from "./ads.types";
 import { correspondeBuscaAnuncio, listarAnunciosMercado } from "./adsStorage";
 import "./ads.css";
 
+export type MetricaPeso =
+  | "PESO_MEDIO_ARROBA"
+  | "QTD_CABECAS"
+  | "VOLUME_SACAS"
+  | "PESO_TOTAL_TON";
+
+interface MetricConfig {
+  id: MetricaPeso;
+  label: string;
+  shortUnit: string;
+  minPlaceholder: string;
+  maxPlaceholder: string;
+  step?: string;
+}
+
+const METRICAS_CONFIG: Record<MetricaPeso, MetricConfig> = {
+  PESO_MEDIO_ARROBA: {
+    id: "PESO_MEDIO_ARROBA",
+    label: "Peso Médio (@)",
+    shortUnit: "@",
+    minPlaceholder: "Ex: 18",
+    maxPlaceholder: "Ex: 22",
+    step: "0.1",
+  },
+  QTD_CABECAS: {
+    id: "QTD_CABECAS",
+    label: "Qtd. Cabeças",
+    shortUnit: "cab.",
+    minPlaceholder: "Ex: 50",
+    maxPlaceholder: "Ex: 150",
+    step: "1",
+  },
+  VOLUME_SACAS: {
+    id: "VOLUME_SACAS",
+    label: "Volume em Sacas (sc)",
+    shortUnit: "sc",
+    minPlaceholder: "Ex: 500",
+    maxPlaceholder: "Ex: 2.000",
+    step: "1",
+  },
+  PESO_TOTAL_TON: {
+    id: "PESO_TOTAL_TON",
+    label: "Peso Total (ton)",
+    shortUnit: "ton",
+    minPlaceholder: "Ex: 20",
+    maxPlaceholder: "Ex: 60",
+    step: "0.1",
+  },
+};
+
+function obterMetricasDisponiveis(categoria: "TODOS" | "ANIMAL" | "GRAOS"): MetricaPeso[] {
+  if (categoria === "ANIMAL") {
+    return ["PESO_MEDIO_ARROBA", "QTD_CABECAS", "PESO_TOTAL_TON"];
+  }
+  if (categoria === "GRAOS") {
+    return ["VOLUME_SACAS", "PESO_TOTAL_TON"];
+  }
+  return ["PESO_TOTAL_TON"];
+}
+
+function obterMetricaPadrao(categoria: "TODOS" | "ANIMAL" | "GRAOS"): MetricaPeso {
+  if (categoria === "ANIMAL") return "PESO_MEDIO_ARROBA";
+  if (categoria === "GRAOS") return "VOLUME_SACAS";
+  return "PESO_TOTAL_TON";
+}
+
+function normalizarMetrica(
+  metricaRaw: string | null,
+  categoria: "TODOS" | "ANIMAL" | "GRAOS"
+): MetricaPeso {
+  const disponiveis = obterMetricasDisponiveis(categoria);
+  if (!metricaRaw) return obterMetricaPadrao(categoria);
+
+  let m = metricaRaw;
+  if (m === "QUANTIDADE_CABECAS" || m === "cabecas") m = "QTD_CABECAS";
+  if (m === "arroba") m = "PESO_MEDIO_ARROBA";
+  if (m === "sacas") m = "VOLUME_SACAS";
+  if (m === "toneladas") m = "PESO_TOTAL_TON";
+
+  if (disponiveis.includes(m as MetricaPeso)) {
+    return m as MetricaPeso;
+  }
+  return obterMetricaPadrao(categoria);
+}
+
 export function MarketPage() {
   const { session } = useAuth();
   const navigate = useNavigate();
@@ -31,6 +116,40 @@ export function MarketPage() {
     culParam && ["CAFE", "SOJA", "MILHO", "TRIGO", "OUTRO"].includes(culParam)
       ? (culParam as GrainCrop)
       : "TODAS";
+
+  // Deriva parâmetros de preço e peso da URL (Single Source of Truth)
+  const precoMinParam = searchParams.get("preco_min");
+  const precoMaxParam = searchParams.get("preco_max");
+  const filtroPrecoMin =
+    precoMinParam !== null && precoMinParam.trim() !== "" && !isNaN(Number(precoMinParam))
+      ? Number(precoMinParam)
+      : null;
+  const filtroPrecoMax =
+    precoMaxParam !== null && precoMaxParam.trim() !== "" && !isNaN(Number(precoMaxParam))
+      ? Number(precoMaxParam)
+      : null;
+
+  const metricaParam = searchParams.get("metrica_peso");
+  const metricaAtiva = normalizarMetrica(metricaParam, filtroCategoria);
+
+  const pesoMinParam = searchParams.get("peso_min");
+  const pesoMaxParam = searchParams.get("peso_max");
+  const filtroPesoMin =
+    pesoMinParam !== null && pesoMinParam.trim() !== "" && !isNaN(Number(pesoMinParam))
+      ? Number(pesoMinParam)
+      : null;
+  const filtroPesoMax =
+    pesoMaxParam !== null && pesoMaxParam.trim() !== "" && !isNaN(Number(pesoMaxParam))
+      ? Number(pesoMaxParam)
+      : null;
+
+  // Estados locais do formulário de rascunho do painel colapsável
+  const [isFilterPanelOpen, setIsFilterPanelOpen] = useState(false);
+  const [draftPrecoMin, setDraftPrecoMin] = useState("");
+  const [draftPrecoMax, setDraftPrecoMax] = useState("");
+  const [draftMetricaPeso, setDraftMetricaPeso] = useState<MetricaPeso>(metricaAtiva);
+  const [draftPesoMin, setDraftPesoMin] = useState("");
+  const [draftPesoMax, setDraftPesoMax] = useState("");
 
   const isSeller = session?.vendedorEstado === "HABILITADO";
 
@@ -124,27 +243,197 @@ export function MarketPage() {
     searchInputRef.current?.focus();
   };
 
-  const handleSelectCategoria = (cat: "TODOS" | "ANIMAL" | "GRAOS") => {
+  const handleToggleFilterPanel = () => {
+    if (!isFilterPanelOpen) {
+      setDraftPrecoMin(filtroPrecoMin !== null ? String(filtroPrecoMin) : "");
+      setDraftPrecoMax(filtroPrecoMax !== null ? String(filtroPrecoMax) : "");
+      setDraftMetricaPeso(metricaAtiva);
+      setDraftPesoMin(filtroPesoMin !== null ? String(filtroPesoMin) : "");
+      setDraftPesoMax(filtroPesoMax !== null ? String(filtroPesoMax) : "");
+    }
+    setIsFilterPanelOpen((prev) => !prev);
+  };
+
+  // Validação inline dos campos de rascunho
+  const numDraftPrecoMin =
+    draftPrecoMin.trim() !== "" && !isNaN(Number(draftPrecoMin)) ? Number(draftPrecoMin) : null;
+  const numDraftPrecoMax =
+    draftPrecoMax.trim() !== "" && !isNaN(Number(draftPrecoMax)) ? Number(draftPrecoMax) : null;
+  const numDraftPesoMin =
+    draftPesoMin.trim() !== "" && !isNaN(Number(draftPesoMin)) ? Number(draftPesoMin) : null;
+  const numDraftPesoMax =
+    draftPesoMax.trim() !== "" && !isNaN(Number(draftPesoMax)) ? Number(draftPesoMax) : null;
+
+  const precoInvalido =
+    numDraftPrecoMin !== null && numDraftPrecoMax !== null && numDraftPrecoMin > numDraftPrecoMax;
+  const pesoInvalido =
+    numDraftPesoMin !== null && numDraftPesoMax !== null && numDraftPesoMin > numDraftPesoMax;
+
+  const precoNegativo =
+    (numDraftPrecoMin !== null && numDraftPrecoMin < 0) ||
+    (numDraftPrecoMax !== null && numDraftPrecoMax < 0);
+  const pesoNegativo =
+    (numDraftPesoMin !== null && numDraftPesoMin < 0) ||
+    (numDraftPesoMax !== null && numDraftPesoMax < 0);
+
+  const temErroValidacao = precoInvalido || pesoInvalido || precoNegativo || pesoNegativo;
+
+  const handleApplyNumericFilters = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (temErroValidacao) return;
+
     setSearchParams(
       (prevParams) => {
         const next = new URLSearchParams(prevParams);
-        // Se clicar no chip já selecionado (toggle para desselecionar), volta para TODOS
-        if (filtroCategoria === cat && cat !== "TODOS") {
-          next.delete("categoria");
-          next.delete("cultura");
-          return next;
-        }
-        if (cat === "TODOS") {
-          next.delete("categoria");
-          next.delete("cultura");
+
+        if (numDraftPrecoMin !== null && numDraftPrecoMin >= 0) {
+          next.set("preco_min", String(numDraftPrecoMin));
         } else {
-          next.set("categoria", cat);
-          next.delete("cultura");
+          next.delete("preco_min");
         }
+
+        if (numDraftPrecoMax !== null && numDraftPrecoMax >= 0) {
+          next.set("preco_max", String(numDraftPrecoMax));
+        } else {
+          next.delete("preco_max");
+        }
+
+        const temFiltroPeso =
+          (numDraftPesoMin !== null && numDraftPesoMin >= 0) ||
+          (numDraftPesoMax !== null && numDraftPesoMax >= 0);
+
+        if (temFiltroPeso) {
+          next.set("metrica_peso", draftMetricaPeso);
+          if (numDraftPesoMin !== null && numDraftPesoMin >= 0) {
+            next.set("peso_min", String(numDraftPesoMin));
+          } else {
+            next.delete("peso_min");
+          }
+          if (numDraftPesoMax !== null && numDraftPesoMax >= 0) {
+            next.set("peso_max", String(numDraftPesoMax));
+          } else {
+            next.delete("peso_max");
+          }
+        } else {
+          next.delete("metrica_peso");
+          next.delete("peso_min");
+          next.delete("peso_max");
+        }
+
         return next;
       },
       { replace: true }
     );
+
+    setIsFilterPanelOpen(false);
+  };
+
+  const handleResetDrafts = () => {
+    setDraftPrecoMin("");
+    setDraftPrecoMax("");
+    setDraftPesoMin("");
+    setDraftPesoMax("");
+    setDraftMetricaPeso(obterMetricaPadrao(filtroCategoria));
+  };
+
+  const handleClearPriceFilter = () => {
+    setSearchParams(
+      (prevParams) => {
+        const next = new URLSearchParams(prevParams);
+        next.delete("preco_min");
+        next.delete("preco_max");
+        return next;
+      },
+      { replace: true }
+    );
+    setDraftPrecoMin("");
+    setDraftPrecoMax("");
+  };
+
+  const handleClearWeightFilter = () => {
+    setSearchParams(
+      (prevParams) => {
+        const next = new URLSearchParams(prevParams);
+        next.delete("metrica_peso");
+        next.delete("peso_min");
+        next.delete("peso_max");
+        return next;
+      },
+      { replace: true }
+    );
+    setDraftPesoMin("");
+    setDraftPesoMax("");
+  };
+
+  const handleClearNumericFilters = () => {
+    setSearchParams(
+      (prevParams) => {
+        const next = new URLSearchParams(prevParams);
+        next.delete("preco_min");
+        next.delete("preco_max");
+        next.delete("metrica_peso");
+        next.delete("peso_min");
+        next.delete("peso_max");
+        return next;
+      },
+      { replace: true }
+    );
+    setDraftPrecoMin("");
+    setDraftPrecoMax("");
+    setDraftPesoMin("");
+    setDraftPesoMax("");
+  };
+
+  const handleClearAllFilters = () => {
+    setSearchTerm("");
+    setDebouncedTerm("");
+    setDraftPrecoMin("");
+    setDraftPrecoMax("");
+    setDraftPesoMin("");
+    setDraftPesoMax("");
+    setIsFilterPanelOpen(false);
+    setSearchParams(new URLSearchParams(), { replace: true });
+    searchInputRef.current?.focus();
+  };
+
+  const handleSelectCategoria = (cat: "TODOS" | "ANIMAL" | "GRAOS") => {
+    const targetCat = filtroCategoria === cat && cat !== "TODOS" ? "TODOS" : cat;
+
+    setSearchParams(
+      (prevParams) => {
+        const next = new URLSearchParams(prevParams);
+
+        if (targetCat === "TODOS") {
+          next.delete("categoria");
+          next.delete("cultura");
+        } else {
+          next.set("categoria", targetCat);
+          next.delete("cultura");
+        }
+
+        // Se a métrica de peso aplicada na URL não for compatível com a nova categoria, ajusta/remove
+        const metricaAtual = next.get("metrica_peso");
+        if (metricaAtual) {
+          const metricasValidas = obterMetricasDisponiveis(targetCat);
+          if (!metricasValidas.includes(metricaAtual as MetricaPeso)) {
+            next.delete("metrica_peso");
+            next.delete("peso_min");
+            next.delete("peso_max");
+          }
+        }
+
+        return next;
+      },
+      { replace: true }
+    );
+
+    // Ajusta draft de métrica se a atual não for compatível
+    const metricasValidas = obterMetricasDisponiveis(targetCat);
+    if (!metricasValidas.includes(draftMetricaPeso)) {
+      setDraftMetricaPeso(obterMetricaPadrao(targetCat));
+      setDraftPesoMin("");
+      setDraftPesoMax("");
+    }
   };
 
   const handleSelectCultura = (cul: "TODAS" | GrainCrop) => {
@@ -227,8 +516,117 @@ export function MarketPage() {
     })();
 
     const passaBusca = correspondeBuscaAnuncio(anuncio, debouncedTerm);
-    return passaCategoria && passaBusca;
+
+    const passaPreco = (() => {
+      if (filtroPrecoMin !== null && anuncio.precoTotal < filtroPrecoMin) {
+        return false;
+      }
+      if (filtroPrecoMax !== null && anuncio.precoTotal > filtroPrecoMax) {
+        return false;
+      }
+      return true;
+    })();
+
+    const passaPesoVolume = (() => {
+      if (filtroPesoMin === null && filtroPesoMax === null) {
+        return true;
+      }
+
+      let valorComparacao: number | undefined;
+
+      if (anuncio.categoria === "ANIMAL") {
+        if (metricaAtiva === "PESO_MEDIO_ARROBA") {
+          valorComparacao = anuncio.pesoMedioArroba;
+        } else if (metricaAtiva === "QTD_CABECAS") {
+          valorComparacao = anuncio.quantidadeCabecas;
+        } else if (metricaAtiva === "PESO_TOTAL_TON") {
+          const totalKg =
+            anuncio.pesoTotalKg ?? (anuncio.quantidadeCabecas * (anuncio.pesoMedioKg ?? 0));
+          valorComparacao = totalKg ? totalKg / 1000 : undefined;
+        }
+      } else if (anuncio.categoria === "GRAOS") {
+        if (metricaAtiva === "VOLUME_SACAS") {
+          valorComparacao = anuncio.quantidadeSacas;
+        } else if (metricaAtiva === "PESO_TOTAL_TON") {
+          valorComparacao =
+            anuncio.pesoTotalToneladas ?? (anuncio.pesoTotalKg ? anuncio.pesoTotalKg / 1000 : undefined);
+        }
+      }
+
+      if (valorComparacao === undefined) {
+        return false;
+      }
+
+      if (filtroPesoMin !== null && valorComparacao < filtroPesoMin) {
+        return false;
+      }
+      if (filtroPesoMax !== null && valorComparacao > filtroPesoMax) {
+        return false;
+      }
+      return true;
+    })();
+
+    return passaCategoria && passaBusca && passaPreco && passaPesoVolume;
   });
+
+  // Estados e textos para tags de filtros ativos
+  const temBuscaAtiva = Boolean(debouncedTerm.trim());
+  const temCategoriaAtiva = filtroCategoria !== "TODOS" || filtroCultura !== "TODAS";
+  const temPrecoAtivo = filtroPrecoMin !== null || filtroPrecoMax !== null;
+  const temPesoAtivo = filtroPesoMin !== null || filtroPesoMax !== null;
+  const activeNumericFilterCount = (temPrecoAtivo ? 1 : 0) + (temPesoAtivo ? 1 : 0);
+  const temFiltroAtivo =
+    temBuscaAtiva || temCategoriaAtiva || temPrecoAtivo || temPesoAtivo;
+
+  const textoTagPreco = (() => {
+    if (!temPrecoAtivo) return "";
+    const formatar = (val: number) =>
+      val.toLocaleString("pt-BR", {
+        style: "currency",
+        currency: "BRL",
+        maximumFractionDigits: 0,
+      });
+
+    if (filtroPrecoMin !== null && filtroPrecoMax !== null) {
+      return `De ${formatar(filtroPrecoMin)} até ${formatar(filtroPrecoMax)}`;
+    }
+    if (filtroPrecoMin !== null) {
+      return `A partir de ${formatar(filtroPrecoMin)}`;
+    }
+    if (filtroPrecoMax !== null) {
+      return `Até ${formatar(filtroPrecoMax)}`;
+    }
+    return "";
+  })();
+
+  const textoTagPeso = (() => {
+    if (!temPesoAtivo) return "";
+    const config = METRICAS_CONFIG[metricaAtiva];
+    const unit = config.shortUnit;
+
+    const formatarNum = (val: number) =>
+      val.toLocaleString("pt-BR", { maximumFractionDigits: 1 });
+
+    if (filtroPesoMin !== null && filtroPesoMax !== null) {
+      if (metricaAtiva === "PESO_MEDIO_ARROBA") {
+        return `${formatarNum(filtroPesoMin)}@ a ${formatarNum(filtroPesoMax)}@`;
+      }
+      return `${formatarNum(filtroPesoMin)} a ${formatarNum(filtroPesoMax)} ${unit}`;
+    }
+    if (filtroPesoMin !== null) {
+      return `A partir de ${formatarNum(filtroPesoMin)} ${unit}`;
+    }
+    if (filtroPesoMax !== null) {
+      return `Até ${formatarNum(filtroPesoMax)} ${unit}`;
+    }
+    return "";
+  })();
+
+  const iconeTagPeso = (() => {
+    if (metricaAtiva === "VOLUME_SACAS") return "📦";
+    if (metricaAtiva === "QTD_CABECAS") return "🐂";
+    return "⚖️";
+  })();
 
   return (
     <div className="market-page">
@@ -321,46 +719,37 @@ export function MarketPage() {
               </button>
             </div>
 
-            {/* Linha de Contagem e Controle Independente */}
-            <div className="market-count-label">
-              <span className="market-count-label__wrap">
-                <span>
-                  Exibindo <strong>{anunciosFiltrados.length}</strong>{" "}
-                  {anunciosFiltrados.length === 1 ? "oferta" : "ofertas"}
-                </span>
-
-                {debouncedTerm.trim() && (
-                  <span className="market-search-chip">
-                    &ldquo;{debouncedTerm.trim()}&rdquo;
-                    <button
-                      type="button"
-                      className="market-search-chip__btn"
-                      onClick={handleClearSearch}
-                      title="Remover filtro de busca"
-                      aria-label="Remover filtro de busca"
-                    >
-                      <Icon name="close" />
-                    </button>
-                  </span>
-                )}
-
-                {filtroCategoria !== "TODOS" && (
-                  <span className="market-category-chip">
-                    <span>
-                      Categoria: <strong>{labelCategoriaAtiva}</strong>
-                    </span>
-                    <button
-                      type="button"
-                      className="market-category-chip__btn"
-                      onClick={handleClearCategory}
-                      title="Limpar filtro de categoria"
-                      aria-label="Limpar filtro de categoria"
-                    >
-                      <Icon name="close" />
-                    </button>
-                  </span>
-                )}
+            {/* Linha de Utilidades: Contagem de Ofertas e Botão de Filtros de Preço e Peso */}
+            <div className="market-utility-bar">
+              <span className="market-count-text">
+                Exibindo <strong>{anunciosFiltrados.length}</strong>{" "}
+                {anunciosFiltrados.length === 1 ? "oferta" : "ofertas"}
               </span>
+
+              <button
+                type="button"
+                className={`market-filter-btn-trigger ${
+                  isFilterPanelOpen ? "market-filter-btn-trigger--open" : ""
+                } ${activeNumericFilterCount > 0 ? "market-filter-btn-trigger--active" : ""}`}
+                onClick={handleToggleFilterPanel}
+                aria-expanded={isFilterPanelOpen}
+                aria-controls="market-filter-panel"
+                title="Filtros avançados de preço e volume"
+              >
+                <Icon name="sliders" className="market-filter-btn-icon" />
+                <span>Filtros de Preço e Peso</span>
+                {activeNumericFilterCount > 0 && (
+                  <span className="market-filter-badge" title={`${activeNumericFilterCount} filtros ativos`}>
+                    {activeNumericFilterCount}
+                  </span>
+                )}
+                <Icon
+                  name="chevron"
+                  className={`market-filter-btn-chevron ${
+                    isFilterPanelOpen ? "market-filter-btn-chevron--rotated" : ""
+                  }`}
+                />
+              </button>
             </div>
           </div>
 
@@ -442,6 +831,301 @@ export function MarketPage() {
               </div>
             </div>
           )}
+
+          {/* Painel Suspenso de Filtros Numéricos (US-023) */}
+          {isFilterPanelOpen && (
+            <form
+              id="market-filter-panel"
+              className="market-filter-panel"
+              onSubmit={handleApplyNumericFilters}
+              noValidate
+            >
+              <div className="market-filter-panel__header">
+                <div className="market-filter-panel__title">
+                  <Icon name="sliders" />
+                  <strong>Filtros Avançados de Preço e Volume</strong>
+                </div>
+                <button
+                  type="button"
+                  className="market-filter-panel__close"
+                  onClick={() => setIsFilterPanelOpen(false)}
+                  title="Fechar painel de filtros"
+                  aria-label="Fechar painel de filtros"
+                >
+                  <Icon name="close" />
+                </button>
+              </div>
+
+              <div className="market-filter-panel__body">
+                {/* Grupo 1: Faixa de Preço */}
+                <div className="market-filter-group">
+                  <div className="market-filter-group__header">
+                    <label className="market-filter-group__label">
+                      Preço Total do Lote (R$)
+                    </label>
+                    <span className="market-filter-group__hint">
+                      Valor total da negociação
+                    </span>
+                  </div>
+                  <div className="market-range-inputs">
+                    <div className="market-input-wrapper">
+                      <span className="market-input-prefix">R$</span>
+                      <input
+                        type="number"
+                        min="0"
+                        step="1000"
+                        className={`market-number-input ${
+                          precoInvalido || precoNegativo ? "market-number-input--error" : ""
+                        }`}
+                        placeholder="Mínimo (ex: 50.000)"
+                        value={draftPrecoMin}
+                        onChange={(e) => setDraftPrecoMin(e.target.value)}
+                        aria-label="Preço mínimo em reais"
+                      />
+                    </div>
+                    <span className="market-range-sep">até</span>
+                    <div className="market-input-wrapper">
+                      <span className="market-input-prefix">R$</span>
+                      <input
+                        type="number"
+                        min="0"
+                        step="1000"
+                        className={`market-number-input ${
+                          precoInvalido || precoNegativo ? "market-number-input--error" : ""
+                        }`}
+                        placeholder="Máximo (ex: 250.000)"
+                        value={draftPrecoMax}
+                        onChange={(e) => setDraftPrecoMax(e.target.value)}
+                        aria-label="Preço máximo em reais"
+                      />
+                    </div>
+                  </div>
+                  {precoInvalido && (
+                    <p className="market-filter-error" role="alert">
+                      <Icon name="alert" />
+                      <span>O preço mínimo não pode ser maior que o máximo.</span>
+                    </p>
+                  )}
+                  {precoNegativo && (
+                    <p className="market-filter-error" role="alert">
+                      <Icon name="alert" />
+                      <span>Os valores de preço não podem ser negativos.</span>
+                    </p>
+                  )}
+                </div>
+
+                {/* Grupo 2: Volume e Peso */}
+                <div className="market-filter-group">
+                  <div className="market-filter-group__header">
+                    <label className="market-filter-group__label">
+                      Volume e Peso do Lote
+                    </label>
+                    <span className="market-filter-group__hint">
+                      Escolha a métrica ideal para sua logística
+                    </span>
+                  </div>
+
+                  {/* Seletor Segmentado de Métricas */}
+                  <div
+                    className="market-metric-selector"
+                    role="radiogroup"
+                    aria-label="Selecione a métrica de peso ou volume"
+                  >
+                    {obterMetricasDisponiveis(filtroCategoria).map((metrica) => {
+                      const cfg = METRICAS_CONFIG[metrica];
+                      const isSelected = draftMetricaPeso === metrica;
+                      return (
+                        <button
+                          key={metrica}
+                          type="button"
+                          className={`market-metric-chip ${
+                            isSelected ? "market-metric-chip--active" : ""
+                          }`}
+                          onClick={() => {
+                            if (draftMetricaPeso !== metrica) {
+                              setDraftMetricaPeso(metrica);
+                              setDraftPesoMin("");
+                              setDraftPesoMax("");
+                            }
+                          }}
+                          aria-pressed={isSelected}
+                        >
+                          {filtroCategoria === "TODOS" && metrica === "PESO_TOTAL_TON"
+                            ? "Peso Total da Carga (ton)"
+                            : cfg.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  <div className="market-range-inputs">
+                    <div className="market-input-wrapper">
+                      <input
+                        type="number"
+                        min="0"
+                        step={METRICAS_CONFIG[draftMetricaPeso].step || "1"}
+                        className={`market-number-input ${
+                          pesoInvalido || pesoNegativo ? "market-number-input--error" : ""
+                        }`}
+                        placeholder={`Mínimo (${METRICAS_CONFIG[draftMetricaPeso].minPlaceholder})`}
+                        value={draftPesoMin}
+                        onChange={(e) => setDraftPesoMin(e.target.value)}
+                        aria-label={`Valor mínimo em ${METRICAS_CONFIG[draftMetricaPeso].label}`}
+                      />
+                      <span className="market-input-suffix">
+                        {METRICAS_CONFIG[draftMetricaPeso].shortUnit}
+                      </span>
+                    </div>
+                    <span className="market-range-sep">até</span>
+                    <div className="market-input-wrapper">
+                      <input
+                        type="number"
+                        min="0"
+                        step={METRICAS_CONFIG[draftMetricaPeso].step || "1"}
+                        className={`market-number-input ${
+                          pesoInvalido || pesoNegativo ? "market-number-input--error" : ""
+                        }`}
+                        placeholder={`Máximo (${METRICAS_CONFIG[draftMetricaPeso].maxPlaceholder})`}
+                        value={draftPesoMax}
+                        onChange={(e) => setDraftPesoMax(e.target.value)}
+                        aria-label={`Valor máximo em ${METRICAS_CONFIG[draftMetricaPeso].label}`}
+                      />
+                      <span className="market-input-suffix">
+                        {METRICAS_CONFIG[draftMetricaPeso].shortUnit}
+                      </span>
+                    </div>
+                  </div>
+                  {pesoInvalido && (
+                    <p className="market-filter-error" role="alert">
+                      <Icon name="alert" />
+                      <span>O valor mínimo não pode ser maior que o máximo.</span>
+                    </p>
+                  )}
+                  {pesoNegativo && (
+                    <p className="market-filter-error" role="alert">
+                      <Icon name="alert" />
+                      <span>Os valores de peso/volume não podem ser negativos.</span>
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              {/* Rodapé de Ações do Painel */}
+              <div className="market-filter-panel__footer">
+                <button
+                  type="button"
+                  className="button button--ghost"
+                  onClick={handleResetDrafts}
+                >
+                  Limpar campos
+                </button>
+                <div className="market-filter-panel__footer-actions">
+                  <button
+                    type="button"
+                    className="button button--outline"
+                    onClick={() => setIsFilterPanelOpen(false)}
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    className="button button--primary"
+                    disabled={temErroValidacao}
+                  >
+                    Aplicar Filtros
+                  </button>
+                </div>
+              </div>
+            </form>
+          )}
+
+          {/* Tags de Filtros Ativos e "Limpar todos" (US-023) */}
+          {temFiltroAtivo && (
+            <div className="market-active-filters" aria-label="Filtros aplicados">
+              <span className="market-active-filters__label">Filtros ativos:</span>
+              <div className="market-active-filters__list">
+                {/* Tag de Busca */}
+                {temBuscaAtiva && (
+                  <span className="market-filter-pill">
+                    <span className="market-filter-pill__icon">🔍</span>
+                    <span>&ldquo;{debouncedTerm.trim()}&rdquo;</span>
+                    <button
+                      type="button"
+                      className="market-filter-pill__btn"
+                      onClick={handleClearSearch}
+                      title="Remover filtro de busca"
+                      aria-label="Remover filtro de busca"
+                    >
+                      <Icon name="close" />
+                    </button>
+                  </span>
+                )}
+
+                {/* Tag de Categoria */}
+                {temCategoriaAtiva && (
+                  <span className="market-filter-pill">
+                    <span className="market-filter-pill__icon">
+                      {filtroCategoria === "ANIMAL" ? "🐂" : "🌾"}
+                    </span>
+                    <span>Categoria: {labelCategoriaAtiva}</span>
+                    <button
+                      type="button"
+                      className="market-filter-pill__btn"
+                      onClick={handleClearCategory}
+                      title="Remover filtro de categoria"
+                      aria-label="Remover filtro de categoria"
+                    >
+                      <Icon name="close" />
+                    </button>
+                  </span>
+                )}
+
+                {/* Tag de Preço */}
+                {temPrecoAtivo && (
+                  <span className="market-filter-pill">
+                    <span className="market-filter-pill__icon">💰</span>
+                    <span>{textoTagPreco}</span>
+                    <button
+                      type="button"
+                      className="market-filter-pill__btn"
+                      onClick={handleClearPriceFilter}
+                      title="Remover filtro de preço"
+                      aria-label="Remover filtro de preço"
+                    >
+                      <Icon name="close" />
+                    </button>
+                  </span>
+                )}
+
+                {/* Tag de Peso / Volume */}
+                {temPesoAtivo && (
+                  <span className="market-filter-pill">
+                    <span className="market-filter-pill__icon">{iconeTagPeso}</span>
+                    <span>{textoTagPeso}</span>
+                    <button
+                      type="button"
+                      className="market-filter-pill__btn"
+                      onClick={handleClearWeightFilter}
+                      title="Remover filtro de peso ou volume"
+                      aria-label="Remover filtro de peso ou volume"
+                    >
+                      <Icon name="close" />
+                    </button>
+                  </span>
+                )}
+
+                {/* Botão Discreto Limpar Todos */}
+                <button
+                  type="button"
+                  className="market-clear-all-btn"
+                  onClick={handleClearAllFilters}
+                  title="Limpar todos os filtros e ver catálogo completo"
+                >
+                  • Limpar todos
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Listagem dos Lotes */}
@@ -462,7 +1146,8 @@ export function MarketPage() {
                 {filtroCategoria !== "TODOS"
                   ? ` na categoria ${labelCategoriaAtiva}`
                   : ""}
-                . Tente palavras-chave mais genéricas, revise a ortografia ou limpe a busca.
+                {temPrecoAtivo || temPesoAtivo ? " com os filtros de preço e peso atuais" : ""}.
+                Tente palavras-chave mais genéricas, revise a ortografia ou limpe a busca.
               </p>
               <div className="market-empty-box__actions">
                 <button
@@ -472,15 +1157,43 @@ export function MarketPage() {
                 >
                   Limpar busca e ver ofertas
                 </button>
-                {filtroCategoria !== "TODOS" && (
+                {temFiltroAtivo && (
                   <button
                     type="button"
                     className="button button--outline button--large"
-                    onClick={handleClearCategory}
+                    onClick={handleClearAllFilters}
                   >
-                    Ver todas as categorias
+                    Limpar todos os filtros
                   </button>
                 )}
+              </div>
+            </div>
+          ) : temPrecoAtivo || temPesoAtivo ? (
+            <div className="market-empty-box market-empty-box--filters" role="status">
+              <div className="market-empty-box__icon-wrapper" aria-hidden="true">
+                <Icon name="sliders" />
+              </div>
+              <h2>Nenhum lote encontrado com os filtros aplicados</h2>
+              <p>
+                Não há ofertas que atendam aos limites de valores e volumes estipulados
+                {filtroCategoria !== "TODOS" ? ` em ${labelCategoriaAtiva}` : ""}.
+                Amplie a faixa informada ou limpe os filtros para visualizar as ofertas disponíveis.
+              </p>
+              <div className="market-empty-box__actions">
+                <button
+                  type="button"
+                  className="button button--primary button--large"
+                  onClick={handleClearNumericFilters}
+                >
+                  Limpar filtros de preço e peso
+                </button>
+                <button
+                  type="button"
+                  className="button button--outline button--large"
+                  onClick={handleClearAllFilters}
+                >
+                  Ver todo o mercado
+                </button>
               </div>
             </div>
           ) : filtroCategoria !== "TODOS" ? (

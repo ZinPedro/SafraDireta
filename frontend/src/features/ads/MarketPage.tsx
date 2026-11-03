@@ -93,6 +93,12 @@ function normalizarMetrica(
   return obterMetricaPadrao(categoria);
 }
 
+export type CriterioOrdenacao =
+  | "recentes"
+  | "menor_preco"
+  | "maior_preco"
+  | "maior_peso";
+
 export function MarketPage() {
   const { session } = useAuth();
   const navigate = useNavigate();
@@ -142,6 +148,15 @@ export function MarketPage() {
     pesoMaxParam !== null && pesoMaxParam.trim() !== "" && !isNaN(Number(pesoMaxParam))
       ? Number(pesoMaxParam)
       : null;
+
+  // Deriva parâmetro de ordenação da URL (Single Source of Truth)
+  const paramOrdenacao = searchParams.get("ordenacao");
+  const ordenacaoAtiva: CriterioOrdenacao =
+    paramOrdenacao === "menor_preco" ||
+    paramOrdenacao === "maior_preco" ||
+    paramOrdenacao === "maior_peso"
+      ? paramOrdenacao
+      : "recentes";
 
   // Estados locais do formulário de rascunho do painel colapsável
   const [isFilterPanelOpen, setIsFilterPanelOpen] = useState(false);
@@ -241,6 +256,21 @@ export function MarketPage() {
       { replace: true }
     );
     searchInputRef.current?.focus();
+  };
+
+  const handleSelectOrdenacao = (novaOrdem: string) => {
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        if (novaOrdem === "recentes" || !novaOrdem) {
+          next.delete("ordenacao");
+        } else {
+          next.set("ordenacao", novaOrdem);
+        }
+        return next;
+      },
+      { replace: true }
+    );
   };
 
   const handleToggleFilterPanel = () => {
@@ -392,7 +422,16 @@ export function MarketPage() {
     setDraftPesoMin("");
     setDraftPesoMax("");
     setIsFilterPanelOpen(false);
-    setSearchParams(new URLSearchParams(), { replace: true });
+
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams();
+        const ordem = prev.get("ordenacao");
+        if (ordem) next.set("ordenacao", ordem);
+        return next;
+      },
+      { replace: true }
+    );
     searchInputRef.current?.focus();
   };
 
@@ -569,6 +608,38 @@ export function MarketPage() {
     return passaCategoria && passaBusca && passaPreco && passaPesoVolume;
   });
 
+  const obterPesoTotalToneladas = (anuncio: MarketplaceAd): number => {
+    if (anuncio.categoria === "GRAOS") {
+      return (
+        anuncio.pesoTotalToneladas ??
+        (anuncio.pesoTotalKg ? anuncio.pesoTotalKg / 1000 : 0)
+      );
+    }
+    const totalKg =
+      anuncio.pesoTotalKg ??
+      (anuncio.quantidadeCabecas * (anuncio.pesoMedioKg ?? 0));
+    return totalKg ? totalKg / 1000 : 0;
+  };
+
+  const anunciosOrdenados = [...anunciosFiltrados].sort((a, b) => {
+    if (ordenacaoAtiva === "menor_preco") {
+      const diff = a.precoTotal - b.precoTotal;
+      if (diff !== 0) return diff;
+    } else if (ordenacaoAtiva === "maior_preco") {
+      const diff = b.precoTotal - a.precoTotal;
+      if (diff !== 0) return diff;
+    } else if (ordenacaoAtiva === "maior_peso") {
+      const diff = obterPesoTotalToneladas(b) - obterPesoTotalToneladas(a);
+      if (diff !== 0) return diff;
+    }
+
+    // Desempate estável ou critério padrão ("recentes"): mais recente primeiro
+    const dateDiff =
+      new Date(b.criadoEm).getTime() - new Date(a.criadoEm).getTime();
+    if (dateDiff !== 0) return dateDiff;
+    return b.id.localeCompare(a.id);
+  });
+
   // Estados e textos para tags de filtros ativos
   const temBuscaAtiva = Boolean(debouncedTerm.trim());
   const temCategoriaAtiva = filtroCategoria !== "TODOS" || filtroCultura !== "TODAS";
@@ -719,37 +790,57 @@ export function MarketPage() {
               </button>
             </div>
 
-            {/* Linha de Utilidades: Contagem de Ofertas e Botão de Filtros de Preço e Peso */}
+            {/* Linha de Utilidades: Contagem de Ofertas, Ordenação e Filtros */}
             <div className="market-utility-bar">
               <span className="market-count-text">
-                Exibindo <strong>{anunciosFiltrados.length}</strong>{" "}
-                {anunciosFiltrados.length === 1 ? "oferta" : "ofertas"}
+                Exibindo <strong>{anunciosOrdenados.length}</strong>{" "}
+                {anunciosOrdenados.length === 1 ? "oferta" : "ofertas"}
               </span>
 
-              <button
-                type="button"
-                className={`market-filter-btn-trigger ${
-                  isFilterPanelOpen ? "market-filter-btn-trigger--open" : ""
-                } ${activeNumericFilterCount > 0 ? "market-filter-btn-trigger--active" : ""}`}
-                onClick={handleToggleFilterPanel}
-                aria-expanded={isFilterPanelOpen}
-                aria-controls="market-filter-panel"
-                title="Filtros avançados de preço e volume"
-              >
-                <Icon name="sliders" className="market-filter-btn-icon" />
-                <span>Filtros de Preço e Peso</span>
-                {activeNumericFilterCount > 0 && (
-                  <span className="market-filter-badge" title={`${activeNumericFilterCount} filtros ativos`}>
-                    {activeNumericFilterCount}
-                  </span>
-                )}
-                <Icon
-                  name="chevron"
-                  className={`market-filter-btn-chevron ${
-                    isFilterPanelOpen ? "market-filter-btn-chevron--rotated" : ""
-                  }`}
-                />
-              </button>
+              <div className="market-utility-actions">
+                <div className="market-sort">
+                  <label htmlFor="market-sort-select" className="market-sort__label">
+                    Ordenar:
+                  </label>
+                  <select
+                    id="market-sort-select"
+                    className="market-sort__select"
+                    value={ordenacaoAtiva}
+                    onChange={(e) => handleSelectOrdenacao(e.target.value)}
+                    aria-label="Critério de ordenação dos anúncios"
+                  >
+                    <option value="recentes">Mais recentes</option>
+                    <option value="menor_preco">Menor preço total</option>
+                    <option value="maior_preco">Maior preço total</option>
+                    <option value="maior_peso">Maior peso / volume</option>
+                  </select>
+                </div>
+
+                <button
+                  type="button"
+                  className={`market-filter-btn-trigger ${
+                    isFilterPanelOpen ? "market-filter-btn-trigger--open" : ""
+                  } ${activeNumericFilterCount > 0 ? "market-filter-btn-trigger--active" : ""}`}
+                  onClick={handleToggleFilterPanel}
+                  aria-expanded={isFilterPanelOpen}
+                  aria-controls="market-filter-panel"
+                  title="Filtros avançados de preço e volume"
+                >
+                  <Icon name="sliders" className="market-filter-btn-icon" />
+                  <span>Filtros de Preço e Peso</span>
+                  {activeNumericFilterCount > 0 && (
+                    <span className="market-filter-badge" title={`${activeNumericFilterCount} filtros ativos`}>
+                      {activeNumericFilterCount}
+                    </span>
+                  )}
+                  <Icon
+                    name="chevron"
+                    className={`market-filter-btn-chevron ${
+                      isFilterPanelOpen ? "market-filter-btn-chevron--rotated" : ""
+                    }`}
+                  />
+                </button>
+              </div>
             </div>
           </div>
 
@@ -1134,7 +1225,7 @@ export function MarketPage() {
             <Icon name="clock" className="ad-loading-spinner" />
             <p>Carregando ofertas do mercado...</p>
           </div>
-        ) : anunciosFiltrados.length === 0 ? (
+        ) : anunciosOrdenados.length === 0 ? (
           debouncedTerm.trim() ? (
             <div className="market-empty-box market-empty-box--search" role="status">
               <div className="market-empty-box__icon-wrapper" aria-hidden="true">
@@ -1236,7 +1327,7 @@ export function MarketPage() {
           )
         ) : (
           <div className="market-grid">
-            {anunciosFiltrados.map((anuncio) => {
+            {anunciosOrdenados.map((anuncio) => {
               const [tag1, tag2] = obterTagsAnuncio(anuncio);
               return (
                 <article

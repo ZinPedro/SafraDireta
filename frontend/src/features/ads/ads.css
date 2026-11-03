@@ -6040,6 +6040,56 @@
   color: #059669;
 }
 
+/* ==========================================================================
+   US-024 — Ordenar Resultados (Seletor de Ordenação)
+   ========================================================================== */
+.market-utility-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.market-sort {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.market-sort__label {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--color-text-muted, #556b55);
+  white-space: nowrap;
+}
+
+.market-sort__select {
+  padding: 0.4375rem 2rem 0.4375rem 0.75rem;
+  background-color: #ffffff;
+  border: 1px solid var(--color-border, #d6ccbe);
+  border-radius: 20px;
+  color: var(--color-text, #1a2e1a);
+  font-size: 0.84rem;
+  font-weight: 600;
+  cursor: pointer;
+  outline: none;
+  transition: all 0.2s ease;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23556b55' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.65rem center;
+}
+
+.market-sort__select:hover {
+  background-color: var(--color-cream-100, #f8f6f0);
+  border-color: #b5a999;
+}
+
+.market-sort__select:focus {
+  border-color: var(--color-primary, #1e5631);
+  box-shadow: 0 0 0 3px rgba(30, 86, 49, 0.12);
+}
+
 
 
 

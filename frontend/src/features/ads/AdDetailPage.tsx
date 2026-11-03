@@ -41,6 +41,10 @@ import type { PublicProducerProfile } from "./adsStorage";
 import { ViewAdDocumentModal } from "./ViewAdDocumentModal";
 import { RequestAdAccessModal } from "./RequestAdAccessModal";
 import { CloseAdModal } from "./CloseAdModal";
+import {
+  alternarFavoritoStorage,
+  verificarIsFavorito,
+} from "./favoritesStorage";
 import "./ads.css";
 
 interface AdDetailPageProps {
@@ -74,6 +78,54 @@ export function AdDetailPage({ onOpenDialog }: AdDetailPageProps) {
   const [sellerRequests, setSellerRequests] = useState<AdDocumentAccessRequest[]>([]);
   const [isProcessingRequest, setIsProcessingRequest] = useState(false);
   const [docFeedbackToast, setDocFeedbackToast] = useState<string | null>(null);
+
+  // Estado de Favoritos (US-025)
+  const [isFavorito, setIsFavorito] = useState(() =>
+    session?.conta?.id && id ? verificarIsFavorito(session.conta.id, id) : false
+  );
+  const [prevFavKey, setPrevFavKey] = useState(() => `${session?.conta?.id}_${id}`);
+  const currentFavKey = `${session?.conta?.id}_${id}`;
+  if (currentFavKey !== prevFavKey) {
+    setPrevFavKey(currentFavKey);
+    setIsFavorito(session?.conta?.id && id ? verificarIsFavorito(session.conta.id, id) : false);
+  }
+
+  useEffect(() => {
+    if (!session?.conta?.id || !id) return;
+    const pendingId = sessionStorage.getItem("safra_pending_favorite");
+    if (pendingId) {
+      sessionStorage.removeItem("safra_pending_favorite");
+      alternarFavoritoStorage(session.conta.id, pendingId);
+      setIsFavorito(true);
+      window.dispatchEvent(new CustomEvent("safra:favorites-updated"));
+    }
+  }, [session, id]);
+
+  useEffect(() => {
+    const handleUpdate = () => {
+      if (session?.conta?.id && id) {
+        setIsFavorito(verificarIsFavorito(session.conta.id, id));
+      }
+    };
+    window.addEventListener("safra:favorites-updated", handleUpdate);
+    return () => window.removeEventListener("safra:favorites-updated", handleUpdate);
+  }, [session, id]);
+
+  const handleToggleFavorito = () => {
+    if (!id) return;
+    if (!session?.conta?.id) {
+      sessionStorage.setItem("safra_pending_favorite", id);
+      onOpenDialog?.("login");
+      return;
+    }
+    const novoEstado = alternarFavoritoStorage(session.conta.id, id);
+    setIsFavorito(novoEstado);
+    setActiveToast(
+      novoEstado
+        ? "Lote salvo nos seus favoritos!"
+        : "Lote removido dos seus favoritos."
+    );
+  };
 
   const fotos = anuncio?.fotos && anuncio.fotos.length > 0 ? anuncio.fotos : [anuncio?.imagemUrl || ""];
 
@@ -1408,6 +1460,17 @@ export function AdDetailPage({ onOpenDialog }: AdDetailPageProps) {
                     {anuncio.status === "VENDIDO" ? "comercializado" : "retirado"}
                     ) e não aceita novos contatos comerciais.
                   </p>
+                  <button
+                    type="button"
+                    className={`ad-detail-fav-btn ${isFavorito ? "ad-detail-fav-btn--active" : ""}`}
+                    onClick={handleToggleFavorito}
+                    title={isFavorito ? "Remover dos favoritos" : "Salvar nos favoritos"}
+                    aria-pressed={isFavorito}
+                    style={{ marginBottom: "0.75rem" }}
+                  >
+                    <Icon name="star" />
+                    <span>{isFavorito ? "Lote Salvo nos Favoritos" : "Salvar nos Favoritos"}</span>
+                  </button>
                   <Link to={routes.market} className="button button--primary button--full">
                     Explorar outros lotes no Mercado
                   </Link>
@@ -1438,6 +1501,17 @@ export function AdDetailPage({ onOpenDialog }: AdDetailPageProps) {
                       Tenho Interesse neste Lote
                     </button>
                   )}
+                  {/* Botão de Favoritar Lote (US-025) */}
+                  <button
+                    type="button"
+                    className={`ad-detail-fav-btn ${isFavorito ? "ad-detail-fav-btn--active" : ""}`}
+                    onClick={handleToggleFavorito}
+                    title={isFavorito ? "Remover dos favoritos" : "Salvar nos favoritos"}
+                    aria-pressed={isFavorito}
+                  >
+                    <Icon name="star" />
+                    <span>{isFavorito ? "Lote Salvo nos Favoritos" : "Salvar nos Favoritos"}</span>
+                  </button>
                   {producerProfile?.publicPhone && (
                     <a
                       href={`tel:${phoneDigits(producerProfile.publicPhone)}`}

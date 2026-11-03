@@ -3170,12 +3170,12 @@
 }
 
 /* ==========================================================================
-   US-012: Selo de Vídeo nos Cards do Mercado
+   US-012: Selo de Vídeo nos Cards do Mercado (Inferior Esquerdo)
    ========================================================================== */
 .market-card__video-badge {
   position: absolute;
-  top: 12px;
-  right: 12px;
+  bottom: 12px;
+  left: 12px;
   background: rgba(18, 38, 22, 0.85);
   color: #ffffff;
   backdrop-filter: blur(4px);
@@ -6089,6 +6089,370 @@
   border-color: var(--color-primary, #1e5631);
   box-shadow: 0 0 0 3px rgba(30, 86, 49, 0.12);
 }
+
+/* ==========================================================================
+   US-025 — Favoritar Anúncio (Botão de Estrela Dourada e Tela de Favoritos)
+   ========================================================================== */
+
+/* Botão Flutuante de Favorito no Card */
+.market-card__fav-btn {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.88);
+  backdrop-filter: blur(4px);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: #64748b;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  z-index: 5;
+}
+
+.market-card__fav-btn:hover {
+  background: #ffffff;
+  color: #d97706;
+  transform: scale(1.08);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
+}
+
+.market-card__fav-btn .icon {
+  width: 18px;
+  height: 18px;
+  transition: all 0.2s ease;
+}
+
+/* Estado Ativo: Estrela Dourada Preenchida */
+.market-card__fav-btn--active {
+  color: #f59e0b !important;
+  background: #ffffff !important;
+  border-color: #fde68a !important;
+}
+
+.market-card__fav-btn--active .icon,
+.market-card__fav-btn--active .icon path {
+  fill: #f59e0b !important;
+  stroke: #d97706 !important;
+}
+
+/* Botão de Favoritar na Ficha de Detalhe */
+.ad-detail-fav-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.75rem 1rem;
+  margin: 0;
+  min-height: 2.75rem;
+  box-sizing: border-box;
+  border-radius: 0.5rem;
+  border: 1px solid var(--color-border, #d1d5db);
+  background: #ffffff;
+  color: var(--color-text-secondary, #4b5563);
+  font-size: 0.9375rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.ad-detail-fav-btn:hover {
+  background: #fefce8;
+  border-color: #fde047;
+  color: #d97706;
+}
+
+.ad-detail-fav-btn .icon {
+  width: 18px;
+  height: 18px;
+  color: inherit;
+  transition: all 0.2s ease;
+}
+
+.ad-detail-fav-btn--active {
+  background: #fffbeb;
+  border-color: #fde68a;
+  color: #b45309;
+}
+
+.ad-detail-fav-btn--active .icon,
+.ad-detail-fav-btn--active .icon path {
+  color: #f59e0b;
+  fill: #f59e0b !important;
+  stroke: #d97706 !important;
+}
+
+/* Card Encerrado em Favoritos */
+.market-card--closed {
+  opacity: 0.65;
+  filter: grayscale(20%);
+  cursor: default !important;
+}
+
+.market-card--closed:hover {
+  transform: none !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06) !important;
+}
+
+.market-card__btn-view--disabled {
+  background: #e2e8f0 !important;
+  color: #64748b !important;
+  cursor: default !important;
+  border-color: #cbd5e1 !important;
+}
+
+/* Badge de Status de Encerramento no Card de Favoritos */
+.market-card__closed-badge {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  z-index: 4;
+}
+
+.market-card__closed-badge--sold {
+  background: #047857;
+  color: #ffffff;
+}
+
+.market-card__closed-badge--paused {
+  background: #d97706;
+  color: #ffffff;
+}
+
+/* Estilos da Tela de Favoritos */
+.favorites-page {
+  padding: 2.5rem 0 4rem;
+}
+
+.favorites-header {
+  margin-bottom: 2rem;
+}
+
+.favorites-back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--color-primary, #1e5631);
+  text-decoration: none;
+  margin-bottom: 0.75rem;
+  transition: opacity 0.2s ease;
+}
+
+.favorites-back-link:hover {
+  text-decoration: underline;
+  opacity: 0.85;
+}
+
+.favorites-title-row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.favorites-title {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 1.85rem;
+  font-weight: 700;
+  color: var(--color-primary-dark, #164225);
+  margin: 0.25rem 0 0.25rem;
+}
+
+.favorites-title .icon {
+  color: #f59e0b;
+  fill: #f59e0b;
+  width: 28px;
+  height: 28px;
+}
+
+.favorites-count-badge {
+  background: #fef3c7;
+  color: #92400e;
+  font-size: 0.82rem;
+  font-weight: 700;
+  padding: 0.25rem 0.75rem;
+  border-radius: 999px;
+  border: 1px solid #fde68a;
+}
+
+.favorites-subtitle {
+  font-size: 0.95rem;
+  color: var(--color-text-secondary, #475569);
+  margin: 0.25rem 0 1rem;
+}
+
+/* Abas de Filtragem */
+.favorites-tabs {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 2rem;
+  flex-wrap: wrap;
+}
+
+.favorites-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.5rem 1rem;
+  border-radius: 999px;
+  background: #ffffff;
+  border: 1px solid #d1d5db;
+  color: #475569;
+  font-size: 0.88rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.favorites-tab:hover {
+  background: #f8fafc;
+  border-color: #94a3b8;
+}
+
+.favorites-tab--active {
+  background: var(--color-primary, #1e5631) !important;
+  border-color: var(--color-primary, #1e5631) !important;
+  color: #ffffff !important;
+}
+
+.favorites-tab__counter {
+  background: rgba(0, 0, 0, 0.08);
+  font-size: 0.75rem;
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+}
+
+.favorites-tab--active .favorites-tab__counter {
+  background: rgba(255, 255, 255, 0.25);
+  color: #ffffff;
+}
+
+/* Empty State e Login Card */
+.favorites-empty-card,
+.favorites-login-card {
+  text-align: center;
+  padding: 3.5rem 2rem;
+  background: #ffffff;
+  border-radius: 1rem;
+  border: 1px solid var(--color-border, #e2e8f0);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04);
+  max-width: 580px;
+  margin: 2rem auto;
+}
+
+.favorites-empty-icon,
+.favorites-login-icon {
+  width: 64px;
+  height: 64px;
+  margin: 0 auto 1.25rem;
+  border-radius: 50%;
+  background: #fef3c7;
+  color: #d97706;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.favorites-empty-icon .icon,
+.favorites-login-icon .icon {
+  width: 32px;
+  height: 32px;
+  fill: #f59e0b;
+}
+
+.favorites-empty-card h3,
+.favorites-login-card h2 {
+  font-size: 1.35rem;
+  color: #1e293b;
+  margin-bottom: 0.75rem;
+}
+
+.favorites-empty-card p,
+.favorites-login-card p {
+  font-size: 0.95rem;
+  color: #64748b;
+  line-height: 1.6;
+  margin-bottom: 1.75rem;
+}
+
+.favorites-login-actions {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+/* Toast de Notificação */
+.favorites-toast {
+  position: fixed;
+  bottom: 2rem;
+  right: 2rem;
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  background: #1e293b;
+  color: #ffffff;
+  padding: 0.85rem 1.25rem;
+  border-radius: 0.5rem;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+  z-index: 1000;
+  animation: slideUpToast 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  font-size: 0.9rem;
+}
+
+.favorites-toast .icon {
+  width: 18px;
+  height: 18px;
+  color: #10b981;
+}
+
+.favorites-toast__close {
+  background: none;
+  border: none;
+  color: #94a3b8;
+  font-size: 1.2rem;
+  cursor: pointer;
+  padding: 0 0.25rem;
+  margin-left: 0.5rem;
+}
+
+.favorites-toast__close:hover {
+  color: #ffffff;
+}
+
+@keyframes slideUpToast {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.favorites-loading {
+  text-align: center;
+  padding: 4rem 1rem;
+  color: #64748b;
+}
+
 
 
 

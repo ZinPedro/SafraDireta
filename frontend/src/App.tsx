@@ -13,6 +13,7 @@ import { LegalDialog } from "./components/LegalDialog";
 import { HomePage } from "./pages/HomePage";
 import { DevelopmentPage } from "./pages/DevelopmentPage";
 import { MarketPage } from "./features/ads/MarketPage";
+import { FavoritesPage } from "./features/ads/FavoritesPage";
 import { AnimalAdCreatePage } from "./features/ads/AnimalAdCreatePage";
 import { MyAdsPage } from "./features/ads/MyAdsPage";
 import { AdDetailPage } from "./features/ads/AdDetailPage";
@@ -29,6 +30,7 @@ const pageTitles: Record<string, string> = {
   [routes.corporateRegistration]: "Cadastro Corporativo | SafraDireta",
   [routes.sellerUpgrade]: "Habilitar vendedor | SafraDireta",
   [routes.profile]: "Meu perfil | SafraDireta",
+  [routes.favorites]: "Meus Favoritos | SafraDireta",
   [routes.home]: "SafraDireta — Do campo à negociação",
   [routes.market]: "Mercado Agropecuário | SafraDireta",
   [routes.myAds]: "Meus Anúncios | SafraDireta",
@@ -101,7 +103,8 @@ function Site() {
             path={routes.home}
             element={<HomePage onOpenDialog={openFeature} />}
           />
-          <Route path={routes.market} element={<MarketPage />} />
+          <Route path={routes.market} element={<MarketPage onOpenDialog={openFeature} />} />
+          <Route path={routes.favorites} element={<FavoritesPage onOpenDialog={openFeature} />} />
           <Route path={routes.createAd} element={<AnimalAdCreatePage onOpenDialog={openFeature} />} />
           <Route path={routes.myAds} element={<MyAdsPage onOpenDialog={openFeature} />} />
           <Route path={routes.adEdit} element={<AdEditPage onOpenDialog={openFeature} />} />

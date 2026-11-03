@@ -5,11 +5,21 @@ import { routes } from "../data/site";
 import { useAuth } from "../context/authContext";
 import { Avatar } from "./Avatar";
 import { Icon } from "./Icon";
+import { obterFavoritosIds } from "../features/ads/favoritesStorage";
 import "./UserMenu.css";
 
 export function UserMenu({ onNavigate }: { onNavigate?: () => void }) {
   const { session, signOut } = useAuth();
   const [open, setOpen] = useState(false);
+  const [favCount, setFavCount] = useState(() =>
+    session?.conta?.id ? obterFavoritosIds(session.conta.id).length : 0
+  );
+  const [prevUserId, setPrevUserId] = useState(session?.conta?.id);
+  if (session?.conta?.id !== prevUserId) {
+    setPrevUserId(session?.conta?.id);
+    setFavCount(session?.conta?.id ? obterFavoritosIds(session.conta.id).length : 0);
+  }
+
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuId = useId();
@@ -23,6 +33,16 @@ export function UserMenu({ onNavigate }: { onNavigate?: () => void }) {
     document.addEventListener("pointerdown", handlePointer);
     return () => document.removeEventListener("pointerdown", handlePointer);
   }, [open]);
+
+  useEffect(() => {
+    const handleUpdate = () => {
+      if (session?.conta?.id) {
+        setFavCount(obterFavoritosIds(session.conta.id).length);
+      }
+    };
+    window.addEventListener("safra:favorites-updated", handleUpdate);
+    return () => window.removeEventListener("safra:favorites-updated", handleUpdate);
+  }, [session]);
 
   if (!session) return null;
   const { conta, vendedorEstado, avatarUrl } = session;
@@ -80,6 +100,10 @@ export function UserMenu({ onNavigate }: { onNavigate?: () => void }) {
             </div>
           </div>
           <Link role="menuitem" to={routes.profile} onClick={() => close()}><Icon name="user" /> Meu perfil</Link>
+          <Link role="menuitem" to={routes.favorites} onClick={() => close()}>
+            <Icon name="star" /> Meus favoritos
+            {favCount > 0 && <span className="user-menu__badge">{favCount}</span>}
+          </Link>
           {isSeller && (
             <>
               <Link role="menuitem" to={routes.myAds} onClick={() => close()}><Icon name="box" /> Meus anúncios</Link>

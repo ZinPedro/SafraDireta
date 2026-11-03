@@ -2,10 +2,15 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../../context/authContext";
 import { routes } from "../../data/site";
+import type { OpenDevelopmentDialog } from "../../data/site";
 import { Icon } from "../../components/Icon";
 import { GRAIN_PACKAGING_LABELS, obterFotoCapa, obterTagsAnuncio } from "./ads.types";
 import type { GrainCrop, MarketplaceAd } from "./ads.types";
 import { correspondeBuscaAnuncio, listarAnunciosMercado } from "./adsStorage";
+import {
+  alternarFavoritoStorage,
+  obterFavoritosIds,
+} from "./favoritesStorage";
 import "./ads.css";
 
 export type MetricaPeso =
@@ -99,10 +104,23 @@ export type CriterioOrdenacao =
   | "maior_preco"
   | "maior_peso";
 
-export function MarketPage() {
+export interface MarketPageProps {
+  onOpenDialog?: OpenDevelopmentDialog;
+}
+
+export function MarketPage({ onOpenDialog }: MarketPageProps = {}) {
   const { session } = useAuth();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
+
+  const [favoritosIds, setFavoritosIds] = useState<string[]>(() =>
+    session?.conta?.id ? obterFavoritosIds(session.conta.id) : []
+  );
+  const [prevUserId, setPrevUserId] = useState(session?.conta?.id);
+  if (session?.conta?.id !== prevUserId) {
+    setPrevUserId(session?.conta?.id);
+    setFavoritosIds(session?.conta?.id ? obterFavoritosIds(session.conta.id) : []);
+  }
 
   const urlQuery = searchParams.get("q") || "";
   const [searchTerm, setSearchTerm] = useState(urlQuery);
@@ -222,6 +240,41 @@ export function MarketPage() {
       isMounted = false;
     };
   }, []);
+
+  // Sincroniza favoritos com a sessão ativa e resolve pendência pós-login (US-025)
+  useEffect(() => {
+    if (!session?.conta?.id) return;
+    const pendingId = sessionStorage.getItem("safra_pending_favorite");
+    if (pendingId) {
+      sessionStorage.removeItem("safra_pending_favorite");
+      alternarFavoritoStorage(session.conta.id, pendingId);
+      setFavoritosIds(obterFavoritosIds(session.conta.id));
+      window.dispatchEvent(new CustomEvent("safra:favorites-updated"));
+    }
+  }, [session]);
+
+  useEffect(() => {
+    const handleFavoritesUpdated = () => {
+      if (session?.conta?.id) {
+        setFavoritosIds(obterFavoritosIds(session.conta.id));
+      }
+    };
+    window.addEventListener("safra:favorites-updated", handleFavoritesUpdated);
+    return () => {
+      window.removeEventListener("safra:favorites-updated", handleFavoritesUpdated);
+    };
+  }, [session]);
+
+  const handleToggleFavorito = (e: React.MouseEvent, anuncioId: string) => {
+    e.stopPropagation();
+    if (!session?.conta?.id) {
+      sessionStorage.setItem("safra_pending_favorite", anuncioId);
+      onOpenDialog?.("login");
+      return;
+    }
+    alternarFavoritoStorage(session.conta.id, anuncioId);
+    setFavoritosIds(obterFavoritosIds(session.conta.id));
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -1344,6 +1397,22 @@ export function MarketPage() {
                 >
                   <div className="market-card__thumb">
                     <img src={obterFotoCapa(anuncio)} alt={anuncio.titulo} loading="lazy" />
+                    <button
+                      type="button"
+                      className={`market-card__fav-btn ${
+                        favoritosIds.includes(anuncio.id) ? "market-card__fav-btn--active" : ""
+                      }`}
+                      onClick={(e) => handleToggleFavorito(e, anuncio.id)}
+                      title={
+                        favoritosIds.includes(anuncio.id)
+                          ? "Remover dos favoritos"
+                          : "Salvar nos favoritos"
+                      }
+                      aria-label="Favoritar anúncio"
+                      aria-pressed={favoritosIds.includes(anuncio.id)}
+                    >
+                      <Icon name="star" />
+                    </button>
                     {anuncio.video?.url && (
                       <span className="market-card__video-badge" title="Contém vídeo demonstrativo">
                         <Icon name="play" /> Vídeo

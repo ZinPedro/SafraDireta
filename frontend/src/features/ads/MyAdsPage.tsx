@@ -510,7 +510,10 @@ export function MyAdsPage({ onOpenDialog }: MyAdsPageProps) {
                       </div>
                     )}
 
-                    <div className="my-ad-card__location">
+                    <div
+                      className="my-ad-card__location"
+                      title={`${anuncio.cidade} - ${anuncio.uf}${anuncio.regiaoAproximada ? ` (${anuncio.regiaoAproximada})` : ""}`}
+                    >
                       <Icon name="location" />
                       <span>
                         {anuncio.cidade}, {anuncio.uf}

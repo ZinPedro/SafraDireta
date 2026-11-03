@@ -96,6 +96,7 @@ export interface AnimalLotAd {
   precoPorArroba: number;
   cidade: string;
   uf: string;
+  regiaoAproximada?: string;
   fotos?: string[];
   video?: AdVideoItem;
   documentos?: AdDocumentItem[];
@@ -169,6 +170,7 @@ export interface GrainLotAd {
   precoPorTonelada: number;
   cidade: string;
   uf: string;
+  regiaoAproximada?: string;
   fotos?: string[];
   video?: AdVideoItem;
   documentos?: AdDocumentItem[];
@@ -234,6 +236,7 @@ export interface CreateAnimalAdInput {
   precoPorCabeca?: number;
   cidade: string;
   uf: string;
+  regiaoAproximada?: string;
   fotos?: string[];
   video?: AdVideoItem;
   documentos?: AdDocumentItem[];
@@ -256,6 +259,7 @@ export interface CreateGrainAdInput {
   precoPorSaca?: number;
   cidade: string;
   uf: string;
+  regiaoAproximada?: string;
   fotos?: string[];
   video?: AdVideoItem;
   documentos?: AdDocumentItem[];

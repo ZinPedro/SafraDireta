@@ -1,10 +1,9 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useAuth } from "../../context/authContext";
 import { routes } from "../../data/site";
 import type { OpenDevelopmentDialog } from "../../data/site";
-import { ufs } from "../corporate-registration/corporateRegistration";
 import { AccessRestricted } from "../../components/AccessRestricted";
 import { Icon } from "../../components/Icon";
 import { SellerBlockedView } from "../admin/SellerBlockedView";
@@ -45,6 +44,14 @@ import {
   obterAnuncioPorId,
 } from "./adsStorage";
 import { AdDocumentsSection } from "./AdDocumentsSection";
+import {
+  UFS_BRASIL,
+  obterTodosMunicipiosPorUf,
+  obterPolosDestaque,
+  obterRegioesSugeridas,
+  verificarMunicipioValido,
+} from "./locationAgro";
+import { LocationMapEmbed } from "./LocationMapEmbed";
 import defaultFarmImage from "../../assets/images/farm-landscape.jpeg";
 import harvestSunsetImage from "../../assets/images/harvest-sunset.jpeg";
 import "./ads.css";
@@ -143,6 +150,33 @@ export function AnimalAdCreatePage({ onOpenDialog, mode = "create" }: AnimalAdCr
     }
     return "";
   });
+
+  const [regiaoAproximada, setRegiaoAproximada] = useState("");
+  const [mostrarPreviaMapa, setMostrarPreviaMapa] = useState(false);
+  const [mostrarDropdownCidades, setMostrarDropdownCidades] = useState(false);
+  const [mostrarDropdownRegioes, setMostrarDropdownRegioes] = useState(false);
+
+  // Cidades: se vazio, mostra os Polos em Destaque. Se digitando, busca nos 5.571 municípios da UF!
+  const todasCidadesUf = obterTodosMunicipiosPorUf(uf);
+  const cidadesFiltradas = useMemo(() => {
+    if (!cidade.trim()) {
+      return obterPolosDestaque(uf);
+    }
+    const termo = cidade.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    return todasCidadesUf
+      .filter((c) =>
+        c.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").includes(termo)
+      )
+      .slice(0, 15); // Limita a 15 resultados no menu para manter performance estelar
+  }, [cidade, uf, todasCidadesUf]);
+
+  // Regiões aproximadas da UF
+  const regioesDisponiveis = obterRegioesSugeridas(uf);
+  const regioesFiltradas = useMemo(() => {
+    if (!regiaoAproximada.trim()) return regioesDisponiveis;
+    const termo = regiaoAproximada.toLowerCase().trim();
+    return regioesDisponiveis.filter((r) => r.toLowerCase().includes(termo));
+  }, [regiaoAproximada, regioesDisponiveis]);
 
   // Estados de Mídia (US-012)
   const [fotos, setFotos] = useState<string[]>([]);
@@ -315,6 +349,7 @@ export function AnimalAdCreatePage({ onOpenDialog, mode = "create" }: AnimalAdCr
         setDescricao(ad.descricao || "");
         setCidade(ad.cidade);
         setUf(ad.uf);
+        setRegiaoAproximada(ad.regiaoAproximada || "");
 
         if (ad.fotos && ad.fotos.length > 0) {
           setFotos(ad.fotos);
@@ -479,6 +514,7 @@ export function AnimalAdCreatePage({ onOpenDialog, mode = "create" }: AnimalAdCr
         setDescricao(modelo.descricao || "");
         setCidade(modelo.cidade || "");
         setUf(modelo.uf || "");
+        setRegiaoAproximada(modelo.regiaoAproximada || "");
 
         // Reseta mídias e documentos obrigatoriamente (US-017)
         setFotos([]);
@@ -682,6 +718,8 @@ export function AnimalAdCreatePage({ onOpenDialog, mode = "create" }: AnimalAdCr
         /* ignore */
       }
     }
+    setRegiaoAproximada("");
+    setMostrarPreviaMapa(false);
 
     setCloneFeedback({
       type: "info",
@@ -1099,6 +1137,7 @@ export function AnimalAdCreatePage({ onOpenDialog, mode = "create" }: AnimalAdCr
           precoPorCabeca: pricingMode === "PER_HEAD" ? Number(precoPorCabeca) : valorCabecaFinal,
           cidade: cidade.trim(),
           uf,
+          regiaoAproximada: regiaoAproximada.trim() || undefined,
           fotos: fotos.length > 0 ? fotos : undefined,
           video: videoPayload,
           documentos: documentos.length > 0 ? documentos : undefined,
@@ -1181,6 +1220,7 @@ export function AnimalAdCreatePage({ onOpenDialog, mode = "create" }: AnimalAdCr
             grainPricingMode === "PER_SACK" ? Number(precoPorSaca) : valorSacaFinal,
           cidade: cidade.trim(),
           uf,
+          regiaoAproximada: regiaoAproximada.trim() || undefined,
           fotos: fotos.length > 0 ? fotos : undefined,
           video: videoPayload,
           documentos: documentos.length > 0 ? documentos : undefined,
@@ -3035,37 +3075,8 @@ export function AnimalAdCreatePage({ onOpenDialog, mode = "create" }: AnimalAdCr
               </>
             )}
 
-            {/* Localização */}
+            {/* Localização (US-032) */}
             <div className="ad-form-grid ad-form-grid--2">
-              <div className="form-group">
-                <label htmlFor="ad-cidade" className="form-label">
-                  {modalidade === "ANIMAL"
-                    ? "Município de Retirada"
-                    : "Município de Retirada / Armazém"}{" "}
-                  <span className="required">*</span>
-                </label>
-                <input
-                  id="ad-cidade"
-                  type="text"
-                  className={`form-input ${erros.cidade ? "form-input--error" : ""}`}
-                  placeholder={
-                    modalidade === "ANIMAL"
-                      ? "Ex: Uberaba ou Barretos"
-                      : "Ex: Patrocínio, Rio Verde ou Sorriso"
-                  }
-                  value={cidade}
-                  onChange={(e) => setCidade(e.target.value)}
-                  aria-invalid={Boolean(erros.cidade)}
-                  aria-describedby={erros.cidade ? "ad-cidade-error" : undefined}
-                  required
-                />
-                {erros.cidade && (
-                  <span id="ad-cidade-error" className="form-error">
-                    {erros.cidade}
-                  </span>
-                )}
-              </div>
-
               <div className="form-group">
                 <label htmlFor="ad-uf" className="form-label">
                   Estado (UF) <span className="required">*</span>
@@ -3074,15 +3085,23 @@ export function AnimalAdCreatePage({ onOpenDialog, mode = "create" }: AnimalAdCr
                   id="ad-uf"
                   className={`form-select ${erros.uf ? "form-select--error" : ""}`}
                   value={uf}
-                  onChange={(e) => setUf(e.target.value)}
+                  onChange={(e) => {
+                    const novaUf = e.target.value;
+                    setUf(novaUf);
+                    // Se a cidade atual não for válida na nova UF selecionada, limpa para forçar escolha coerente
+                    if (cidade && !verificarMunicipioValido(cidade, novaUf)) {
+                      setCidade("");
+                      setRegiaoAproximada("");
+                    }
+                  }}
                   aria-invalid={Boolean(erros.uf)}
                   aria-describedby={erros.uf ? "ad-uf-error" : undefined}
                   required
                 >
                   <option value="">Selecione o estado</option>
-                  {ufs.map((estado) => (
-                    <option key={estado} value={estado}>
-                      {estado}
+                  {UFS_BRASIL.map((estado) => (
+                    <option key={estado.sigla} value={estado.sigla}>
+                      {estado.sigla} - {estado.nome}
                     </option>
                   ))}
                 </select>
@@ -3092,7 +3111,192 @@ export function AnimalAdCreatePage({ onOpenDialog, mode = "create" }: AnimalAdCr
                   </span>
                 )}
               </div>
+
+              {/* Município com Autocomplete Interativo */}
+              <div className="form-group ad-autocomplete-container">
+                <label htmlFor="ad-cidade" className="form-label">
+                  {modalidade === "ANIMAL"
+                    ? "Município de Retirada"
+                    : "Município de Retirada / Armazém"}{" "}
+                  <span className="required">*</span>
+                </label>
+                <div className="ad-autocomplete-wrapper">
+                  <input
+                    id="ad-cidade"
+                    type="text"
+                    autoComplete="off"
+                    className={`form-input ${erros.cidade ? "form-input--error" : ""}`}
+                    placeholder={
+                      uf
+                        ? "Clique para ver sugestões ou digite o município"
+                        : "Selecione o estado (UF) primeiro"
+                    }
+                    value={cidade}
+                    onChange={(e) => {
+                      setCidade(e.target.value);
+                      setMostrarDropdownCidades(true);
+                    }}
+                    onFocus={() => {
+                      if (uf) setMostrarDropdownCidades(true);
+                    }}
+                    onBlur={() => {
+                      // Timeout curto para permitir o clique nos itens antes de fechar
+                      setTimeout(() => setMostrarDropdownCidades(false), 200);
+                    }}
+                    disabled={!uf}
+                    required
+                  />
+                  {uf && (
+                    <button
+                      type="button"
+                      tabIndex={-1}
+                      className="ad-autocomplete-toggle"
+                      onClick={() => setMostrarDropdownCidades(!mostrarDropdownCidades)}
+                      title="Ver municípios da UF"
+                    >
+                      ▼
+                    </button>
+                  )}
+                </div>
+
+                {/* Dropdown de Sugestões de Municípios em React */}
+                {mostrarDropdownCidades && uf && cidadesFiltradas.length > 0 && (
+                  <ul className="ad-autocomplete-dropdown" role="listbox">
+                    <li className="ad-autocomplete-header">
+                      {!cidade.trim() ? "Principais Polos e Capitais:" : `Municípios de ${uf} encontrados:`}
+                    </li>
+                    {cidadesFiltradas.map((item) => (
+                      <li
+                        key={item}
+                        className="ad-autocomplete-item"
+                        onMouseDown={() => {
+                          setCidade(item);
+                          setMostrarDropdownCidades(false);
+                        }}
+                      >
+                        <Icon name="location" />
+                        <span>{item}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+
+                {erros.cidade && (
+                  <span id="ad-cidade-error" className="form-error">
+                    {erros.cidade}
+                  </span>
+                )}
+              </div>
             </div>
+
+            {/* Alerta brando caso município não esteja nos polos agropecuários principais */}
+            {cidade.trim().length >= 3 && uf && !verificarMunicipioValido(cidade, uf) && (
+              <div className="ad-location-warning" role="status">
+                <Icon name="alert" />
+                <div>
+                  <strong>Aviso de Localização:</strong> O município &quot;{cidade}&quot; não consta na listagem padrão de polos agropecuários de {uf}. O anúncio poderá ser publicado normalmente, mas certifique-se da grafia correta para facilitar a busca por compradores.
+                </div>
+              </div>
+            )}
+
+            {/* Polo / Região com Autocomplete Interativo */}
+            <div className="form-group ad-autocomplete-container">
+              <label htmlFor="ad-regiao" className="form-label">
+                Polo / Região Agrícola <span className="optional">(Opcional)</span>
+              </label>
+              <div className="ad-autocomplete-wrapper">
+                <input
+                  id="ad-regiao"
+                  type="text"
+                  autoComplete="off"
+                  className="form-input"
+                  placeholder={
+                    uf
+                      ? "Digite ou selecione a macrorregião (ex: Triângulo Mineiro, Médio-Norte)"
+                      : "Selecione a UF para ver sugestões de polos agrícolas"
+                  }
+                  value={regiaoAproximada}
+                  onChange={(e) => {
+                    setRegiaoAproximada(e.target.value);
+                    setMostrarDropdownRegioes(true);
+                  }}
+                  onFocus={() => {
+                    if (uf) setMostrarDropdownRegioes(true);
+                  }}
+                  onBlur={() => {
+                    setTimeout(() => setMostrarDropdownRegioes(false), 200);
+                  }}
+                  disabled={!uf}
+                />
+                {uf && (
+                  <button
+                    type="button"
+                    tabIndex={-1}
+                    className="ad-autocomplete-toggle"
+                    onClick={() => setMostrarDropdownRegioes(!mostrarDropdownRegioes)}
+                    title="Ver polos/regiões sugeridas"
+                  >
+                    ▼
+                  </button>
+                )}
+              </div>
+
+              {/* Dropdown de Sugestões de Regiões em React */}
+              {mostrarDropdownRegioes && uf && regioesFiltradas.length > 0 && (
+                <ul className="ad-autocomplete-dropdown" role="listbox">
+                  {regioesFiltradas.map((item) => (
+                    <li
+                      key={item}
+                      className="ad-autocomplete-item"
+                      onMouseDown={() => {
+                        setRegiaoAproximada(item);
+                        setMostrarDropdownRegioes(false);
+                      }}
+                    >
+                      <Icon name="location" />
+                      <span>{item}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+
+              <span className="form-hint">
+                Ajude compradores a localizarem o lote pela macrorregião produtiva ou polo comercial do estado.
+              </span>
+            </div>
+
+            {/* Nota de Privacidade do Produtor e Logística */}
+            <div className="ad-location-privacy-note">
+              <Icon name="check" />
+              <span>
+                <strong>Privacidade e Logística:</strong> Por segurança patrimonial, apenas o município, estado e polo regional são exibidos publicamente no anúncio. A rota exata e coordenadas da fazenda serão alinhadas diretamente entre as partes no momento do carregamento.
+              </span>
+            </div>
+
+            {/* Pré-visualização do Mapa */}
+            {cidade.trim() && uf && (
+              <div className="ad-location-preview-toggle">
+                <button
+                  type="button"
+                  className="button button--secondary button--small"
+                  onClick={() => setMostrarPreviaMapa(!mostrarPreviaMapa)}
+                >
+                  <Icon name="location" />
+                  {mostrarPreviaMapa ? "Ocultar Prévia do Mapa" : "Pré-visualizar Localização no Mapa"}
+                </button>
+              </div>
+            )}
+
+            {mostrarPreviaMapa && cidade.trim() && uf && (
+              <div className="ad-location-preview-container">
+                <LocationMapEmbed
+                  cidade={cidade.trim()}
+                  uf={uf}
+                  regiaoAproximada={regiaoAproximada.trim() || undefined}
+                  altura={260}
+                />
+              </div>
+            )}
 
             {/* Foto de Capa do Lote */}
             <div className="ad-cover-preview-box">

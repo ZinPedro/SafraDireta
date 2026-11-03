@@ -211,6 +211,7 @@ export function payloadAnimalParaBackend(input: CreateAnimalAdInput) {
     descricao: input.descricao?.trim() || undefined,
     cidade: input.cidade.trim(),
     uf: input.uf.trim().toUpperCase(),
+    ...(input.regiaoAproximada ? { regiaoAproximada: input.regiaoAproximada.trim() } : {}),
     raca: racaBackend,
     ...(racaPersonalizada ? { racaPersonalizada } : {}),
     finalidade: finalidadeBackend,
@@ -278,6 +279,7 @@ export function payloadGraosParaBackend(input: CreateGrainAdInput) {
     descricao: input.descricao?.trim() || undefined,
     cidade: input.cidade.trim(),
     uf: input.uf.trim().toUpperCase(),
+    ...(input.regiaoAproximada ? { regiaoAproximada: input.regiaoAproximada.trim() } : {}),
   };
 }
 
@@ -363,6 +365,7 @@ export function adaptarAnuncioDaApiParaFrontend(
       precoPorArroba,
       cidade: apiAd.cidade || "",
       uf: apiAd.uf || "",
+      regiaoAproximada: apiAd.regiaoAproximada || fallbackLocal?.regiaoAproximada,
       fotos: fotosUrls.length > 0 ? fotosUrls : fallbackLocal?.fotos,
       video: fallbackLocal?.video,
       documentos: fallbackLocal?.documentos,
@@ -423,6 +426,7 @@ export function adaptarAnuncioDaApiParaFrontend(
       precoPorTonelada,
       cidade: apiAd.cidade || "",
       uf: apiAd.uf || "",
+      regiaoAproximada: apiAd.regiaoAproximada || fallbackLocal?.regiaoAproximada,
       fotos: fotosUrls.length > 0 ? fotosUrls : fallbackLocal?.fotos,
       video: fallbackLocal?.video,
       documentos: fallbackLocal?.documentos,

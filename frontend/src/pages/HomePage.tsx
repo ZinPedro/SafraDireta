@@ -156,7 +156,10 @@ export function HomePage({
                       </div>
                       <h3>{anuncio.titulo}</h3>
                       <p className="offer-card__producer">{anuncio.farmName}</p>
-                      <p className="offer-card__location">
+                      <p
+                        className="offer-card__location"
+                        title={`${anuncio.cidade} - ${anuncio.uf}${anuncio.regiaoAproximada ? ` (${anuncio.regiaoAproximada})` : ""}`}
+                      >
                         <Icon name="location" />
                         {anuncio.cidade}, {anuncio.uf}
                       </p>

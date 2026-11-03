@@ -303,7 +303,10 @@ export function FavoritesPage({ onOpenDialog }: FavoritesPageProps) {
                   <h2 className="market-card__title">{anuncio.titulo}</h2>
                   <p className="market-card__farm">{anuncio.farmName}</p>
 
-                  <div className="market-card__location">
+                  <div
+                    className="market-card__location"
+                    title={`${anuncio.cidade} - ${anuncio.uf}${anuncio.regiaoAproximada ? ` (${anuncio.regiaoAproximada})` : ""}`}
+                  >
                     <Icon name="location" />
                     <span>
                       {anuncio.cidade}, {anuncio.uf}

@@ -294,6 +294,7 @@ export function correspondeBuscaAnuncio(anuncio: MarketplaceAd, termoBusca: stri
     anuncio.descricao,
     anuncio.cidade,
     anuncio.uf,
+    anuncio.regiaoAproximada,
     anuncio.farmName,
     anuncio.vendedorNome,
     anuncio.categoria === "ANIMAL" ? anuncio.raca : anuncio.subtipo,
@@ -876,6 +877,7 @@ export async function criarAnuncioAnimal(
     precoPorArroba,
     cidade: input.cidade.trim(),
     uf: input.uf.trim().toUpperCase(),
+    regiaoAproximada: input.regiaoAproximada?.trim() || undefined,
     fotos,
     video: input.video,
     documentos: input.documentos && input.documentos.length > 0 ? input.documentos : undefined,
@@ -1001,6 +1003,7 @@ export async function criarAnuncioGraos(
     precoPorTonelada,
     cidade: input.cidade.trim(),
     uf: input.uf.trim().toUpperCase(),
+    regiaoAproximada: input.regiaoAproximada?.trim() || undefined,
     fotos,
     video: input.video,
     documentos: input.documentos && input.documentos.length > 0 ? input.documentos : undefined,
@@ -1162,6 +1165,10 @@ export async function atualizarAnuncio(
       precoPorArroba,
       cidade: inputAnimal.cidade ? inputAnimal.cidade.trim() : existente.cidade,
       uf: inputAnimal.uf ? inputAnimal.uf.trim().toUpperCase() : existente.uf,
+      regiaoAproximada:
+        inputAnimal.regiaoAproximada !== undefined
+          ? inputAnimal.regiaoAproximada.trim() || undefined
+          : (existente as AnimalLotAd).regiaoAproximada,
       fotos,
       video,
       documentos:
@@ -1240,6 +1247,10 @@ export async function atualizarAnuncio(
       precoPorTonelada,
       cidade: inputGraos.cidade ? inputGraos.cidade.trim() : existente.cidade,
       uf: inputGraos.uf ? inputGraos.uf.trim().toUpperCase() : existente.uf,
+      regiaoAproximada:
+        inputGraos.regiaoAproximada !== undefined
+          ? inputGraos.regiaoAproximada.trim() || undefined
+          : (existente as GrainLotAd).regiaoAproximada,
       fotos,
       video,
       documentos:
@@ -1499,6 +1510,7 @@ export function extrairModeloParaNovoAnuncio(
       descricao: anuncioOriginal.descricao,
       cidade: anuncioOriginal.cidade,
       uf: anuncioOriginal.uf,
+      regiaoAproximada: anuncioOriginal.regiaoAproximada,
       farmName: anuncioOriginal.farmName,
 
       // Dados Zootécnicos (Pecuária) - Mantém raça, espécie e finalidade estruturais
@@ -1542,6 +1554,7 @@ export function extrairModeloParaNovoAnuncio(
     descricao: anuncioOriginal.descricao,
     cidade: anuncioOriginal.cidade,
     uf: anuncioOriginal.uf,
+    regiaoAproximada: anuncioOriginal.regiaoAproximada,
     farmName: anuncioOriginal.farmName,
 
     // Dados Agronômicos (Grãos e Café) - Mantém dados estruturais de lavoura

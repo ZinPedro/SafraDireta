@@ -45,6 +45,7 @@ import {
   alternarFavoritoStorage,
   verificarIsFavorito,
 } from "./favoritesStorage";
+import { LocationMapEmbed } from "./LocationMapEmbed";
 import "./ads.css";
 
 interface AdDetailPageProps {
@@ -96,7 +97,9 @@ export function AdDetailPage({ onOpenDialog }: AdDetailPageProps) {
     if (pendingId) {
       sessionStorage.removeItem("safra_pending_favorite");
       alternarFavoritoStorage(session.conta.id, pendingId);
-      setIsFavorito(true);
+      queueMicrotask(() => {
+        setIsFavorito(true);
+      });
       window.dispatchEvent(new CustomEvent("safra:favorites-updated"));
     }
   }, [session, id]);
@@ -605,8 +608,14 @@ export function AdDetailPage({ onOpenDialog }: AdDetailPageProps) {
                     </span>
                   )}
                 </span>
-                <span className="ad-detail-location">
+                <span
+                  className="ad-detail-location"
+                  title={anuncio.regiaoAproximada ? `Polo regional: ${anuncio.regiaoAproximada}` : undefined}
+                >
                   <Icon name="location" /> {anuncio.cidade}, {anuncio.uf}
+                  {anuncio.regiaoAproximada && (
+                    <span className="ad-detail-location-region"> · {anuncio.regiaoAproximada}</span>
+                  )}
                 </span>
               </div>
               <h1 className="ad-detail-title">{anuncio.titulo}</h1>
@@ -660,6 +669,7 @@ export function AdDetailPage({ onOpenDialog }: AdDetailPageProps) {
                       <span className="ad-spec-label">Local de Retirada / Armazém</span>
                       <strong className="ad-spec-val">
                         {anuncio.cidade} / {anuncio.uf}
+                        {anuncio.regiaoAproximada ? ` (${anuncio.regiaoAproximada})` : ""}
                       </strong>
                     </div>
                   </div>
@@ -842,6 +852,7 @@ export function AdDetailPage({ onOpenDialog }: AdDetailPageProps) {
                     <span className="ad-spec-label">Local de Retirada</span>
                     <strong className="ad-spec-val">
                       {anuncio.cidade} / {anuncio.uf}
+                      {anuncio.regiaoAproximada ? ` (${anuncio.regiaoAproximada})` : ""}
                     </strong>
                   </div>
                 </div>
@@ -862,6 +873,47 @@ export function AdDetailPage({ onOpenDialog }: AdDetailPageProps) {
                 </div>
               </section>
             )}
+
+            {/* Seção de Logística e Localização de Retirada (US-032) */}
+            <section className="ad-detail-section" aria-labelledby="heading-localizacao">
+              <h2 id="heading-localizacao" className="ad-detail-section__title">
+                <Icon name="location" /> Logística e Localização de Retirada
+              </h2>
+              <div className="ad-detail-location-block">
+                <LocationMapEmbed
+                  cidade={anuncio.cidade}
+                  uf={anuncio.uf}
+                  regiaoAproximada={anuncio.regiaoAproximada}
+                  altura={320}
+                />
+                <div className="ad-location-logistic-tips">
+                  <div className="ad-location-logistic-item">
+                    <div className="ad-location-logistic-icon" aria-hidden="true">
+                      <Icon name="check" />
+                    </div>
+                    <div>
+                      <strong>Cálculo e Estimativa de Frete:</strong>
+                      <p>
+                        A rota é centrada no polo logístico de {anuncio.cidade} - {anuncio.uf}
+                        {anuncio.regiaoAproximada ? ` (${anuncio.regiaoAproximada})` : ""}.
+                        Utilize a referência do município para consultar transportadoras rurais, fretes de retorno ou planejamento de frotas.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="ad-location-logistic-item">
+                    <div className="ad-location-logistic-icon" aria-hidden="true">
+                      <Icon name="lock" />
+                    </div>
+                    <div>
+                      <strong>Acesso e Carregamento na Propriedade:</strong>
+                      <p>
+                        Por motivos de segurança e integridade patrimonial, a localização exata, coordenadas geográficas e roteiro de estradas vicinais da fazenda/armazém serão disponibilizados diretamente pelo vendedor após o alinhamento comercial ou agendamento de vistoria.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </section>
 
             {/* Seção de Documentação Comprobatória (Data Room Agro - US-013) */}
             {((anuncio.documentos && anuncio.documentos.length > 0) || isOwner) && (

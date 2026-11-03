@@ -248,7 +248,9 @@ export function MarketPage({ onOpenDialog }: MarketPageProps = {}) {
     if (pendingId) {
       sessionStorage.removeItem("safra_pending_favorite");
       alternarFavoritoStorage(session.conta.id, pendingId);
-      setFavoritosIds(obterFavoritosIds(session.conta.id));
+      queueMicrotask(() => {
+        setFavoritosIds(obterFavoritosIds(session.conta.id));
+      });
       window.dispatchEvent(new CustomEvent("safra:favorites-updated"));
     }
   }, [session]);
@@ -1432,7 +1434,10 @@ export function MarketPage({ onOpenDialog }: MarketPageProps = {}) {
                     <h2 className="market-card__title">{anuncio.titulo}</h2>
                     <p className="market-card__farm">{anuncio.farmName}</p>
 
-                    <div className="market-card__location">
+                    <div
+                      className="market-card__location"
+                      title={`${anuncio.cidade} - ${anuncio.uf}${anuncio.regiaoAproximada ? ` (${anuncio.regiaoAproximada})` : ""}`}
+                    >
                       <Icon name="location" />
                       <span>
                         {anuncio.cidade}, {anuncio.uf}

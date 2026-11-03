@@ -45,6 +45,7 @@ import {
   payloadAnimalParaBackend,
   payloadGraosParaBackend,
 } from "./adsApi";
+import { BUYER_ONLY_ACCOUNT_IDS, listarProdutoresAdmin } from "../admin/adminStorage";
 
 const STORAGE_KEY = "safradireta_anuncios";
 
@@ -678,6 +679,78 @@ export async function obterPerfilProdutorPublico(vendedorId: string): Promise<Pu
   }
 
   return null;
+}
+
+export interface PublicProducerListItem extends PublicProducerProfile {
+  totalAnunciosAtivos: number;
+}
+
+export async function listarTodosProdutoresPublicos(): Promise<PublicProducerListItem[]> {
+  await new Promise((resolve) => setTimeout(resolve, 60));
+
+  const session = getSession();
+  const todosAnuncios = carregarDoStorage();
+  const produtoresAdmin = listarProdutoresAdmin();
+
+  // Mapeia contagem de anúncios ativos por vendedorId
+  const anunciosAtivosPorVendedor = new Map<string, number>();
+  todosAnuncios.forEach((a) => {
+    if (a.status === "ATIVO") {
+      anunciosAtivosPorVendedor.set(a.vendedorId, (anunciosAtivosPorVendedor.get(a.vendedorId) || 0) + 1);
+    }
+  });
+
+  // Reúne todos os IDs potenciais de produtores habilitados (filtrando banidos/suspensos e contas estritamente compradoras)
+  const idsProdutores = new Set<string>();
+
+  // 1. Produtores do adminStorage que estão HABILITADO
+  produtoresAdmin.forEach((p) => {
+    if (p.estado === "HABILITADO" && !BUYER_ONLY_ACCOUNT_IDS.has(p.id) && p.email?.toLowerCase() !== "pedro.h.c.zin@gmail.com") {
+      idsProdutores.add(p.id);
+    }
+  });
+
+  // 2. Vendedores que possuem anúncios (se não estiverem suspensos/banidos)
+  todosAnuncios.forEach((a) => {
+    if (a.vendedorId && !BUYER_ONLY_ACCOUNT_IDS.has(a.vendedorId)) {
+      const reg = produtoresAdmin.find((p) => p.id === a.vendedorId);
+      if (!reg || reg.estado === "HABILITADO") {
+        idsProdutores.add(a.vendedorId);
+      }
+    }
+  });
+
+  // 3. Usuário logado se for vendedor habilitado
+  if (
+    session &&
+    session.conta.tipo !== "ADMIN" &&
+    !BUYER_ONLY_ACCOUNT_IDS.has(session.conta.id) &&
+    session.vendedorEstado === "HABILITADO"
+  ) {
+    idsProdutores.add(session.conta.id);
+  }
+
+  const lista: PublicProducerListItem[] = [];
+
+  for (const id of idsProdutores) {
+    const perfil = await obterPerfilProdutorPublico(id);
+    if (perfil) {
+      lista.push({
+        ...perfil,
+        totalAnunciosAtivos: anunciosAtivosPorVendedor.get(id) || 0,
+      });
+    }
+  }
+
+  // Ordena prioritariamente por quem tem mais anúncios ativos, depois pelo nome da fazenda
+  lista.sort((a, b) => {
+    if (b.totalAnunciosAtivos !== a.totalAnunciosAtivos) {
+      return b.totalAnunciosAtivos - a.totalAnunciosAtivos;
+    }
+    return a.farmName.localeCompare(b.farmName);
+  });
+
+  return lista;
 }
 
 function resolverDadosProdutorSessao(

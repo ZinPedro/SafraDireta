@@ -6453,6 +6453,405 @@
   color: #64748b;
 }
 
+/* ==========================================================================
+   Diretório de Produtores Rurais (/produtores)
+   ========================================================================== */
+.producers-directory-page {
+  padding: 2rem 0 5rem;
+  background-color: var(--color-bg, #f7f9f6);
+  min-height: calc(100vh - 160px);
+}
+
+.producers-directory-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 2rem;
+  margin-bottom: 2rem;
+  padding-bottom: 1.5rem;
+  border-bottom: 1px solid var(--color-border, #d6ccbe);
+  flex-wrap: wrap;
+}
+
+.producers-directory-header__info {
+  flex: 1;
+  min-width: 280px;
+}
+
+.producers-directory-header__info .eyebrow {
+  color: #2f6b3a;
+  margin-bottom: 0.5rem;
+  font-weight: 700;
+}
+
+.producers-directory-header__title {
+  font-family: var(--font-family-heading, "Fraunces", Georgia, serif);
+  font-size: clamp(2rem, 3.5vw, 2.75rem);
+  color: var(--color-earth-900, #2c1a0e);
+  margin: 0 0 0.75rem;
+  line-height: 1.2;
+}
+
+.producers-directory-header__desc {
+  color: var(--color-text-secondary, #64748b);
+  font-size: 1.05rem;
+  line-height: 1.6;
+  max-width: 680px;
+  margin: 0;
+}
+
+.producers-directory-header__stats {
+  display: flex;
+  align-items: center;
+}
+
+.producer-stat-badge {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: #ffffff;
+  border: 1px solid #cce2ca;
+  padding: 0.85rem 1.5rem;
+  border-radius: var(--radius-md, 12px);
+  box-shadow: 0 2px 8px rgba(30, 86, 49, 0.06);
+}
+
+.producer-stat-badge__number {
+  font-family: var(--font-family-heading, "Fraunces", Georgia, serif);
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: #1e5631;
+  line-height: 1;
+}
+
+.producer-stat-badge__label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #556b55;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-top: 0.25rem;
+}
+
+/* Barra de Filtros e Busca de Produtores */
+.producers-filter-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  margin-bottom: 2.5rem;
+}
+
+.producers-search-box {
+  position: relative;
+  width: 100%;
+  max-width: 600px;
+}
+
+.producers-search-icon {
+  position: absolute;
+  left: 1rem;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 20px;
+  height: 20px;
+  color: #64748b;
+  pointer-events: none;
+}
+
+.producers-search-input {
+  width: 100%;
+  padding: 0.875rem 2.5rem 0.875rem 2.75rem;
+  border-radius: 999px;
+  border: 1px solid var(--color-border, #d1d5db);
+  background: #ffffff;
+  font-size: 0.95rem;
+  color: var(--color-text, #1e293b);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  transition: all 0.2s ease;
+}
+
+.producers-search-input:focus {
+  outline: none;
+  border-color: #2f6b3a;
+  box-shadow: 0 0 0 3px rgba(47, 107, 58, 0.15);
+}
+
+.producers-search-clear {
+  position: absolute;
+  right: 1rem;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  font-size: 1.25rem;
+  color: #94a3b8;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+}
+
+.producers-search-clear:hover {
+  color: #475569;
+}
+
+.producers-category-chips {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.producers-chip {
+  padding: 0.5rem 1rem;
+  border-radius: 999px;
+  border: 1px solid var(--color-border, #d1d5db);
+  background: #ffffff;
+  color: var(--color-text-secondary, #4b5563);
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.producers-chip:hover {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+}
+
+.producers-chip--active {
+  background: #1e5631 !important;
+  color: #ffffff !important;
+  border-color: #1e5631 !important;
+  box-shadow: 0 2px 6px rgba(30, 86, 49, 0.25);
+  font-weight: 600;
+}
+
+/* Grid de Cards dos Produtores */
+.producers-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 1.75rem;
+}
+
+.producer-directory-card {
+  display: flex;
+  flex-direction: column;
+  background: #ffffff;
+  border: 1px solid var(--color-border, #d6ccbe);
+  border-radius: var(--radius-md, 12px);
+  overflow: hidden;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.04);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  cursor: pointer;
+  outline: none;
+}
+
+.producer-directory-card:hover,
+.producer-directory-card:focus-visible {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 24px rgba(18, 48, 28, 0.12);
+  border-color: #92b890;
+}
+
+.producer-directory-card__banner {
+  position: relative;
+  height: 120px;
+  width: 100%;
+  overflow: hidden;
+  background: #e2ebe0;
+}
+
+.producer-directory-card__banner img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.producer-directory-card__banner-overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.05) 0%, rgba(18, 48, 28, 0.5) 100%);
+}
+
+.producer-directory-card__badge {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(30, 86, 49, 0.9);
+  color: #ffffff;
+  backdrop-filter: blur(4px);
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+}
+
+.producer-directory-card__badge .icon {
+  width: 12px;
+  height: 12px;
+}
+
+.producer-directory-card__body {
+  padding: 1.25rem 1.25rem 1.5rem;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+.producer-directory-card__avatar-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  margin-top: -46px;
+  margin-bottom: 0.875rem;
+  position: relative;
+  z-index: 2;
+}
+
+.producer-directory-card__avatar {
+  border: 3px solid #ffffff;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  background: #ffffff;
+}
+
+.producer-directory-card__lotes-count {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  background: #f1f7ef;
+  padding: 0.25rem 0.625rem;
+  border-radius: 6px;
+  border: 1px solid #cbe0c7;
+}
+
+.producer-directory-card__lotes-number {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #1e5631;
+  line-height: 1;
+}
+
+.producer-directory-card__lotes-text {
+  font-size: 0.6875rem;
+  color: #4a684a;
+  text-transform: uppercase;
+  font-weight: 600;
+}
+
+.producer-directory-card__farm {
+  font-family: var(--font-family-heading, "Fraunces", Georgia, serif);
+  font-size: 1.25rem;
+  color: var(--color-earth-900, #2c1a0e);
+  margin: 0 0 0.35rem;
+  line-height: 1.3;
+}
+
+.producer-directory-card__owner,
+.producer-directory-card__location {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-size: 0.84rem;
+  color: var(--color-text-secondary, #64748b);
+  margin: 0 0 0.3rem;
+}
+
+.producer-directory-card__owner .icon,
+.producer-directory-card__location .icon {
+  width: 14px;
+  height: 14px;
+  color: #2f6b3a;
+  flex-shrink: 0;
+}
+
+.producer-directory-card__bio {
+  font-size: 0.85rem;
+  color: #4b5563;
+  line-height: 1.5;
+  margin: 0.75rem 0 1rem;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  flex-grow: 1;
+}
+
+.producer-directory-card__tags {
+  display: flex;
+  gap: 0.375rem;
+  flex-wrap: wrap;
+  margin-bottom: 1.25rem;
+}
+
+.producer-tag--logistics {
+  background: #eff6ff;
+  color: #1d4ed8;
+  border: 1px solid #bfdbfe;
+}
+
+.producer-directory-card__footer {
+  margin-top: auto;
+  padding-top: 0.75rem;
+  border-top: 1px solid #edf2eb;
+}
+
+.producer-directory-card__footer .button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+}
+
+/* Empty State */
+.producers-empty-state {
+  text-align: center;
+  padding: 4rem 1.5rem;
+  background: #ffffff;
+  border: 1px dashed var(--color-border, #d6ccbe);
+  border-radius: var(--radius-lg, 16px);
+  margin: 2rem 0;
+}
+
+.producers-empty-icon {
+  width: 4rem;
+  height: 4rem;
+  border-radius: 50%;
+  background: #eaf3e9;
+  color: #1e5631;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 1.25rem;
+}
+
+.producers-empty-icon .icon {
+  width: 2rem;
+  height: 2rem;
+}
+
+.producers-empty-state h2 {
+  font-family: var(--font-family-heading, "Fraunces", Georgia, serif);
+  font-size: 1.5rem;
+  color: var(--color-earth-900, #2c1a0e);
+  margin-bottom: 0.5rem;
+}
+
+.producers-empty-state p {
+  color: var(--color-text-secondary, #64748b);
+  max-width: 480px;
+  margin: 0 auto 1.5rem;
+  font-size: 0.95rem;
+  line-height: 1.6;
+}
+
+
 
 
 

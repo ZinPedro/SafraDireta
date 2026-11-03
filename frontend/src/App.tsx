@@ -19,6 +19,7 @@ import { MyAdsPage } from "./features/ads/MyAdsPage";
 import { AdDetailPage } from "./features/ads/AdDetailPage";
 import { AdEditPage } from "./features/ads/AdEditPage";
 import { PublicProducerProfilePage } from "./features/ads/PublicProducerProfilePage";
+import { ProducersPage } from "./features/ads/ProducersPage";
 import { AdminBar } from "./features/admin/AdminBar";
 import { AdminDashboardPage } from "./features/admin/AdminDashboardPage";
 import { ADMIN_SECRET_SLUG, routes } from "./data/site";
@@ -110,16 +111,7 @@ function Site() {
           <Route path={routes.adEdit} element={<AdEditPage onOpenDialog={openFeature} />} />
           <Route path="/anuncios/:id" element={<AdDetailPage onOpenDialog={openFeature} />} />
           <Route path="/produtor/:id" element={<PublicProducerProfilePage />} />
-          <Route
-            path={routes.producers}
-            element={
-              <DevelopmentPage
-                title="Conheça quem está por trás da safra."
-                description="Os perfis de produtores ainda estão em desenvolvimento. Em breve, você poderá conhecer suas histórias, regiões e produtos."
-                onOpenDialog={openFeature}
-              />
-            }
-          />
+          <Route path={routes.producers} element={<ProducersPage onOpenDialog={openFeature} />} />
           <Route
             path={routes.guide}
             element={

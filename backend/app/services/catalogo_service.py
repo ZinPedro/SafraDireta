@@ -57,7 +57,7 @@ def listar_catalogo(conn: Connection, f: dict) -> dict:
     tamanho, pagina = f["tamanho"], f["pagina"]
     linhas = conn.execute(
         f"""SELECT a.id, a.titulo, a.preco_lote, a.modo_preco, a.publicado_em,
-                   p.nome AS produto, l.municipio_publico, l.uf_publica,
+                   p.nome AS produto, l.municipio_publico, l.uf_publica, l.regiao_publica,
                    la.quantidade_animais, lg.cultura, lg.quantidade AS sacas, m.id AS capa_id
             {de} ORDER BY {_ORDEM[f['ordem']]} LIMIT %s OFFSET %s""",
         [*params, tamanho, (pagina - 1) * tamanho],
@@ -74,6 +74,8 @@ def listar_catalogo(conn: Connection, f: dict) -> dict:
             "produto": r["produto"],
             "cidade": r["municipio_publico"],
             "uf": r["uf_publica"],
+            "municipio": r["municipio_publico"],
+            "regiaoAproximada": r["regiao_publica"],
             "precoTotal": float(r["preco_lote"]),
             "pricingMode": r["modo_preco"],
             "publicadoEm": r["publicado_em"],
@@ -99,7 +101,10 @@ def detalhe_publico(conn: Connection, anuncio_id) -> dict:
         raise nao_encontrado("Anúncio não encontrado.")
 
     anuncio = obter_anuncio(conn, anuncio_id)
-    anuncio.pop("vendedorId")  # dado interno: o publico ve so o nome
+    if anuncio["estadoComercial"] != "ATIVO":
+        raise nao_encontrado("Anúncio não encontrado.")
+    for campo in ("vendedorId", "encerradoEm", "motivoEncerramento", "observacoesEncerramento"):
+        anuncio.pop(campo)
     vendedor = conn.execute(
         """SELECT COALESCE(pf.nome, e.nome_fantasia, e.razao_social, c.nome_publico) AS nome
            FROM safradireta.conta c

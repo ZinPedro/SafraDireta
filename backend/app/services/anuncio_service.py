@@ -1,4 +1,5 @@
 """Regras e consultas de anuncios."""
+from unicodedata import normalize
 from decimal import ROUND_HALF_UP, Decimal
 from typing import get_args
 
@@ -8,7 +9,7 @@ from psycopg.types.json import Jsonb
 from pydantic import TypeAdapter, ValidationError
 
 from app.errors import conflito, invalido, nao_encontrado
-from app.schemas.anuncio import AnuncioAnimal, AnuncioEntrada, AnuncioGraos
+from app.schemas.anuncio import AnuncioAnimal, AnuncioEntrada, AnuncioGraos, EncerramentoAnuncio
 from app.services.anuncio_regras import PENEIRAS, RACAS, SACA_KG, SUBTIPOS, conferir
 
 _COMUNS = ["titulo", "cidade", "uf", "pricingMode", "precoTotal"]
@@ -118,11 +119,13 @@ def _dados_do_lote(conn: Connection, d, laudo: dict):
 
 def _gravar_localizacao(conn: Connection, anuncio_id, d) -> None:
     conn.execute(
-        """INSERT INTO safradireta.localizacao_anuncio (anuncio_id, municipio_publico, uf_publica)
-           VALUES (%s, %s, %s)
+        """INSERT INTO safradireta.localizacao_anuncio (anuncio_id, municipio_publico, uf_publica, regiao_publica)
+           VALUES (%s, %s, %s, %s)
            ON CONFLICT (anuncio_id) DO UPDATE
-           SET municipio_publico = EXCLUDED.municipio_publico, uf_publica = EXCLUDED.uf_publica""",
-        (anuncio_id, d.cidade, d.uf.upper()),
+           SET municipio_publico = EXCLUDED.municipio_publico, uf_publica = EXCLUDED.uf_publica,
+               regiao_publica = EXCLUDED.regiao_publica""",
+        (anuncio_id, normalize("NFC", " ".join(d.cidade.split())), d.uf.upper(),
+         d.regiao_aproximada or None),
     )
 
 
@@ -165,7 +168,7 @@ def _por_unidade(total, quantidade):
 def obter_anuncio(conn: Connection, anuncio_id) -> dict:
     """Anuncio completo no formato do formulario (os mesmos nomes que o front envia)."""
     a = conn.execute(
-        """SELECT a.*, p.nome AS produto_nome, l.municipio_publico, l.uf_publica
+        """SELECT a.*, p.nome AS produto_nome, l.municipio_publico, l.uf_publica, l.regiao_publica
            FROM safradireta.anuncio a
            JOIN safradireta.produto p ON p.id = a.produto_id
            LEFT JOIN safradireta.localizacao_anuncio l ON l.anuncio_id = a.id
@@ -191,10 +194,15 @@ def obter_anuncio(conn: Connection, anuncio_id) -> dict:
         "criadoEm": a["criado_em"],
         "atualizadoEm": a["atualizado_em"],
         "publicadoEm": a["publicado_em"],
+        "encerradoEm": a["encerrado_em"] or a["vendido_em"],
+        "motivoEncerramento": a["motivo_encerramento"],
+        "observacoesEncerramento": a["observacoes_encerramento"],
         "titulo": a["titulo"],
         "descricao": a["descricao"],
         "cidade": a["municipio_publico"],
         "uf": a["uf_publica"],
+        "municipio": a["municipio_publico"],
+        "regiaoAproximada": a["regiao_publica"],
         "pricingMode": a["modo_preco"],
         "precoTotal": _num(a["preco_lote"]),
         "midias": [{"id": str(m["id"]), "tipo": m["tipo"], "ordem": m["ordem"], "capa": m["capa"]} for m in midias],
@@ -226,7 +234,8 @@ def obter_anuncio(conn: Connection, anuncio_id) -> dict:
 # O que a resposta traz alem do formulario: nao volta para a validacao da edicao.
 _FORA_DO_FORMULARIO = {
     "id", "vendedorId", "produto", "estadoComercial", "versao", "criadoEm", "atualizadoEm",
-    "publicadoEm", "midias", "precoPorCabeca", "precoPorSaca", "pesoTotalToneladas",
+    "publicadoEm", "encerradoEm", "motivoEncerramento", "observacoesEncerramento",
+    "municipio", "midias", "documentos", "precoPorCabeca", "precoPorSaca", "pesoTotalToneladas",
 }
 _IMUTAVEIS = ("categoria", "especie", "cultura")
 _ENTRADA = TypeAdapter(AnuncioEntrada)
@@ -237,29 +246,41 @@ def editar_anuncio(conn: Connection, anuncio: dict, corpo: dict) -> dict:
 
     'anuncio' ja foi validado como sendo do vendedor logado.
     """
-    if anuncio["estado_comercial"] == "VENDIDO":
-        raise conflito("Anúncio vendido não pode ser editado.")
-    if not corpo:
-        raise invalido("Envie ao menos um campo para alterar.", {"corpo": "Envie ao menos um campo."})
-
-    completo = obter_anuncio(conn, anuncio["id"])
-    atual = {k: v for k, v in completo.items() if k not in _FORA_DO_FORMULARIO}
-    # Valores derivados que o front devolve como vieram do GET sao so eco: ignorados.
-    corpo = {k: v for k, v in corpo.items()
-             if not (k in ("precoPorCabeca", "precoPorSaca", "pesoTotalToneladas") and v == completo.get(k))}
-    for campo in _IMUTAVEIS:
-        if campo in corpo and corpo[campo] != atual.get(campo):
-            raise invalido("Dados inválidos.", {campo: "Este campo não pode ser alterado."})
-
-    try:
-        dados = _ENTRADA.validate_python({**atual, **corpo})
-    except ValidationError as erro:
-        raise RequestValidationError(erro.errors()) from None
-    laudo = conferir(dados)
-    produto_id = _id_por(conn, "produto", "nome", _nome_do_produto(dados))
-    tabela, colunas, peso_kg = _dados_do_lote(conn, dados, laudo)
-
     with conn.transaction():
+        bloqueio = conn.execute(
+            "SELECT estado_comercial FROM safradireta.anuncio WHERE id = %s FOR UPDATE",
+            (anuncio["id"],),
+        ).fetchone()
+        if bloqueio is None:
+            raise nao_encontrado("Anúncio não encontrado.")
+        if bloqueio["estado_comercial"] in ("VENDIDO", "CANCELADO"):
+            raise conflito("Anúncio encerrado não pode ser editado.")
+
+        if not corpo:
+            raise invalido("Envie ao menos um campo para alterar.", {"corpo": "Envie ao menos um campo."})
+        corpo = dict(corpo)
+        if "municipio" in corpo and "cidade" not in corpo:
+            corpo["cidade"] = corpo["municipio"]
+        if "regiao_aproximada" in corpo and "regiaoAproximada" not in corpo:
+            corpo["regiaoAproximada"] = corpo["regiao_aproximada"]
+        completo = obter_anuncio(conn, anuncio["id"])
+        atual = {k: v for k, v in completo.items() if k not in _FORA_DO_FORMULARIO}
+        # Valores derivados que o front devolve como vieram do GET sao so eco: ignorados.
+        corpo = {k: v for k, v in corpo.items()
+                 if not (k in ("precoPorCabeca", "precoPorSaca", "pesoTotalToneladas") and v == completo.get(k))}
+        for campo in _IMUTAVEIS:
+            if campo in corpo and corpo[campo] != atual.get(campo):
+                raise invalido("Dados inválidos.", {campo: "Este campo não pode ser alterado."})
+
+        try:
+            dados = _ENTRADA.validate_python({**atual, **corpo})
+        except ValidationError as erro:
+            raise RequestValidationError(erro.errors()) from None
+        origem_alterada = (dados.cidade, dados.uf.upper()) != (completo["cidade"], completo["uf"])
+        laudo = conferir(dados, validar_origem=origem_alterada)
+        produto_id = _id_por(conn, "produto", "nome", _nome_do_produto(dados))
+        tabela, colunas, peso_kg = _dados_do_lote(conn, dados, laudo)
+
         conn.execute(
             """UPDATE safradireta.anuncio
                SET titulo = %s, descricao = %s, preco_lote = %s, modo_preco = %s, peso_total_kg = %s,
@@ -349,3 +370,51 @@ def reativar_anuncio(
         conn, anuncio, atual,
         "PAUSADO", "ATIVO", "ANUNCIO_REATIVADO",
     )
+
+
+def encerrar_anuncio(
+    conn: Connection, anuncio: dict, atual: dict, dados: EncerramentoAnuncio,
+) -> dict:
+    with conn.transaction():
+        linha = conn.execute(
+            "SELECT estado_comercial FROM safradireta.anuncio WHERE id = %s FOR UPDATE",
+            (anuncio["id"],),
+        ).fetchone()
+        if linha is None:
+            raise nao_encontrado("Anúncio não encontrado.")
+        estado_anterior = linha["estado_comercial"]
+        if estado_anterior not in ("ATIVO", "PAUSADO"):
+            raise conflito("Só anúncios ativos ou pausados podem ser encerrados.")
+
+        conn.execute(
+            """UPDATE safradireta.anuncio
+               SET estado_comercial = %s, encerrado_em = now(),
+                   motivo_encerramento = %s, observacoes_encerramento = %s,
+                   vendido_em = CASE WHEN %s THEN now() END,
+                   origem_encerramento = CASE WHEN %s THEN 'MANUAL' END,
+                   versao = versao + 1, atualizado_em = now()
+               WHERE id = %s""",
+            (dados.status, dados.motivo, dados.observacoes, dados.status == "VENDIDO",
+             dados.status == "VENDIDO", anuncio["id"]),
+        )
+        conn.execute(
+            """UPDATE safradireta.solicitacao_documento
+               SET status = 'REVOGADO', respondida_em = now()
+               WHERE anuncio_id = %s AND status IN ('PENDENTE', 'APROVADO')""",
+            (anuncio["id"],),
+        )
+        conn.execute(
+            """INSERT INTO safradireta.evento_auditoria
+                   (conta_ator_id, sessao_id, origem, acao, entidade, entidade_id, resumo)
+               VALUES (%s, %s, 'API', 'ANUNCIO_ENCERRADO', 'anuncio', %s, %s)""",
+            (atual["conta_id"], atual["sessao_id"], anuncio["id"], Jsonb({
+                "estadoAnterior": estado_anterior, "estadoNovo": dados.status, "motivo": dados.motivo,
+            })),
+        )
+        return obter_anuncio(conn, anuncio["id"])
+
+
+def modelo_para_clonar(conn: Connection, anuncio_id) -> dict:
+    anuncio = obter_anuncio(conn, anuncio_id)
+    modelo = {k: v for k, v in anuncio.items() if k not in _FORA_DO_FORMULARIO}
+    return {**modelo, "fotos": [], "video": None, "midias": [], "documentos": []}

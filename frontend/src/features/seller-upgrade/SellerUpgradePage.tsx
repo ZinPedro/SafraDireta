@@ -2,8 +2,10 @@ import { useEffect, useRef, useState } from "react";
 import type { ChangeEvent, FormEvent } from "react";
 import { Link } from "react-router-dom";
 import registrationImage from "../../assets/images/registration-landscape.jpeg";
+import { AccessRestricted } from "../../components/AccessRestricted";
 import { Icon } from "../../components/Icon";
 import { routes } from "../../data/site";
+import type { OpenDevelopmentDialog } from "../../data/site";
 import { useAuth } from "../../context/authContext";
 import { getSession } from "../../context/session";
 import { loadUserProfile } from "../profile/profile";
@@ -47,7 +49,13 @@ function FileSlot({ id, label, hint, required, file, error, message, onPick, onR
   );
 }
 
-export function SellerUpgradePage({ onUpgrade = defaultUpgradeToSeller }: { onUpgrade?: UpgradeToSeller }) {
+export function SellerUpgradePage({
+  onUpgrade = defaultUpgradeToSeller,
+  onOpenDialog,
+}: {
+  onUpgrade?: UpgradeToSeller;
+  onOpenDialog?: OpenDevelopmentDialog;
+}) {
   const { session, setVendedorEstado } = useAuth();
   const isAlreadyHabilitado = session?.vendedorEstado === "HABILITADO";
   const isAlreadyPending = session?.vendedorEstado === "PENDENTE";
@@ -223,6 +231,36 @@ export function SellerUpgradePage({ onUpgrade = defaultUpgradeToSeller }: { onUp
       pendingRef.current = false;
       setSubmitting(false);
     }
+  }
+
+  if (!session) {
+    return (
+      <AccessRestricted
+        title="Identifique-se para solicitar habilitação"
+        description="Para habilitar sua conta como produtor vendedor no SafraDireta, entre na sua conta ou crie um cadastro."
+        onOpenLogin={() => onOpenDialog?.("login")}
+        onOpenRegister={() => onOpenDialog?.("registration")}
+      />
+    );
+  }
+
+  if (session.conta.tipo === "PJ") {
+    return (
+      <AccessRestricted
+        title="Habilitação de Vendedor para Pessoa Jurídica"
+        description="Contas corporativas (PJ) gerenciam a habilitação de vendedor e a vitrine da fazenda diretamente pelo perfil da empresa."
+        customAction={
+          <div style={{ display: "flex", gap: "1rem", flexWrap: "wrap", justifyContent: "center" }}>
+            <Link to={routes.profile} className="button button--primary">
+              Acessar Perfil Corporativo
+            </Link>
+            <Link to={routes.home} className="button button--outline">
+              Voltar ao Início
+            </Link>
+          </div>
+        }
+      />
+    );
   }
 
   const finalState = doneState ?? (isAlreadyHabilitado ? "habilitado" : isAlreadyPending ? "pendente" : null);

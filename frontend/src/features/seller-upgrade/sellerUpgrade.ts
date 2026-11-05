@@ -1,5 +1,4 @@
 import { clearSession, getSession, updateSession } from "../../context/session";
-import { MOCK_API } from "../../dev/mockApi";
 import { isValidCpf, ufs } from "../corporate-registration/corporateRegistration";
 import { sincronizarProdutorNosAnuncios } from "../ads/adsStorage";
 import { registrarProdutorParaGovernanca } from "../admin/adminStorage";
@@ -37,98 +36,48 @@ export type SellerUpgradeResult =
 
 export type UpgradeToSeller = (data: SellerUpgradeData) => Promise<SellerUpgradeResult>;
 
-// Simulação local (VITE_MOCK_API=true): habilitação imediata. Fora dela, chama o backend real,
-// que cria a solicitação em estado PENDENTE (POST /api/vendedor/habilitacao).
 export const defaultUpgradeToSeller: UpgradeToSeller = async (data: SellerUpgradeData) => {
-  const session = getSession();
-  if (session) {
-    try {
-      const key = `safradireta_mock_profile:${session.conta.id}`;
-      const raw = localStorage.getItem(key);
-      const stored = raw ? (JSON.parse(raw) as Record<string, unknown>) : {};
-      const account = (stored.account && typeof stored.account === "object" ? stored.account : {}) as Record<string, unknown>;
-      const existingCpf = typeof account.cpfCnpj === "string" ? account.cpfCnpj.trim() : "";
-      const docFinal = existingCpf || data.cpf;
-      stored.account = { ...account, nome: session.conta.nome, email: session.conta.email, cpfCnpj: docFinal };
-      stored.seller = {
-        isHabilitado: true,
-        farmName: data.farmName,
-        bio: (stored.seller as Record<string, unknown> | undefined)?.bio ?? "",
-        city: data.city,
-        state: data.state,
-        publicPhone: (stored.seller as Record<string, unknown> | undefined)?.publicPhone ?? session.conta.telefone ?? "",
-        categories: data.categories,
-        hasOwnTransport: data.hasOwnTransport,
-      };
-      const agoraIso = new Date().toISOString();
-      const docStatus = {
-        rgFrente: data.documents.cpfFrontFileName
-          ? {
-              nome: data.documents.cpfFrontFileName,
-              status: "EM_REANALISE" as const,
-              atualizadoEm: agoraIso,
-              tamanhoFormatado: "Arquivo digital",
-            }
-          : undefined,
-        rgVerso: data.documents.cpfBackFileName
-          ? {
-              nome: data.documents.cpfBackFileName,
-              status: "EM_REANALISE" as const,
-              atualizadoEm: agoraIso,
-              tamanhoFormatado: "Arquivo digital",
-            }
-          : undefined,
-        car: data.documents.carFileName
-          ? {
-              nome: data.documents.carFileName,
-              status: "EM_REANALISE" as const,
-              atualizadoEm: agoraIso,
-              tamanhoFormatado: "Arquivo digital",
-            }
-          : undefined,
-      };
-
-      stored.documents = {
-        hasCpfDocument: data.documents.hasCpfDocument,
-        cpfFrontFileName: data.documents.cpfFrontFileName,
-        cpfBackFileName: data.documents.cpfBackFileName,
-        hasCarDocument: data.documents.hasCarDocument,
-        carFileName: data.documents.carFileName,
-      };
-      localStorage.setItem(key, JSON.stringify(stored));
-      sincronizarProdutorNosAnuncios(session.conta.id, {
-        farmName: data.farmName,
-        vendedorNome: session.conta.nome,
-        avatarUrl: session.avatarUrl,
-      });
-      registrarProdutorParaGovernanca({
-        id: session.conta.id,
-        nome: session.conta.nome,
-        farmName: data.farmName,
-        documento: docFinal,
-        tipoDocumento: session.conta.tipo === "PJ" ? "CNPJ" : "CPF",
-        email: session.conta.email,
-        cidade: data.city,
-        uf: data.state,
-        dataEntrada: agoraIso,
-        estado: "HABILITADO",
-        documentosStatus: docStatus,
-      });
-    } catch {
-      /* no-op */
+  const result = await requestSellerHabilitation(data);
+  if (result.ok) {
+    const session = getSession();
+    if (session) {
+      try {
+        const key = `safradireta_mock_profile:${session.conta.id}`;
+        const raw = localStorage.getItem(key);
+        const stored = raw ? (JSON.parse(raw) as Record<string, unknown>) : {};
+        const account = (stored.account && typeof stored.account === "object" ? stored.account : {}) as Record<string, unknown>;
+        const existingCpf = typeof account.cpfCnpj === "string" ? account.cpfCnpj.trim() : "";
+        const docFinal = existingCpf || data.cpf;
+        stored.account = { ...account, nome: session.conta.nome, email: session.conta.email, cpfCnpj: docFinal };
+        stored.seller = {
+          isHabilitado: result.status === "habilitado",
+          farmName: data.farmName,
+          bio: (stored.seller as Record<string, unknown> | undefined)?.bio ?? "",
+          city: data.city,
+          state: data.state,
+          publicPhone: (stored.seller as Record<string, unknown> | undefined)?.publicPhone ?? session.conta.telefone ?? "",
+          categories: data.categories,
+          hasOwnTransport: data.hasOwnTransport,
+        };
+        stored.documents = {
+          hasCpfDocument: data.documents.hasCpfDocument,
+          cpfFrontFileName: data.documents.cpfFrontFileName,
+          cpfBackFileName: data.documents.cpfBackFileName,
+          hasCarDocument: data.documents.hasCarDocument,
+          carFileName: data.documents.carFileName,
+        };
+        localStorage.setItem(key, JSON.stringify(stored));
+        sincronizarProdutorNosAnuncios(session.conta.id, {
+          farmName: data.farmName,
+          vendedorNome: session.conta.nome,
+          avatarUrl: session.avatarUrl,
+        });
+      } catch {
+        /* no-op */
+      }
     }
   }
-
-  // Em simulação local, a sessão passa a refletir o vendedor habilitado e salva os dados no mock.
-  if (MOCK_API) {
-    updateSession({ vendedorEstado: "HABILITADO" });
-    return {
-      ok: true,
-      status: "habilitado",
-      message: "Perfil de vendedor habilitado com sucesso!",
-    };
-  }
-  return requestSellerHabilitation(data);
+  return result;
 };
 
 async function requestSellerHabilitation(data: SellerUpgradeData): Promise<SellerUpgradeResult> {

@@ -210,7 +210,10 @@ export function PublicProducerProfilePage() {
 
                     <div className="market-card__body">
                       <h3 className="market-card__title">{anuncio.titulo}</h3>
-                      <div className="market-card__location">
+                      <div
+                        className="market-card__location"
+                        title={`${anuncio.cidade} - ${anuncio.uf}${anuncio.regiaoAproximada ? ` (${anuncio.regiaoAproximada})` : ""}`}
+                      >
                         <Icon name="location" /> {anuncio.cidade} — {anuncio.uf}
                       </div>
 

@@ -1,5 +1,4 @@
 import { getSession, saveSession } from "../../context/session";
-import { MOCK_API, mockDelay } from "../../dev/mockApi";
 
 export type RegistrationIntent = "buyer" | "seller";
 
@@ -35,12 +34,6 @@ export const registerAccount: RegisterAccount = async (request: RegistrationRequ
         ? "Você já está conectado em uma conta corporativa (PJ). Saia da conta atual antes de cadastrar uma pessoa física."
         : "Você já possui uma conta conectada. Saia da conta atual antes de realizar um novo cadastro.",
     };
-  }
-
-  if (MOCK_API) {
-    await mockDelay();
-    saveSession("mock-token", { id: `mock-${request.email}`, tipo: "PF", nome: request.name, email: request.email }, null);
-    return { status: "registered" };
   }
 
   try {

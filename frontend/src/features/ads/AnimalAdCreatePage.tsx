@@ -1,10 +1,9 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { FormEvent } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useAuth } from "../../context/authContext";
 import { routes } from "../../data/site";
 import type { OpenDevelopmentDialog } from "../../data/site";
-import { ufs } from "../corporate-registration/corporateRegistration";
 import { AccessRestricted } from "../../components/AccessRestricted";
 import { Icon } from "../../components/Icon";
 import { SellerBlockedView } from "../admin/SellerBlockedView";
@@ -24,6 +23,7 @@ import {
   obterYoutubeEmbedUrl,
 } from "./ads.types";
 import type {
+  AdDocumentItem,
   AdVideoItem,
   AnimalPurpose,
   CoffeeScreen,
@@ -40,8 +40,18 @@ import {
   atualizarAnuncio,
   criarAnuncioAnimal,
   criarAnuncioGraos,
+  extrairModeloParaNovoAnuncio,
   obterAnuncioPorId,
 } from "./adsStorage";
+import { AdDocumentsSection } from "./AdDocumentsSection";
+import {
+  UFS_BRASIL,
+  obterTodosMunicipiosPorUf,
+  obterPolosDestaque,
+  obterRegioesSugeridas,
+  verificarMunicipioValido,
+} from "./locationAgro";
+import { LocationMapEmbed } from "./LocationMapEmbed";
 import defaultFarmImage from "../../assets/images/farm-landscape.jpeg";
 import harvestSunsetImage from "../../assets/images/harvest-sunset.jpeg";
 import "./ads.css";
@@ -140,6 +150,33 @@ export function AnimalAdCreatePage({ onOpenDialog, mode = "create" }: AnimalAdCr
     }
     return "";
   });
+
+  const [regiaoAproximada, setRegiaoAproximada] = useState("");
+  const [mostrarPreviaMapa, setMostrarPreviaMapa] = useState(false);
+  const [mostrarDropdownCidades, setMostrarDropdownCidades] = useState(false);
+  const [mostrarDropdownRegioes, setMostrarDropdownRegioes] = useState(false);
+
+  // Cidades: se vazio, mostra os Polos em Destaque. Se digitando, busca nos 5.571 municípios da UF!
+  const todasCidadesUf = obterTodosMunicipiosPorUf(uf);
+  const cidadesFiltradas = useMemo(() => {
+    if (!cidade.trim()) {
+      return obterPolosDestaque(uf);
+    }
+    const termo = cidade.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    return todasCidadesUf
+      .filter((c) =>
+        c.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").includes(termo)
+      )
+      .slice(0, 15); // Limita a 15 resultados no menu para manter performance estelar
+  }, [cidade, uf, todasCidadesUf]);
+
+  // Regiões aproximadas da UF
+  const regioesDisponiveis = obterRegioesSugeridas(uf);
+  const regioesFiltradas = useMemo(() => {
+    if (!regiaoAproximada.trim()) return regioesDisponiveis;
+    const termo = regiaoAproximada.toLowerCase().trim();
+    return regioesDisponiveis.filter((r) => r.toLowerCase().includes(termo));
+  }, [regiaoAproximada, regioesDisponiveis]);
 
   // Estados de Mídia (US-012)
   const [fotos, setFotos] = useState<string[]>([]);
@@ -265,6 +302,9 @@ export function AnimalAdCreatePage({ onOpenDialog, mode = "create" }: AnimalAdCr
     }
   }
 
+  // Estados de Documentação Comprobatória (US-013)
+  const [documentos, setDocumentos] = useState<AdDocumentItem[]>([]);
+
   // Estados de controle
   const [erros, setErros] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -273,6 +313,13 @@ export function AnimalAdCreatePage({ onOpenDialog, mode = "create" }: AnimalAdCr
 
   const { id } = useParams<{ id: string }>();
   const isEditMode = mode === "edit";
+
+  // Parâmetros de URL e Suporte a Modelo (US-017)
+  const [searchParams, setSearchParams] = useSearchParams();
+  const copiarDeId = searchParams.get("copiarDe");
+  const [activeModelAd, setActiveModelAd] = useState<{ id: string; titulo: string } | null>(null);
+  const [cloneFeedback, setCloneFeedback] = useState<{ type: "error" | "info"; message: string } | null>(null);
+  const isLoadingModel = Boolean(!isEditMode && copiarDeId && !activeModelAd && !cloneFeedback);
 
   const [isLoadingAd, setIsLoadingAd] = useState(isEditMode);
   const [adNotFound, setAdNotFound] = useState(false);
@@ -302,6 +349,7 @@ export function AnimalAdCreatePage({ onOpenDialog, mode = "create" }: AnimalAdCr
         setDescricao(ad.descricao || "");
         setCidade(ad.cidade);
         setUf(ad.uf);
+        setRegiaoAproximada(ad.regiaoAproximada || "");
 
         if (ad.fotos && ad.fotos.length > 0) {
           setFotos(ad.fotos);
@@ -318,6 +366,10 @@ export function AnimalAdCreatePage({ onOpenDialog, mode = "create" }: AnimalAdCr
             setVideoMode("YOUTUBE");
             setVideoYoutubeUrl(ad.video.url);
           }
+        }
+
+        if (ad.documentos && ad.documentos.length > 0) {
+          setDocumentos(ad.documentos);
         }
 
         if (ad.categoria === "ANIMAL") {
@@ -410,6 +462,271 @@ export function AnimalAdCreatePage({ onOpenDialog, mode = "create" }: AnimalAdCr
     };
   }, [isEditMode, id, session]);
 
+  // Carregamento de modelo para novo anúncio (US-017)
+  useEffect(() => {
+    if (isEditMode || !copiarDeId) return;
+    let isMounted = true;
+
+    obterAnuncioPorId(copiarDeId)
+      .then((adBase) => {
+        if (!isMounted) return;
+
+        if (!adBase) {
+          setCloneFeedback({
+            type: "error",
+            message: "O anúncio solicitado para modelo não foi encontrado.",
+          });
+          setSearchParams({}, { replace: true });
+          return;
+        }
+
+        if (!session || adBase.vendedorId !== session.conta.id) {
+          setCloneFeedback({
+            type: "error",
+            message: "Você só pode utilizar anúncios de sua própria autoria como modelo.",
+          });
+          setSearchParams({}, { replace: true });
+          return;
+        }
+
+        if (adBase.status === "BLOQUEADO_MODERACAO") {
+          setCloneFeedback({
+            type: "error",
+            message: "Este anúncio foi bloqueado pela moderação e não pode ser reutilizado como modelo.",
+          });
+          setSearchParams({}, { replace: true });
+          return;
+        }
+
+        const modelo = extrairModeloParaNovoAnuncio(adBase, session.conta.id);
+        if (!modelo) {
+          setCloneFeedback({
+            type: "error",
+            message: "Não foi possível carregar os dados deste anúncio como modelo.",
+          });
+          setSearchParams({}, { replace: true });
+          return;
+        }
+
+        // Aplica os dados do modelo no formulário
+        setModalidade(modelo.categoria || "ANIMAL");
+        setTitulo(modelo.titulo || "");
+        setDescricao(modelo.descricao || "");
+        setCidade(modelo.cidade || "");
+        setUf(modelo.uf || "");
+        setRegiaoAproximada(modelo.regiaoAproximada || "");
+
+        // Reseta mídias e documentos obrigatoriamente (US-017)
+        setFotos([]);
+        setVideoFile(null);
+        setVideoUploadUrl("");
+        setVideoUploadName("");
+        setVideoYoutubeUrl("");
+        setDocumentos([]);
+
+        if (modelo.categoria === "ANIMAL") {
+          const matchBreed = BEEF_CATTLE_BREEDS.find((b) => b.value === modelo.raca);
+          if (matchBreed && matchBreed.value !== "OUTRA") {
+            setRacaSelect(modelo.raca || "");
+            setRacaCustom("");
+          } else {
+            setRacaSelect("OUTRA");
+            setRacaCustom(modelo.raca || "");
+          }
+
+          // US-017: Quantidade e peso em branco
+          setQuantidadeCabecas("");
+          setFinalidade(modelo.finalidade || "ENGORDA_ABATE");
+          if (modelo.idadeMeses) {
+            setIdadeMeses(modelo.idadeMeses);
+          } else {
+            setIdadeMeses("");
+          }
+
+          // US-017: Unidade de peso e precificação preservadas, valores em branco
+          setPesoUnitMode(modelo.pesoUnitMode || "KG");
+          setPesoInputValue("");
+          setPrecoTotal("");
+          setPrecoPorCabeca("");
+
+          if (modelo.pricingMode) {
+            setPricingMode(modelo.pricingMode);
+          } else if (
+            adBase.categoria === "ANIMAL" &&
+            adBase.precoPorCabeca &&
+            adBase.quantidadeCabecas &&
+            adBase.precoTotal &&
+            Math.round(adBase.precoPorCabeca * adBase.quantidadeCabecas) === Math.round(adBase.precoTotal)
+          ) {
+            setPricingMode("PER_HEAD");
+          } else {
+            setPricingMode("TOTAL");
+          }
+        } else {
+          // GRAOS
+          setCultura(modelo.cultura || "");
+          if (modelo.culturaPersonalizada) {
+            setCulturaPersonalizada(modelo.culturaPersonalizada);
+          } else {
+            setCulturaPersonalizada("");
+          }
+
+          if (modelo.cultura && modelo.cultura !== "OUTRO") {
+            const culturaValida = modelo.cultura as Exclude<GrainCrop, "OUTRO">;
+            const listaSubtipos = GRAIN_SUBTYPES[culturaValida];
+            const matchSubtipo = listaSubtipos ? listaSubtipos.find((s) => s.value === modelo.subtipo) : null;
+            if (matchSubtipo && matchSubtipo.value !== "OUTRO") {
+              setSubtipoSelect(modelo.subtipo || "");
+              setSubtipoCustom("");
+            } else {
+              setSubtipoSelect("OUTRO");
+              setSubtipoCustom(modelo.subtipo || "");
+            }
+          } else {
+            setSubtipoCustom(modelo.subtipo || "");
+          }
+
+          setSafra(modelo.safra || "2024/2025");
+          setEmbalagem(modelo.embalagem || "SACARIA");
+
+          // US-017: Reset de umidade, volumes e preços (em branco)
+          setUmidadePercentual("");
+          setVolumeUnitMode(modelo.volumeUnitMode || "SACAS");
+          setVolumeInputValue("");
+          setPrecoTotalGraos("");
+          setPrecoPorSaca("");
+
+          if (modelo.grainPricingMode) {
+            setGrainPricingMode(modelo.grainPricingMode);
+          } else if (
+            adBase.categoria === "GRAOS" &&
+            adBase.precoPorSaca &&
+            adBase.quantidadeSacas &&
+            adBase.precoTotal &&
+            Math.round(adBase.precoPorSaca * adBase.quantidadeSacas) === Math.round(adBase.precoTotal)
+          ) {
+            setGrainPricingMode("PER_SACK");
+          } else {
+            setGrainPricingMode("TOTAL");
+          }
+
+          // US-017: Reset obrigatório de todos os campos de laudos e qualidade técnica
+          setSojaImpurezasPct("");
+          setSojaAvariadosPct("");
+          setSojaQuebradosPct("");
+          setMilhoImpurezasPct("");
+          setMilhoArdidosPct("");
+          setMilhoQuebradosPct("");
+          setCafePeneira("");
+          setCafeCatacaoDefeitos("");
+          setCafePontuacaoSca("");
+          setTrigoPhKgHl("");
+          setTrigoForcaGlutenW("");
+          setTrigoFallingNumberSeg("");
+          setOutroObservacoesLaudo("");
+        }
+
+        setActiveModelAd({
+          id: adBase.id,
+          titulo: adBase.titulo,
+        });
+        setCloneFeedback(null);
+      })
+      .catch((err) => {
+        console.error("Erro ao carregar modelo de anúncio:", err);
+        if (isMounted) {
+          setCloneFeedback({
+            type: "error",
+            message: "Erro ao carregar o modelo de anúncio.",
+          });
+          setSearchParams({}, { replace: true });
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [isEditMode, copiarDeId, session, setSearchParams]);
+
+  function handleResetarModelo() {
+    setActiveModelAd(null);
+    setSearchParams({}, { replace: true });
+
+    // Reseta campos comuns
+    setTitulo("");
+    setDescricao("");
+    setErros({});
+
+    // Reseta pecuária
+    setRacaSelect("");
+    setRacaCustom("");
+    setQuantidadeCabecas("");
+    setFinalidade("ENGORDA_ABATE");
+    setIdadeMeses("");
+    setPesoUnitMode("KG");
+    setPesoInputValue("");
+    setPricingMode("TOTAL");
+    setPrecoTotal("");
+    setPrecoPorCabeca("");
+
+    // Reseta grãos
+    setCultura("");
+    setCulturaPersonalizada("");
+    setSubtipoSelect("");
+    setSubtipoCustom("");
+    setSafra("2024/2025");
+    setEmbalagem("SACARIA");
+    setUmidadePercentual("");
+    setVolumeUnitMode("SACAS");
+    setVolumeInputValue("");
+    setGrainPricingMode("TOTAL");
+    setPrecoTotalGraos("");
+    setPrecoPorSaca("");
+
+    setSojaImpurezasPct("");
+    setSojaAvariadosPct("");
+    setSojaQuebradosPct("");
+    setMilhoImpurezasPct("");
+    setMilhoArdidosPct("");
+    setMilhoQuebradosPct("");
+    setCafePeneira("");
+    setCafeCatacaoDefeitos("");
+    setCafePontuacaoSca("");
+    setTrigoPhKgHl("");
+    setTrigoForcaGlutenW("");
+    setTrigoFallingNumberSeg("");
+    setOutroObservacoesLaudo("");
+
+    // Reseta mídias e documentos
+    setFotos([]);
+    setVideoFile(null);
+    setVideoUploadUrl("");
+    setVideoUploadName("");
+    setVideoYoutubeUrl("");
+    setDocumentos([]);
+
+    // Restaura localização do perfil
+    if (session) {
+      try {
+        const raw = localStorage.getItem(`safradireta_mock_profile:${session.conta.id}`);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          setCidade((parsed?.seller?.city || parsed?.address?.cidade || "") as string);
+          setUf((parsed?.seller?.state || parsed?.address?.uf || "") as string);
+        }
+      } catch {
+        /* ignore */
+      }
+    }
+    setRegiaoAproximada("");
+    setMostrarPreviaMapa(false);
+
+    setCloneFeedback({
+      type: "info",
+      message: "Modelo descartado. O formulário foi limpo para cadastro do zero.",
+    });
+  }
+
   const govStatus = session ? obterStatusGovernancaProdutor(session.conta.id) : null;
   const isBlockedSeller =
     session?.vendedorEstado === "SUSPENSO" ||
@@ -483,6 +800,49 @@ export function AnimalAdCreatePage({ onOpenDialog, mode = "create" }: AnimalAdCr
           </Link>
         }
       />
+    );
+  }
+
+  if (
+    isEditMode &&
+    loadedAd &&
+    (loadedAd.status === "VENDIDO" || loadedAd.status === "CANCELADO")
+  ) {
+    return (
+      <div className="ad-create-page">
+        <div className="container">
+          <div className="ad-not-found">
+            <div
+              className="ad-modal-icon-wrapper ad-modal-icon-wrapper--amber"
+              style={{ margin: "0 auto 1.5rem" }}
+              aria-hidden="true"
+            >
+              <Icon name="box" />
+            </div>
+            <h2>Lote Encerrado — Edição Bloqueada</h2>
+            <p>
+              Este lote está marcado como{" "}
+              <strong>
+                {loadedAd.status === "VENDIDO"
+                  ? "Comercializado / Vendido"
+                  : "Cancelado / Retirado"}
+              </strong>
+              . Lotes com disponibilidade encerrada são permanentes e não aceitam alterações de preço, quantidade ou especificações.
+            </p>
+            <div style={{ display: "flex", gap: "1rem", justifyContent: "center", marginTop: "1.5rem" }}>
+              <Link to={routes.myAds} className="button button--secondary">
+                Voltar aos Meus Anúncios
+              </Link>
+              <Link
+                to={`/anunciar?copiarDe=${loadedAd.id}`}
+                className="button button--primary"
+              >
+                <Icon name="copy" /> Usar como Modelo para Novo Lote
+              </Link>
+            </div>
+          </div>
+        </div>
+      </div>
     );
   }
 
@@ -777,8 +1137,10 @@ export function AnimalAdCreatePage({ onOpenDialog, mode = "create" }: AnimalAdCr
           precoPorCabeca: pricingMode === "PER_HEAD" ? Number(precoPorCabeca) : valorCabecaFinal,
           cidade: cidade.trim(),
           uf,
+          regiaoAproximada: regiaoAproximada.trim() || undefined,
           fotos: fotos.length > 0 ? fotos : undefined,
           video: videoPayload,
+          documentos: documentos.length > 0 ? documentos : undefined,
         };
 
         if (isEditMode && id) {
@@ -858,8 +1220,10 @@ export function AnimalAdCreatePage({ onOpenDialog, mode = "create" }: AnimalAdCr
             grainPricingMode === "PER_SACK" ? Number(precoPorSaca) : valorSacaFinal,
           cidade: cidade.trim(),
           uf,
+          regiaoAproximada: regiaoAproximada.trim() || undefined,
           fotos: fotos.length > 0 ? fotos : undefined,
           video: videoPayload,
+          documentos: documentos.length > 0 ? documentos : undefined,
         };
 
         if (isEditMode && id) {
@@ -944,6 +1308,56 @@ export function AnimalAdCreatePage({ onOpenDialog, mode = "create" }: AnimalAdCr
               : "Publique as especificações agronômicas, safra, volume e condições comerciais da sua produção agrícola no mercado."}
           </p>
         </header>
+
+        {/* Notificações e Feedback de Cópia/Modelo (US-017) */}
+        {isLoadingModel && (
+          <div className="ad-loading-box" style={{ padding: "1.25rem", marginBottom: "1.5rem" }} aria-live="polite">
+            <Icon name="clock" className="ad-loading-spinner" />
+            <p>Carregando dados do modelo...</p>
+          </div>
+        )}
+
+        {cloneFeedback && (
+          <div className={`ad-alert ad-alert--${cloneFeedback.type === "error" ? "error" : "success"}`} role="alert">
+            <div className="ad-alert__content">
+              <Icon name={cloneFeedback.type === "error" ? "alert" : "check"} />
+              <span>{cloneFeedback.message}</span>
+            </div>
+            <button
+              type="button"
+              className="ad-alert__close"
+              onClick={() => setCloneFeedback(null)}
+              aria-label="Fechar notificação"
+            >
+              <Icon name="close" />
+            </button>
+          </div>
+        )}
+
+        {!isEditMode && activeModelAd && (
+          <div className="ad-clone-banner" role="status">
+            <div className="ad-clone-banner__content">
+              <div className="ad-clone-banner__icon" aria-hidden="true">
+                <Icon name="copy" />
+              </div>
+              <div className="ad-clone-banner__text">
+                <strong>📋 Criando novo anúncio a partir de um modelo</strong>
+                <p>
+                  Informações técnicas pré-preenchidas com base no anúncio{" "}
+                  <strong>&ldquo;{activeModelAd.titulo}&rdquo;</strong>. Revise os dados, adicione fotos do novo lote e clique em Publicar.
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              className="button button--ghost button--small ad-clone-banner__reset-btn"
+              onClick={handleResetarModelo}
+              title="Descartar modelo e preencher formulário do zero"
+            >
+              Limpar Modelo e Começar do Zero
+            </button>
+          </div>
+        )}
 
         {isEditMode && loadedAd?.status === "PAUSADO_MODERACAO" && (
           <div
@@ -2384,10 +2798,18 @@ export function AnimalAdCreatePage({ onOpenDialog, mode = "create" }: AnimalAdCr
             </div>
           </section>
 
-          {/* BLOCO 4: Precificação e Localização */}
+          {/* BLOCO 4: Documentação Comprobatória do Lote (US-013) */}
+          <AdDocumentsSection
+            documentos={documentos}
+            onChangeDocumentos={setDocumentos}
+            modalidade={modalidade}
+            anuncioId={id}
+          />
+
+          {/* BLOCO 5: Precificação e Localização */}
           <section className="ad-form-section" aria-labelledby="section-preco">
             <h2 id="section-preco" className="ad-form-section__title">
-              <Icon name="location" /> 4. Precificação Comercial e Localização
+              <Icon name="location" /> 5. Precificação Comercial e Localização
             </h2>
 
             {modalidade === "ANIMAL" ? (
@@ -2653,37 +3075,8 @@ export function AnimalAdCreatePage({ onOpenDialog, mode = "create" }: AnimalAdCr
               </>
             )}
 
-            {/* Localização */}
+            {/* Localização (US-032) */}
             <div className="ad-form-grid ad-form-grid--2">
-              <div className="form-group">
-                <label htmlFor="ad-cidade" className="form-label">
-                  {modalidade === "ANIMAL"
-                    ? "Município de Retirada"
-                    : "Município de Retirada / Armazém"}{" "}
-                  <span className="required">*</span>
-                </label>
-                <input
-                  id="ad-cidade"
-                  type="text"
-                  className={`form-input ${erros.cidade ? "form-input--error" : ""}`}
-                  placeholder={
-                    modalidade === "ANIMAL"
-                      ? "Ex: Uberaba ou Barretos"
-                      : "Ex: Patrocínio, Rio Verde ou Sorriso"
-                  }
-                  value={cidade}
-                  onChange={(e) => setCidade(e.target.value)}
-                  aria-invalid={Boolean(erros.cidade)}
-                  aria-describedby={erros.cidade ? "ad-cidade-error" : undefined}
-                  required
-                />
-                {erros.cidade && (
-                  <span id="ad-cidade-error" className="form-error">
-                    {erros.cidade}
-                  </span>
-                )}
-              </div>
-
               <div className="form-group">
                 <label htmlFor="ad-uf" className="form-label">
                   Estado (UF) <span className="required">*</span>
@@ -2692,15 +3085,23 @@ export function AnimalAdCreatePage({ onOpenDialog, mode = "create" }: AnimalAdCr
                   id="ad-uf"
                   className={`form-select ${erros.uf ? "form-select--error" : ""}`}
                   value={uf}
-                  onChange={(e) => setUf(e.target.value)}
+                  onChange={(e) => {
+                    const novaUf = e.target.value;
+                    setUf(novaUf);
+                    // Se a cidade atual não for válida na nova UF selecionada, limpa para forçar escolha coerente
+                    if (cidade && !verificarMunicipioValido(cidade, novaUf)) {
+                      setCidade("");
+                      setRegiaoAproximada("");
+                    }
+                  }}
                   aria-invalid={Boolean(erros.uf)}
                   aria-describedby={erros.uf ? "ad-uf-error" : undefined}
                   required
                 >
                   <option value="">Selecione o estado</option>
-                  {ufs.map((estado) => (
-                    <option key={estado} value={estado}>
-                      {estado}
+                  {UFS_BRASIL.map((estado) => (
+                    <option key={estado.sigla} value={estado.sigla}>
+                      {estado.sigla} - {estado.nome}
                     </option>
                   ))}
                 </select>
@@ -2710,7 +3111,192 @@ export function AnimalAdCreatePage({ onOpenDialog, mode = "create" }: AnimalAdCr
                   </span>
                 )}
               </div>
+
+              {/* Município com Autocomplete Interativo */}
+              <div className="form-group ad-autocomplete-container">
+                <label htmlFor="ad-cidade" className="form-label">
+                  {modalidade === "ANIMAL"
+                    ? "Município de Retirada"
+                    : "Município de Retirada / Armazém"}{" "}
+                  <span className="required">*</span>
+                </label>
+                <div className="ad-autocomplete-wrapper">
+                  <input
+                    id="ad-cidade"
+                    type="text"
+                    autoComplete="off"
+                    className={`form-input ${erros.cidade ? "form-input--error" : ""}`}
+                    placeholder={
+                      uf
+                        ? "Clique para ver sugestões ou digite o município"
+                        : "Selecione o estado (UF) primeiro"
+                    }
+                    value={cidade}
+                    onChange={(e) => {
+                      setCidade(e.target.value);
+                      setMostrarDropdownCidades(true);
+                    }}
+                    onFocus={() => {
+                      if (uf) setMostrarDropdownCidades(true);
+                    }}
+                    onBlur={() => {
+                      // Timeout curto para permitir o clique nos itens antes de fechar
+                      setTimeout(() => setMostrarDropdownCidades(false), 200);
+                    }}
+                    disabled={!uf}
+                    required
+                  />
+                  {uf && (
+                    <button
+                      type="button"
+                      tabIndex={-1}
+                      className="ad-autocomplete-toggle"
+                      onClick={() => setMostrarDropdownCidades(!mostrarDropdownCidades)}
+                      title="Ver municípios da UF"
+                    >
+                      ▼
+                    </button>
+                  )}
+                </div>
+
+                {/* Dropdown de Sugestões de Municípios em React */}
+                {mostrarDropdownCidades && uf && cidadesFiltradas.length > 0 && (
+                  <ul className="ad-autocomplete-dropdown" role="listbox">
+                    <li className="ad-autocomplete-header">
+                      {!cidade.trim() ? "Principais Polos e Capitais:" : `Municípios de ${uf} encontrados:`}
+                    </li>
+                    {cidadesFiltradas.map((item) => (
+                      <li
+                        key={item}
+                        className="ad-autocomplete-item"
+                        onMouseDown={() => {
+                          setCidade(item);
+                          setMostrarDropdownCidades(false);
+                        }}
+                      >
+                        <Icon name="location" />
+                        <span>{item}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+
+                {erros.cidade && (
+                  <span id="ad-cidade-error" className="form-error">
+                    {erros.cidade}
+                  </span>
+                )}
+              </div>
             </div>
+
+            {/* Alerta brando caso município não esteja nos polos agropecuários principais */}
+            {cidade.trim().length >= 3 && uf && !verificarMunicipioValido(cidade, uf) && (
+              <div className="ad-location-warning" role="status">
+                <Icon name="alert" />
+                <div>
+                  <strong>Aviso de Localização:</strong> O município &quot;{cidade}&quot; não consta na listagem padrão de polos agropecuários de {uf}. O anúncio poderá ser publicado normalmente, mas certifique-se da grafia correta para facilitar a busca por compradores.
+                </div>
+              </div>
+            )}
+
+            {/* Polo / Região com Autocomplete Interativo */}
+            <div className="form-group ad-autocomplete-container">
+              <label htmlFor="ad-regiao" className="form-label">
+                Polo / Região Agrícola <span className="optional">(Opcional)</span>
+              </label>
+              <div className="ad-autocomplete-wrapper">
+                <input
+                  id="ad-regiao"
+                  type="text"
+                  autoComplete="off"
+                  className="form-input"
+                  placeholder={
+                    uf
+                      ? "Digite ou selecione a macrorregião (ex: Triângulo Mineiro, Médio-Norte)"
+                      : "Selecione a UF para ver sugestões de polos agrícolas"
+                  }
+                  value={regiaoAproximada}
+                  onChange={(e) => {
+                    setRegiaoAproximada(e.target.value);
+                    setMostrarDropdownRegioes(true);
+                  }}
+                  onFocus={() => {
+                    if (uf) setMostrarDropdownRegioes(true);
+                  }}
+                  onBlur={() => {
+                    setTimeout(() => setMostrarDropdownRegioes(false), 200);
+                  }}
+                  disabled={!uf}
+                />
+                {uf && (
+                  <button
+                    type="button"
+                    tabIndex={-1}
+                    className="ad-autocomplete-toggle"
+                    onClick={() => setMostrarDropdownRegioes(!mostrarDropdownRegioes)}
+                    title="Ver polos/regiões sugeridas"
+                  >
+                    ▼
+                  </button>
+                )}
+              </div>
+
+              {/* Dropdown de Sugestões de Regiões em React */}
+              {mostrarDropdownRegioes && uf && regioesFiltradas.length > 0 && (
+                <ul className="ad-autocomplete-dropdown" role="listbox">
+                  {regioesFiltradas.map((item) => (
+                    <li
+                      key={item}
+                      className="ad-autocomplete-item"
+                      onMouseDown={() => {
+                        setRegiaoAproximada(item);
+                        setMostrarDropdownRegioes(false);
+                      }}
+                    >
+                      <Icon name="location" />
+                      <span>{item}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+
+              <span className="form-hint">
+                Ajude compradores a localizarem o lote pela macrorregião produtiva ou polo comercial do estado.
+              </span>
+            </div>
+
+            {/* Nota de Privacidade do Produtor e Logística */}
+            <div className="ad-location-privacy-note">
+              <Icon name="check" />
+              <span>
+                <strong>Privacidade e Logística:</strong> Por segurança patrimonial, apenas o município, estado e polo regional são exibidos publicamente no anúncio. A rota exata e coordenadas da fazenda serão alinhadas diretamente entre as partes no momento do carregamento.
+              </span>
+            </div>
+
+            {/* Pré-visualização do Mapa */}
+            {cidade.trim() && uf && (
+              <div className="ad-location-preview-toggle">
+                <button
+                  type="button"
+                  className="button button--secondary button--small"
+                  onClick={() => setMostrarPreviaMapa(!mostrarPreviaMapa)}
+                >
+                  <Icon name="location" />
+                  {mostrarPreviaMapa ? "Ocultar Prévia do Mapa" : "Pré-visualizar Localização no Mapa"}
+                </button>
+              </div>
+            )}
+
+            {mostrarPreviaMapa && cidade.trim() && uf && (
+              <div className="ad-location-preview-container">
+                <LocationMapEmbed
+                  cidade={cidade.trim()}
+                  uf={uf}
+                  regiaoAproximada={regiaoAproximada.trim() || undefined}
+                  altura={260}
+                />
+              </div>
+            )}
 
             {/* Foto de Capa do Lote */}
             <div className="ad-cover-preview-box">

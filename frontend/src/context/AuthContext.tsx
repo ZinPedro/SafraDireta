@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useSyncExternalStore } from "react";
 import type { ReactNode } from "react";
-import { MOCK_API } from "../dev/mockApi";
 import { clearSession, getSession, saveSession, subscribeSession, updateSession } from "./session";
 import { AuthContext } from "./authContext";
 import type { AuthContextValue } from "./authContext";
@@ -16,7 +15,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Revalida a sessão guardada e completa o estado de vendedor via GET /api/auth/me.
   const token = session?.token;
   useEffect(() => {
-    if (!token || MOCK_API) return;
+    if (!token) return;
     // Sessão administrativa local do backoffice não deve ser validada contra /api/auth/me
     if (session?.conta?.tipo === "ADMIN" || token.startsWith("admin-")) return;
 
@@ -29,7 +28,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const data = await response.json();
         if (getSession()?.token !== token) return;
 
-        const avatarUrl = data.conta?.avatar_url ?? data.conta?.avatarUrl ?? undefined;
+        const avatarUrl =
+          data.conta?.avatar_url ||
+          data.conta?.avatarUrl ||
+          (data.conta?.id ? localStorage.getItem(`safradireta_avatar_${data.conta.id}`) : null) ||
+          getSession()?.avatarUrl ||
+          undefined;
         let resolvedVendedorEstado = data.vendedor?.estado ?? null;
 
         if (data.conta?.id) {
@@ -62,7 +66,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         updateSession({
           conta: data.conta,
           vendedorEstado: resolvedVendedorEstado,
-          ...(avatarUrl !== undefined ? { avatarUrl } : {}),
+          avatarUrl,
         });
       })
       .catch(() => undefined);
@@ -72,7 +76,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signOut = useCallback(async () => {
     const current = getSession();
     clearSession();
-    if (!current || MOCK_API) return;
+    if (!current) return;
     try {
       await fetch("/api/auth/logout", { method: "POST", headers: { Authorization: `Bearer ${current.token}` } });
     } catch {

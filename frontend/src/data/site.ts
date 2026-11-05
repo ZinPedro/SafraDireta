@@ -6,6 +6,7 @@ export const routes = {
   corporateRegistration: "/cadastro/empresa",
   sellerUpgrade: "/habilitar-vendedor",
   profile: "/perfil",
+  favorites: "/favoritos",
   market: "/mercado",
   producers: "/produtores",
   guide: "/guia",

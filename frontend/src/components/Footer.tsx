@@ -41,11 +41,11 @@ export function Footer({
             {session ? (
               <>
                 <Link to={routes.profile}>Meu perfil</Link>
-                {session.conta.tipo !== "PJ" && (
-                  <Link to={session.vendedorEstado === "HABILITADO" ? `${routes.profile}?aba=produtor` : routes.sellerUpgrade}>
-                    {session.vendedorEstado === "HABILITADO" ? "Área do produtor" : "Habilitar vendas"}
-                  </Link>
-                )}
+                {session.vendedorEstado === "HABILITADO" ? (
+                  <Link to={`${routes.profile}?aba=produtor`}>Área do produtor</Link>
+                ) : session.conta.tipo !== "PJ" ? (
+                  <Link to={routes.sellerUpgrade}>Habilitar vendas</Link>
+                ) : null}
                 <Link to={routes.market}>Mercado</Link>
               </>
             ) : (

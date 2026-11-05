@@ -14,49 +14,49 @@ def adicionar(conn: Connection, conta_id, anuncio_id) -> None:
         if anuncio is None:
             raise nao_encontrado("Anúncio não encontrado.")
         if not anuncio["disponivel"] and not conn.execute(
-            "SELECT 1 FROM safradireta.favorito WHERE usuario_id = %s AND anuncio_id = %s",
+            "SELECT 1 FROM safradireta.favorito_anuncio WHERE conta_id = %s AND anuncio_id = %s",
             (conta_id, anuncio_id),
         ).fetchone():
             raise nao_encontrado("Anúncio não encontrado.")
         if anuncio["disponivel"]:
             conn.execute(
-                """INSERT INTO safradireta.favorito (usuario_id, anuncio_id)
-                   VALUES (%s, %s) ON CONFLICT (usuario_id, anuncio_id) DO NOTHING""",
+                """INSERT INTO safradireta.favorito_anuncio (conta_id, anuncio_id)
+                   VALUES (%s, %s) ON CONFLICT (conta_id, anuncio_id) DO NOTHING""",
                 (conta_id, anuncio_id),
             )
 
 
 def remover(conn: Connection, conta_id, anuncio_id) -> None:
     conn.execute(
-        "DELETE FROM safradireta.favorito WHERE usuario_id = %s AND anuncio_id = %s",
+        "DELETE FROM safradireta.favorito_anuncio WHERE conta_id = %s AND anuncio_id = %s",
         (conta_id, anuncio_id),
     )
 
 
 def listar(conn: Connection, conta_id, pagina: int, tamanho: int) -> dict:
     total = conn.execute(
-        "SELECT count(*) AS n FROM safradireta.favorito WHERE usuario_id = %s", (conta_id,),
+        "SELECT count(*) AS n FROM safradireta.favorito_anuncio WHERE conta_id = %s", (conta_id,),
     ).fetchone()["n"]
     linhas = conn.execute(
-        f"""SELECT a.id, a.titulo, a.estado_comercial, a.preco_lote, f.adicionado_em,
+        f"""SELECT a.id, a.titulo, a.estado_comercial, a.preco_lote, f.criado_em,
                    ({_VISIVEL}) AS disponivel, l.municipio_publico, l.uf_publica, l.regiao_publica,
                    la.anuncio_id IS NOT NULL AS animal, lg.cultura,
                    CASE WHEN {_VISIVEL} THEN m.id END AS capa_id
-            FROM safradireta.favorito f
+            FROM safradireta.favorito_anuncio f
             JOIN safradireta.anuncio a ON a.id = f.anuncio_id
             LEFT JOIN safradireta.localizacao_anuncio l ON l.anuncio_id = a.id
             LEFT JOIN safradireta.lote_animal la ON la.anuncio_id = a.id
             LEFT JOIN safradireta.lote_agricola lg ON lg.anuncio_id = a.id
             LEFT JOIN safradireta.midia_anuncio m ON m.anuncio_id = a.id AND m.capa
-            WHERE f.usuario_id = %s
-            ORDER BY f.adicionado_em DESC, f.anuncio_id
+            WHERE f.conta_id = %s
+            ORDER BY f.criado_em DESC, f.anuncio_id
             LIMIT %s OFFSET %s""",
         (conta_id, tamanho, (pagina - 1) * tamanho),
     ).fetchall()
 
     itens = [{
         "id": r["id"], "titulo": r["titulo"], "estadoComercial": r["estado_comercial"],
-        "disponivel": r["disponivel"], "adicionadoEm": r["adicionado_em"],
+        "disponivel": r["disponivel"], "adicionadoEm": r["criado_em"],
         "precoTotal": r["preco_lote"], "categoria": "ANIMAL" if r["animal"] else "GRAOS",
         "cultura": r["cultura"], "cidade": r["municipio_publico"], "municipio": r["municipio_publico"],
         "uf": r["uf_publica"], "regiaoAproximada": r["regiao_publica"],

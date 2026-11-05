@@ -9,7 +9,7 @@ from app.services import midia_service
 
 MAX_TAMANHO = 10 * 1024 * 1024
 _CAMPOS_SOLICITACAO = """id, anuncio_id, comprador_id, mensagem, status,
-    solicitada_em, respondida_em, motivo_recusa"""
+    solicitado_em AS solicitada_em, respondido_em AS respondida_em, motivo_recusa"""
 
 
 def _anuncio(conn: Connection, anuncio_id, *, bloquear: bool = False) -> dict:
@@ -88,14 +88,14 @@ def listar(conn: Connection, anuncio_id, conta_id) -> dict:
     if dono:
         solicitacoes = conn.execute(
             f"""SELECT {_CAMPOS_SOLICITACAO} FROM safradireta.solicitacao_documento
-                WHERE anuncio_id = %s ORDER BY solicitada_em DESC, id DESC""",
+                WHERE anuncio_id = %s ORDER BY solicitado_em DESC, id DESC""",
             (anuncio_id,),
         ).fetchall()
         return {"documentos": documentos, "solicitacoes": solicitacoes}
     solicitacao = conn.execute(
         f"""SELECT {_CAMPOS_SOLICITACAO} FROM safradireta.solicitacao_documento
             WHERE anuncio_id = %s AND comprador_id = %s
-            ORDER BY (status IN ('PENDENTE', 'APROVADO')) DESC, solicitada_em DESC, id DESC LIMIT 1""",
+            ORDER BY (status IN ('PENDENTE', 'APROVADO')) DESC, solicitado_em DESC, id DESC LIMIT 1""",
         (anuncio_id, conta_id),
     ).fetchone()
     return {"documentos": documentos, "solicitacao": solicitacao}
@@ -154,9 +154,10 @@ def decidir(conn: Connection, solicitacao_id, conta_id, status: str, motivo: str
             raise conflito("A solicitação já foi processada.")
         return conn.execute(
             f"""UPDATE safradireta.solicitacao_documento
-                SET status = %s, respondida_em = now(), motivo_recusa = %s
+                SET status = %s, respondido_em = now(), respondido_por = %s,
+                    atualizado_em = now(), motivo_recusa = %s
                 WHERE id = %s RETURNING {_CAMPOS_SOLICITACAO}""",
-            (status, motivo if status == "RECUSADO" else None, solicitacao_id),
+            (status, conta_id, motivo if status == "RECUSADO" else None, solicitacao_id),
         ).fetchone()
 
 

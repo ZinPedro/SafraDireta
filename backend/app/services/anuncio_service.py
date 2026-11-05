@@ -399,9 +399,10 @@ def encerrar_anuncio(
         )
         conn.execute(
             """UPDATE safradireta.solicitacao_documento
-               SET status = 'REVOGADO', respondida_em = now()
+               SET status = 'REVOGADO', respondido_em = now(), respondido_por = %s,
+                   atualizado_em = now()
                WHERE anuncio_id = %s AND status IN ('PENDENTE', 'APROVADO')""",
-            (anuncio["id"],),
+            (atual["conta_id"], anuncio["id"]),
         )
         conn.execute(
             """INSERT INTO safradireta.evento_auditoria

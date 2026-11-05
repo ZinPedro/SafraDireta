@@ -47,8 +47,8 @@ sudo -u postgres psql -v ON_ERROR_STOP=1 -d "$DB_NAME" < "$SQL_DIR/02_permissoes
 echo "4/5: Aplicando dados iniciais de desenvolvimento (03_seed_dev.sql)..."
 sudo -u postgres psql -v ON_ERROR_STOP=1 -d "$DB_NAME" < "$SQL_DIR/03_seed_dev.sql" > /dev/null
 
-echo "5/5: Aplicando as migrações 04 a 08..."
-for migration in "$SQL_DIR"/0[4-8]_*.sql; do
+echo "5/5: Aplicando as migrações 04 a 11..."
+for migration in "$SQL_DIR"/0[4-9]_*.sql "$SQL_DIR"/1[01]_*.sql; do
     sudo -u postgres psql -v ON_ERROR_STOP=1 -d "$DB_NAME" < "$migration" > /dev/null
 done
 

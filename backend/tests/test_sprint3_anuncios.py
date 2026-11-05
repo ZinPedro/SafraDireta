@@ -119,7 +119,7 @@ def test_upload_documental_valida_conteudo_tamanho_e_dono(
     conteudo = pdf.getvalue()
 
     def enviar(dados, conta=vendedor):
-        return client.post(rota, headers=conta["headers"], data={"tipo": "LAUDO_SANITARIO"},
+        return client.post(rota, headers=conta["headers"], data={"tipo": "EXAME_ANDROLOGICO"},
                            files={"arquivo": ("laudo.pdf", dados, "application/pdf")})
 
     assert enviar(conteudo, terceiro).status_code == 403
@@ -132,6 +132,7 @@ def test_upload_documental_valida_conteudo_tamanho_e_dono(
     resposta = enviar(conteudo)
     assert resposta.status_code == 201, resposta.text
     assert resposta.json()["mimeType"] == "application/pdf"
+    assert resposta.json()["tipo"] == "EXAME_ANDROLOGICO"
     dados = client.db.execute(
         """SELECT a.checksum, a.tamanho_bytes FROM safradireta.documento_anuncio d
            JOIN safradireta.arquivo a ON a.id = d.arquivo_id WHERE d.id = %s""",

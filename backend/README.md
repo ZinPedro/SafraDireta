@@ -27,7 +27,9 @@ O contrato completo (entradas, respostas, erros e decisões em aberto) está em
 4. Rode `sql/02_permissoes.sql` como dono da estrutura.
 5. Rode `sql/03_seed_dev.sql` como dono do banco. Ele cria o termo de uso 1.0 e um operador de teste. O `safra_app` não consegue inserir nessas tabelas, por isso este passo é do dono.
 
-6. Rode os arquivos SQL `04` a `08` em ordem como dono da estrutura. Em um banco que já tem a Sprint 2, aplique apenas `08_documentos_favoritos_encerramento.sql`.
+6. Rode os arquivos SQL de `04` a `11` em ordem, como dono da estrutura. A migração `09` só deve ser executada em desenvolvimento.
+   - Banco já atualizado com `10_sprint3.sql`: aplique apenas `11_compatibilidade_documentos.sql`.
+   - Banco que recebeu a antiga `08_documentos_favoritos_encerramento.sql`: aplique a `08_admin_governanca.sql` se ainda for necessária, pule a `10` e aplique a `11`. A `11` mantém os dados existentes e adapta as tabelas ao contrato usado pela API.
 
 Sem o termo de uso vigente, o cadastro responde 503 `TERMO_INDISPONIVEL`.
 

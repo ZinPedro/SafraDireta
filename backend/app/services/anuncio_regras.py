@@ -7,6 +7,7 @@ from decimal import Decimal
 
 from app.errors import ErroApp, invalido
 from app.schemas.anuncio import AnuncioAnimal, AnuncioGraos
+from app.services.localizacao import validar_municipio
 from app.validators import normalizar_uf, validar_uf
 
 SACA_KG = Decimal(60)
@@ -128,7 +129,7 @@ def validar_laudo(cultura: str, laudo: dict | None) -> dict:
     return {k: v for k, v in laudo.items() if k in campos_da_cultura and v is not None}
 
 
-def conferir(d: AnuncioAnimal | AnuncioGraos) -> dict:
+def conferir(d: AnuncioAnimal | AnuncioGraos, *, validar_origem: bool = True) -> dict:
     """Confere as regras entre campos. Devolve o laudo limpo (graos) ou {} (animais)."""
     erros: dict = {}
 
@@ -140,8 +141,8 @@ def conferir(d: AnuncioAnimal | AnuncioGraos) -> dict:
     uf = normalizar_uf(d.uf)
     if not validar_uf(uf):
         erros["uf"] = "Informe uma UF válida."
-    if not d.cidade.strip():
-        erros["cidade"] = "Informe a cidade."
+    elif validar_origem and not validar_municipio(d.cidade, uf):
+        erros["cidade"] = "Informe um município válido para a UF selecionada."
 
     laudo: dict = {}
     if isinstance(d, AnuncioAnimal):

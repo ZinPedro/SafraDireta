@@ -22,7 +22,7 @@ sudo systemctl start postgresql
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SQL_DIR="$DIR/sql"
 
-echo "1/4: Criando/Atualizando usuário '$DB_USER' e banco '$DB_NAME'..."
+echo "1/5: Criando/Atualizando usuário '$DB_USER' e banco '$DB_NAME'..."
 sudo -u postgres psql <<EOSQL
 DO \$\$
 BEGIN
@@ -38,14 +38,19 @@ SELECT 'CREATE DATABASE $DB_NAME WITH OWNER postgres ENCODING UTF8'
 WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = '$DB_NAME')\gexec
 EOSQL
 
-echo "2/4: Aplicando estrutura de tabelas (01_estrutura.sql)..."
-sudo -u postgres psql -d "$DB_NAME" < "$SQL_DIR/01_estrutura.sql" > /dev/null
+echo "2/5: Aplicando estrutura de tabelas (01_estrutura.sql)..."
+sudo -u postgres psql -v ON_ERROR_STOP=1 -d "$DB_NAME" < "$SQL_DIR/01_estrutura.sql" > /dev/null
 
-echo "3/4: Configurando permissões do usuário de aplicação (02_permissoes.sql)..."
-sudo -u postgres psql -d "$DB_NAME" < "$SQL_DIR/02_permissoes.sql" > /dev/null
+echo "3/5: Configurando permissões do usuário de aplicação (02_permissoes.sql)..."
+sudo -u postgres psql -v ON_ERROR_STOP=1 -d "$DB_NAME" < "$SQL_DIR/02_permissoes.sql" > /dev/null
 
-echo "4/4: Aplicando dados iniciais de desenvolvimento (03_seed_dev.sql)..."
-sudo -u postgres psql -d "$DB_NAME" < "$SQL_DIR/03_seed_dev.sql" > /dev/null
+echo "4/5: Aplicando dados iniciais de desenvolvimento (03_seed_dev.sql)..."
+sudo -u postgres psql -v ON_ERROR_STOP=1 -d "$DB_NAME" < "$SQL_DIR/03_seed_dev.sql" > /dev/null
+
+echo "5/5: Aplicando as migrações 04 a 08..."
+for migration in "$SQL_DIR"/0[4-8]_*.sql; do
+    sudo -u postgres psql -v ON_ERROR_STOP=1 -d "$DB_NAME" < "$migration" > /dev/null
+done
 
 # Criar ou atualizar backend/.env
 ENV_FILE="$DIR/.env"

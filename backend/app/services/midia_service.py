@@ -14,7 +14,7 @@ from fastapi import UploadFile
 from psycopg import Connection
 
 from app.config import get_settings
-from app.errors import conflito, invalido
+from app.errors import conflito, invalido, nao_encontrado
 
 
 MAX_FOTOS = 6
@@ -113,6 +113,7 @@ def salvar_arquivo(conteudo: bytes, mime_type: str) -> tuple[str, Path]:
     """Salva um arquivo localmente com nome unico."""
 
     extensoes = {
+        "application/pdf": ".pdf",
         "image/jpeg": ".jpg",
         "image/png": ".png",
         "image/webp": ".webp",
@@ -147,9 +148,6 @@ def cadastrar_midia(
 
     tipo, mime_type = validar_midia(conteudo)
 
-    if anuncio["estado_comercial"] == "VENDIDO":
-        raise conflito("Não é possível adicionar mídia a um anúncio vendido.")
-
     chave = None
     caminho = None
 
@@ -167,10 +165,10 @@ def cadastrar_midia(
                 (anuncio["id"],),
             ).fetchone()
 
-            if estado["estado_comercial"] == "VENDIDO":
-                raise conflito(
-                    "Não é possível adicionar mídia a um anúncio vendido."
-                )
+            if estado is None:
+                raise nao_encontrado("Anúncio não encontrado.")
+            if estado["estado_comercial"] in ("VENDIDO", "CANCELADO"):
+                raise conflito("Não é possível adicionar mídia a um anúncio encerrado.")
 
             midias = conn.execute(
                 """

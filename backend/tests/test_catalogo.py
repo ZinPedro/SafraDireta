@@ -86,10 +86,10 @@ def test_catalogo_traz_a_capa_da_foto(client, vendedor, criar_anuncio):
 
 
 def test_filtros_do_catalogo(client, vendedor, criar_anuncio):
-    boi = criar_anuncio(vendedor, titulo="Boi filtro unico", uf="GO", precoTotal=70000)
+    boi = criar_anuncio(vendedor, titulo="Boi filtro unico", cidade="Goiânia", uf="GO", precoTotal=70000)
     soja = criar_anuncio(vendedor, tipo="graos", titulo="Soja filtro unica", uf="MT")
     milho = criar_anuncio(vendedor, tipo="graos", cultura="MILHO", subtipo="COMERCIAL_RACAO",
-                          titulo="Milho filtro unico", uf="PR", precoTotal=200000)
+                          titulo="Milho filtro unico", cidade="Londrina", uf="PR", precoTotal=200000)
 
     assert boi["id"] in _ids(client, categoria="ANIMAL") and soja["id"] not in _ids(client, categoria="ANIMAL")
     assert {soja["id"], milho["id"]} <= _ids(client, categoria="GRAOS")
@@ -101,7 +101,10 @@ def test_filtros_do_catalogo(client, vendedor, criar_anuncio):
 
 
 def test_ordem_e_paginacao(client, vendedor, criar_anuncio):
-    baratos = [criar_anuncio(vendedor, titulo=f"Pagina teste {n}", uf="AC", precoTotal=1000 * n) for n in (3, 1, 2)]
+    baratos = [
+        criar_anuncio(vendedor, titulo=f"Pagina teste {n}", cidade="Rio Branco", uf="AC", precoTotal=1000 * n)
+        for n in (3, 1, 2)
+    ]
     params = {"uf": "AC", "tamanho": 2}
 
     r = client.get("/api/anuncios", params={**params, "ordem": "menor_preco"}).json()

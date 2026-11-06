@@ -317,16 +317,27 @@ export const BUYER_ONLY_ACCOUNT_IDS = new Set<string>([
   "a7f57e8e-d032-4107-963c-2de3a078fe13", // Pedro Henrique Coan Zin (Comprador PF)
 ]);
 
-const KNOWN_REAL_ACCOUNTS: KnownAccountInfo[] = [
+export const KNOWN_REAL_ACCOUNTS: KnownAccountInfo[] = [
   {
     id: "26aa7800-eb21-4d65-838e-91830e3cda5f",
     nome: "Fernando Kintschner",
     email: "fernando@gmail.com",
     tipo: "PF",
     cpfCnpj: "12345678909",
-    farmName: "PUC Campinas",
-    cidade: "Campinas",
-    uf: "SP",
+    farmName: "Fazenda Bela Vista",
+    cidade: "Uberaba",
+    uf: "MG",
+    estadoVendedor: "HABILITADO",
+  },
+  {
+    id: "6bc5b7b6-8334-44fb-83ea-67c6a04c0c0d",
+    nome: "Agropecuária Vale Dourado Comércio e Exportação LTDA",
+    email: "contato@valedourado.com.br",
+    tipo: "PJ",
+    cpfCnpj: "00000000000100",
+    farmName: "Fazenda Vale Dourado",
+    cidade: "Rio Verde",
+    uf: "GO",
     estadoVendedor: "HABILITADO",
   },
   {
@@ -336,7 +347,7 @@ const KNOWN_REAL_ACCOUNTS: KnownAccountInfo[] = [
     tipo: "PF",
     cpfCnpj: "15875033959",
     farmName: "Fazendinha Hay Day da Maria",
-    cidade: "Baneario Camboriu",
+    cidade: "Balneario Camboriu",
     uf: "SC",
     estadoVendedor: "HABILITADO",
   },
@@ -355,6 +366,10 @@ const KNOWN_REAL_ACCOUNTS: KnownAccountInfo[] = [
     email: "pucc@gmail.com",
     tipo: "PJ",
     cpfCnpj: "74608768000189",
+    farmName: "PUCC Fazenda",
+    cidade: "Campinas",
+    uf: "SP",
+    estadoVendedor: "HABILITADO",
     pjData: {
       razaoSocial: "PUCCamp",
       nomeFantasia: "PUCC",
@@ -385,7 +400,7 @@ const KNOWN_REAL_ACCOUNTS: KnownAccountInfo[] = [
   },
 ];
 
-function resolverDadosConta(id: string, email?: string, nome?: string): KnownAccountInfo | undefined {
+export function resolverDadosConta(id: string, email?: string, nome?: string): KnownAccountInfo | undefined {
   const cleanEmail = email?.trim().toLowerCase();
   const cleanNome = nome?.trim().toLowerCase();
 

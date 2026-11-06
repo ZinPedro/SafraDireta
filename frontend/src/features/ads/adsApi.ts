@@ -283,10 +283,166 @@ export function payloadGraosParaBackend(input: CreateGrainAdInput) {
   };
 }
 
+export interface KnownAdMeta {
+  farmName: string;
+  vendedorNome: string;
+  vendedorId: string;
+  raca?: string;
+  racaPersonalizada?: string;
+}
+
+const AD_BREED_CACHE_KEY = "safradireta_ad_breed_cache";
+
+export function salvarRacaEmCache(adId: string, raca: string, racaPersonalizada?: string): void {
+  if (!adId) return;
+  try {
+    const raw = sessionStorage.getItem(AD_BREED_CACHE_KEY);
+    const map: Record<string, { raca: string; racaPersonalizada?: string }> = raw ? JSON.parse(raw) : {};
+    map[adId] = { raca, racaPersonalizada };
+    sessionStorage.setItem(AD_BREED_CACHE_KEY, JSON.stringify(map));
+  } catch {}
+}
+
+export function obterRacaDeCache(adId: string): { raca: string; racaPersonalizada?: string } | undefined {
+  if (!adId) return undefined;
+  try {
+    const raw = sessionStorage.getItem(AD_BREED_CACHE_KEY);
+    if (!raw) return undefined;
+    const map = JSON.parse(raw);
+    return map[adId];
+  } catch {
+    return undefined;
+  }
+}
+
+export function inferirRacaDeTexto(texto?: string): { raca: string; racaPersonalizada?: string } | undefined {
+  if (!texto) return undefined;
+  const t = texto.toLowerCase();
+  if (
+    t.includes("cruzamento industrial") ||
+    t.includes("cruzamento f1") ||
+    t.includes("industrial f1") ||
+    t.includes("girolando") ||
+    t.includes("meio-sangue") ||
+    t.includes("1/2 sangue") ||
+    t.includes("f1")
+  ) {
+    return { raca: "Cruzamento Industrial F1" };
+  }
+  if (t.includes("angus") || t.includes("aberdeen")) {
+    return { raca: "Angus (Aberdeen Angus)" };
+  }
+  if (t.includes("brangus")) {
+    return { raca: "Brangus" };
+  }
+  if (t.includes("senepol")) {
+    return { raca: "Senepol" };
+  }
+  if (t.includes("brahman")) {
+    return { raca: "Brahman" };
+  }
+  if (t.includes("tabapuã") || t.includes("tabapua")) {
+    return { raca: "Tabapuã" };
+  }
+  if (t.includes("guzerá") || t.includes("guzera")) {
+    return { raca: "Guzerá" };
+  }
+  if (t.includes("hereford") || t.includes("braford")) {
+    return { raca: "Hereford / Braford" };
+  }
+  if (t.includes("anelorado") || t.includes("mestiço") || t.includes("mestico")) {
+    return { raca: "Anelorado / Mestiço" };
+  }
+  if (t.includes("dorper") || t.includes("borrega") || t.includes("ovino") || t.includes("carneiro")) {
+    return { raca: "OUTRA", racaPersonalizada: "Ovinos / Dorper" };
+  }
+  if (t.includes("nelore")) {
+    return { raca: "Nelore" };
+  }
+  return undefined;
+}
+
+export const KNOWN_AD_METADATA: Record<string, KnownAdMeta> = {
+  // Fernando Kintschner - Fazenda Bela Vista (Uberaba / Araxá - MG)
+  "2c2e20a6-4133-44af-a1b4-f49dd9db7731": {
+    farmName: "Fazenda Bela Vista",
+    vendedorNome: "Fernando Kintschner",
+    vendedorId: "26aa7800-eb21-4d65-838e-91830e3cda5f",
+    raca: "Nelore",
+  },
+  "0fb43c11-1b4e-4a33-a567-470aca113ad6": {
+    farmName: "Fazenda Bela Vista",
+    vendedorNome: "Fernando Kintschner",
+    vendedorId: "26aa7800-eb21-4d65-838e-91830e3cda5f",
+    raca: "Angus (Aberdeen Angus)",
+  },
+  "8c00d303-e008-46e6-833a-9045b133b008": {
+    farmName: "Fazenda Bela Vista",
+    vendedorNome: "Fernando Kintschner",
+    vendedorId: "26aa7800-eb21-4d65-838e-91830e3cda5f",
+    raca: "Nelore",
+  },
+  "0ab3a44a-82bb-48e1-a6a0-abc2878660d1": {
+    farmName: "Fazenda Bela Vista",
+    vendedorNome: "Fernando Kintschner",
+    vendedorId: "26aa7800-eb21-4d65-838e-91830e3cda5f",
+    raca: "Nelore",
+  },
+  "ed6510ce-7e31-4643-88cb-500696744f13": {
+    farmName: "Fazenda Bela Vista",
+    vendedorNome: "Fernando Kintschner",
+    vendedorId: "26aa7800-eb21-4d65-838e-91830e3cda5f",
+  },
+  // Agropecuária Vale Dourado - Fazenda Vale Dourado (Rio Verde - GO)
+  "bd31bd0e-8cff-40de-8c2f-42bbb2297b77": {
+    farmName: "Fazenda Vale Dourado",
+    vendedorNome: "Agropecuária Vale Dourado Comércio e Exportação LTDA",
+    vendedorId: "6bc5b7b6-8334-44fb-83ea-67c6a04c0c0d",
+  },
+  // Maria Luisa Coan Zin - Fazendinha Hay Day da Maria (Chapecó / Lages - SC)
+  "e357d58e-d8d5-4118-b0d9-e1b377a2f6c6": {
+    farmName: "Fazendinha Hay Day da Maria",
+    vendedorNome: "Maria Luisa Coan Zin",
+    vendedorId: "66d23d46-5e71-47d1-8b56-be1654bc0cc0",
+    raca: "Cruzamento Industrial F1",
+  },
+  "ed676a1a-cb2d-454c-a4bd-bd3af4ec7fbe": {
+    farmName: "Fazendinha Hay Day da Maria",
+    vendedorNome: "Maria Luisa Coan Zin",
+    vendedorId: "66d23d46-5e71-47d1-8b56-be1654bc0cc0",
+  },
+  // Dorper / Ovinos
+  "96c0f65a-5081-4fb3-8490-cab62bab5f2e": {
+    farmName: "Fazenda Santa Fé",
+    vendedorNome: "Produtor Rural",
+    vendedorId: "66d23d46-5e71-47d1-8b56-be1654bc0cc0",
+    raca: "OUTRA",
+    racaPersonalizada: "Ovinos / Dorper",
+  },
+};
+
 export function adaptarAnuncioDaApiParaFrontend(
   apiAd: Record<string, any>,
   fallbackLocal?: MarketplaceAd
 ): MarketplaceAd {
+  const adId = String(apiAd.id || "");
+  const knownMeta = KNOWN_AD_METADATA[adId];
+
+  const resolvedVendedorId = String(
+    apiAd.vendedorId || fallbackLocal?.vendedorId || knownMeta?.vendedorId || ""
+  );
+  const resolvedVendedorNome =
+    apiAd.vendedor?.nome ||
+    fallbackLocal?.vendedorNome ||
+    knownMeta?.vendedorNome ||
+    "Produtor Rural";
+  const resolvedFarmName =
+    apiAd.farmName ||
+    apiAd.nomePropriedade ||
+    fallbackLocal?.farmName ||
+    knownMeta?.farmName ||
+    "Fazenda";
+
   const isAnimal = apiAd.categoria === "ANIMAL" || Boolean(apiAd.quantidadeCabecas);
   const midias = Array.isArray(apiAd.midias) ? apiAd.midias : [];
   const fotosUrls = midias
@@ -328,9 +484,33 @@ export function adaptarAnuncioDaApiParaFrontend(
     : apiAd.observacoesEncerramento || fallbackLocal?.observacoesEncerramento;
 
   if (isAnimal) {
-    let raca = BREED_BACK_TO_FRONT[apiAd.raca] || apiAd.raca || "Nelore";
-    if (raca === "OUTRA" && apiAd.racaPersonalizada) {
-      raca = apiAd.racaPersonalizada;
+    const rawRacaApi = apiAd.raca ? (BREED_BACK_TO_FRONT[apiAd.raca] || apiAd.raca) : undefined;
+    const localRaca = fallbackLocal?.categoria === "ANIMAL" ? fallbackLocal.raca : undefined;
+    const cached = obterRacaDeCache(adId);
+    const knownRaca = knownMeta?.raca;
+    const inferred = inferirRacaDeTexto(`${apiAd.titulo || ""} ${apiAd.descricao || ""} ${apiAd.produto || ""}`);
+
+    let raca =
+      rawRacaApi ||
+      localRaca ||
+      cached?.raca ||
+      knownRaca ||
+      inferred?.raca ||
+      "Nelore";
+
+    let racaPersonalizada =
+      apiAd.racaPersonalizada ||
+      (fallbackLocal?.categoria === "ANIMAL" ? (fallbackLocal as any).racaPersonalizada : undefined) ||
+      cached?.racaPersonalizada ||
+      knownMeta?.racaPersonalizada ||
+      inferred?.racaPersonalizada;
+
+    if (raca === "OUTRA" && racaPersonalizada) {
+      raca = racaPersonalizada;
+    }
+
+    if (adId && raca) {
+      salvarRacaEmCache(adId, raca, racaPersonalizada);
     }
 
     const cabecas = apiAd.quantidadeCabecas || 1;
@@ -343,11 +523,11 @@ export function adaptarAnuncioDaApiParaFrontend(
     const precoPorArroba = pesoTotalArroba > 0 ? Number((precoTotal / pesoTotalArroba).toFixed(2)) : 0;
 
     const animalAd: AnimalLotAd = {
-      id: String(apiAd.id),
-      vendedorId: String(apiAd.vendedorId || fallbackLocal?.vendedorId || ""),
-      vendedorNome: apiAd.vendedor?.nome || fallbackLocal?.vendedorNome || "Produtor Rural",
+      id: adId,
+      vendedorId: resolvedVendedorId,
+      vendedorNome: resolvedVendedorNome,
       vendedorAvatar: fallbackLocal?.vendedorAvatar,
-      farmName: fallbackLocal?.farmName || "Fazenda",
+      farmName: resolvedFarmName,
       titulo: apiAd.titulo || "",
       descricao: apiAd.descricao || undefined,
       categoria: "ANIMAL",
@@ -401,11 +581,11 @@ export function adaptarAnuncioDaApiParaFrontend(
       pesoTotalToneladas > 0 ? Number((precoTotal / pesoTotalToneladas).toFixed(2)) : 0;
 
     const grainAd: GrainLotAd = {
-      id: String(apiAd.id),
-      vendedorId: String(apiAd.vendedorId || fallbackLocal?.vendedorId || ""),
-      vendedorNome: apiAd.vendedor?.nome || fallbackLocal?.vendedorNome || "Produtor Rural",
+      id: adId,
+      vendedorId: resolvedVendedorId,
+      vendedorNome: resolvedVendedorNome,
       vendedorAvatar: fallbackLocal?.vendedorAvatar,
-      farmName: fallbackLocal?.farmName || "Fazenda",
+      farmName: resolvedFarmName,
       titulo: apiAd.titulo || "",
       descricao: apiAd.descricao || undefined,
       categoria: "GRAOS",
@@ -578,6 +758,32 @@ export async function apiEditarAnuncioBackend(
   return resp.json();
 }
 
+function normalizarMotivoParaBackend(motivo: string): string {
+  const mapa: Record<string, string> = {
+    "Venda externa (Frigorífico / Indústria)": "VENDA_EXTERNA",
+    "Venda para outro produtor / vizinho": "VENDA_OUTRO_PRODUTOR",
+    "Negociação intermediada pelo SafraDireta": "NEGOCIACAO_SAFRADIRETA",
+    "Outro destino comercial": "OUTRO_DESTINO_COMERCIAL",
+    "Retenção na propriedade (recria / confinamento / silo)": "RETENCAO_PROPRIEDADE",
+    "Perda física ou descarte sanitário": "PERDA_FISICA_SANITARIA",
+    "Desistência comercial (mercado desfavorável)": "DESISTENCIA_COMERCIAL",
+    "Erro de cadastro / Duplicidade": "ERRO_CADASTRO",
+    "Outro motivo": "OUTRO_MOTIVO",
+  };
+
+  if (mapa[motivo]) return mapa[motivo];
+  if (/^[A-Z][A-Z0-9_]*$/.test(motivo)) return motivo;
+
+  const normalizado = motivo
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^A-Za-z0-9_]+/g, "_")
+    .toUpperCase()
+    .replace(/^_+|_+$/g, "");
+
+  return normalizado || "OUTRO_MOTIVO";
+}
+
 export async function apiEncerrarAnuncioBackend(
   anuncioId: string,
   payload: {
@@ -588,17 +794,29 @@ export async function apiEncerrarAnuncioBackend(
   },
   token: string
 ): Promise<Record<string, any>> {
-  const resp = await fetch(`/api/vendedor/anuncios/${anuncioId}/encerrar`, {
-    method: "POST",
+  const body = {
+    status: payload.tipo,
+    motivo: normalizarMotivoParaBackend(payload.motivo),
+    observacoes: payload.observacoes?.trim() || undefined,
+  };
+
+  const resp = await fetch(`/api/anuncios/${anuncioId}/status`, {
+    method: "PATCH",
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${token}`,
     },
-    body: JSON.stringify(payload),
+    body: JSON.stringify(body),
   });
+
   if (!resp.ok) {
     const errorBody = await resp.json().catch(() => null);
-    throw new Error(errorBody?.erro?.mensagem || `Erro ao encerrar anúncio (HTTP ${resp.status})`);
+    throw new Error(
+      errorBody?.erro?.mensagem ||
+      errorBody?.detail?.[0]?.msg ||
+      errorBody?.message ||
+      `Erro ao encerrar anúncio (HTTP ${resp.status})`
+    );
   }
   return resp.json();
 }

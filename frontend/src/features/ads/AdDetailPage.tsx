@@ -30,6 +30,7 @@ import type {
 } from "./ads.types";
 import {
   alternarStatusAnuncio,
+  carregarDoStorage,
   encerrarAnuncio,
   obterAnuncioPorId,
   obterPerfilProdutorPublico,
@@ -235,9 +236,18 @@ export function AdDetailPage({ onOpenDialog }: AdDetailPageProps) {
     setActiveToast("Lote liberado pela Moderação e republicado no Mercado!");
   }
 
+  const verificarIsOwner = (ad: MarketplaceAd | null) => {
+    if (!ad || !session) return false;
+    if (session.conta.id === ad.vendedorId) return true;
+    if (session.conta.tipo === "ADMIN") return true;
+    return carregarDoStorage().some(
+      (a) => a.id === ad.id && a.vendedorId === session.conta.id
+    );
+  };
+
   const recarregarSolicitacoes = () => {
     if (!anuncio?.id || !session) return;
-    if (session.conta.id === anuncio.vendedorId) {
+    if (verificarIsOwner(anuncio)) {
       void listarSolicitacoesAnuncio(anuncio.id, session.token).then(setSellerRequests);
     } else {
       void obterSolicitacaoComprador(anuncio.id, session.conta.id, session.token).then(setBuyerRequest);
@@ -249,7 +259,7 @@ export function AdDetailPage({ onOpenDialog }: AdDetailPageProps) {
     let isMounted = true;
     const adId = anuncio.id;
     const userId = session.conta.id;
-    const isOwnerUser = userId === anuncio.vendedorId;
+    const isOwnerUser = verificarIsOwner(anuncio);
 
     if (isOwnerUser) {
       void listarSolicitacoesAnuncio(adId, session.token).then((reqs) => {
@@ -325,12 +335,13 @@ export function AdDetailPage({ onOpenDialog }: AdDetailPageProps) {
     );
   }
 
-  const isOwner = Boolean(session && session.conta.id === anuncio.vendedorId);
+  const isOwner = verificarIsOwner(anuncio);
   const isAdmin = session?.conta.tipo === "ADMIN";
   const isApprovedBuyer = Boolean(buyerRequest && buyerRequest.status === "APROVADO");
   const hasUnlockedAccess = Boolean(isOwner || isAdmin || isApprovedBuyer);
   const isClosed = anuncio.status === "VENDIDO" || anuncio.status === "CANCELADO";
   const [tag1, tag2] = obterTagsAnuncio(anuncio);
+  const pedidosPendentesCount = sellerRequests.filter((r) => r.status === "PENDENTE").length;
 
   const hasVideo = Boolean(anuncio.video?.url);
 
@@ -495,6 +506,34 @@ export function AdDetailPage({ onOpenDialog }: AdDetailPageProps) {
               </Link>
             </div>
           )
+        )}
+        {/* Banner de Solicitações de Documentos Pendentes para o Vendedor */}
+        {isOwner && pedidosPendentesCount > 0 && (
+          <div className="ad-alert ad-alert--doc-pending" role="status">
+            <div className="ad-alert__content">
+              <Icon name="file" />
+              <div>
+                <strong>
+                  {pedidosPendentesCount === 1
+                    ? "1 solicitação de documentos aguardando sua autorização"
+                    : `${pedidosPendentesCount} solicitações de documentos aguardando sua autorização`}
+                </strong>
+                <p>
+                  Comprador(es) interessado(s) solicitaram acesso aos laudos técnicos e guias sanitárias deste lote no Data Room.
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              className="button button--primary button--small"
+              onClick={() => {
+                const el = document.querySelector(".ad-doc-seller-panel") || document.getElementById("heading-documentacao");
+                el?.scrollIntoView({ behavior: "smooth" });
+              }}
+            >
+              <Icon name="user" /> Revisar Solicitações
+            </button>
+          </div>
         )}
 
         {/* Layout Principal da Ficha Técnica */}
@@ -1402,6 +1441,34 @@ export function AdDetailPage({ onOpenDialog }: AdDetailPageProps) {
                     <div className="ad-owner-badge ad-owner-badge--active">
                       <Icon name="check" /> Seu Lote Ativo no Mercado
                     </div>
+                  )}
+
+                  {/* Alerta de Documentos Pendentes no Sidebar para o Dono */}
+                  {pedidosPendentesCount > 0 && (
+                    <button
+                      type="button"
+                      className="button button--secondary button--full"
+                      style={{
+                        backgroundColor: "#fffbeb",
+                        borderColor: "#fde68a",
+                        color: "#92400e",
+                        fontWeight: 700,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: "0.5rem",
+                        marginTop: "0.75rem",
+                        marginBottom: "0.75rem",
+                      }}
+                      onClick={() => {
+                        const el = document.querySelector(".ad-doc-seller-panel") || document.getElementById("heading-documentacao");
+                        el?.scrollIntoView({ behavior: "smooth" });
+                      }}
+                      title="Ver solicitações de documentos aguardando sua autorização"
+                    >
+                      <Icon name="file" /> {pedidosPendentesCount}{" "}
+                      {pedidosPendentesCount === 1 ? "Pedido de Documento" : "Pedidos de Documentos"}
+                    </button>
                   )}
 
                   {isClosed ? (

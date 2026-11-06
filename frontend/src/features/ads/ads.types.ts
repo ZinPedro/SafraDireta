@@ -535,15 +535,117 @@ export const COFFEE_SCREEN_LABELS: Record<CoffeeScreen, string> = {
   BICA_CORRIDA: "Bica Corrida",
 };
 
+export const MAPA_RACAS_BOI_GORDO: Record<string, string> = {
+  "Nelore": "Nelore",
+  "Angus (Aberdeen Angus)": "Angus",
+  "Angus": "Angus",
+  "Brangus": "Brangus",
+  "Cruzamento Industrial F1": "Cruzamento F1",
+  "Cruzamento Industrial": "Cruzamento F1",
+  "Cruzamento F1": "Cruzamento F1",
+  "Senepol": "Senepol",
+  "Brahman": "Brahman",
+  "Tabapuã": "Tabapuã",
+  "Guzerá": "Guzerá",
+  "Hereford / Braford": "Hereford/Braford",
+  "Hereford": "Hereford",
+  "Braford": "Braford",
+  "Anelorado / Mestiço": "Anelorado",
+  "Anelorado": "Anelorado",
+  "Mestiço": "Mestiço",
+};
+
+export function formatarTextoTagCurta(texto: string, maxLen = 18): string {
+  if (!texto) return "";
+  const limpo = texto.trim();
+  if (limpo.length <= maxLen) return limpo;
+  return limpo.slice(0, maxLen - 1).trim() + "…";
+}
+
 export function obterTagsAnuncio(anuncio: MarketplaceAd): [string, string] {
   if (anuncio.categoria === "GRAOS") {
+    if (anuncio.cultura === "OUTRO") {
+      const custom = anuncio.culturaPersonalizada || anuncio.subtipo || "Grão / Cereal";
+      return ["Outro", formatarTextoTagCurta(custom, 18)];
+    }
     const tag1 = anuncio.tagPrincipal || GRAIN_CROP_LABELS[anuncio.cultura] || "Grãos";
-    const tag2 = anuncio.tagSecundaria || anuncio.subtipo || anuncio.culturaPersonalizada || "Comercial";
-    return [tag1, tag2];
+    if (anuncio.subtipo === "OUTRO" || anuncio.subtipo?.startsWith("OUTRO")) {
+      const customSub = anuncio.culturaPersonalizada || "Especial";
+      return [tag1, formatarTextoTagCurta(customSub, 18)];
+    }
+    const tag2 = anuncio.tagSecundaria || anuncio.subtipo || "Comercial";
+    return [tag1, formatarTextoTagCurta(tag2, 18)];
   }
-  const tag1 = anuncio.especie === "BOVINO" ? "Boi Gordo" : SPECIES_LABELS[anuncio.especie];
-  const tag2 = anuncio.raca || "Nelore";
-  return [tag1, tag2];
+
+  // Categoria ANIMAL (Boi Gordo / Raças)
+  let racaRaw = (anuncio.raca || "").trim();
+  let racaPersonalizada = ((anuncio as any).racaPersonalizada || "").trim();
+
+  // Se for Nelore padrão ou vazio, verifica se o título/descrição indica explicitamente outra raça
+  if (!racaRaw || racaRaw === "Nelore") {
+    const textoContexto = `${anuncio.titulo || ""} ${anuncio.descricao || ""}`.toLowerCase();
+    if (
+      textoContexto.includes("cruzamento industrial") ||
+      textoContexto.includes("cruzamento f1") ||
+      textoContexto.includes("industrial f1") ||
+      textoContexto.includes("girolando") ||
+      textoContexto.includes("meio-sangue") ||
+      textoContexto.includes("1/2 sangue") ||
+      textoContexto.includes("f1")
+    ) {
+      racaRaw = "Cruzamento Industrial F1";
+    } else if (textoContexto.includes("angus") || textoContexto.includes("aberdeen")) {
+      racaRaw = "Angus (Aberdeen Angus)";
+    } else if (textoContexto.includes("brangus")) {
+      racaRaw = "Brangus";
+    } else if (textoContexto.includes("senepol")) {
+      racaRaw = "Senepol";
+    } else if (textoContexto.includes("brahman")) {
+      racaRaw = "Brahman";
+    } else if (textoContexto.includes("tabapuã") || textoContexto.includes("tabapua")) {
+      racaRaw = "Tabapuã";
+    } else if (textoContexto.includes("guzerá") || textoContexto.includes("guzera")) {
+      racaRaw = "Guzerá";
+    } else if (textoContexto.includes("hereford") || textoContexto.includes("braford")) {
+      racaRaw = "Hereford / Braford";
+    } else if (textoContexto.includes("anelorado") || textoContexto.includes("mestiço")) {
+      racaRaw = "Anelorado / Mestiço";
+    } else if (textoContexto.includes("dorper") || textoContexto.includes("ovino") || textoContexto.includes("borrega")) {
+      racaRaw = "OUTRA";
+      if (!racaPersonalizada) racaPersonalizada = "Ovinos / Dorper";
+    }
+  }
+
+  // Verifica se é uma raça padrão de boi gordo
+  let racaBoiGordo: string | undefined = MAPA_RACAS_BOI_GORDO[racaRaw];
+  if (!racaBoiGordo && racaRaw) {
+    const key = Object.keys(MAPA_RACAS_BOI_GORDO).find(
+      (k) => k.toLowerCase() === racaRaw.toLowerCase()
+    );
+    if (key) racaBoiGordo = MAPA_RACAS_BOI_GORDO[key];
+  }
+
+  if (racaBoiGordo) {
+    return ["Boi Gordo", formatarTextoTagCurta(racaBoiGordo, 18)];
+  }
+
+  // Se for "OUTRA", "OUTRO", espécie "OUTRO" ou raça personalizada não mapeada
+  const isOutro =
+    racaRaw === "OUTRA" ||
+    racaRaw === "OUTRO" ||
+    (anuncio.especie as string) === "OUTRO" ||
+    Boolean(racaPersonalizada) ||
+    Boolean(racaRaw && !racaBoiGordo);
+
+  if (isOutro) {
+    const textoCustom =
+      racaPersonalizada ||
+      (racaRaw !== "OUTRA" && racaRaw !== "OUTRO" ? racaRaw : "") ||
+      "Outra Raça";
+    return ["Outro", formatarTextoTagCurta(textoCustom, 18)];
+  }
+
+  return ["Boi Gordo", "Nelore"];
 }
 
 export function obterFotoCapa(anuncio: MarketplaceAd): string {

@@ -44,8 +44,9 @@ import {
   converterDataUrlParaBlob,
   payloadAnimalParaBackend,
   payloadGraosParaBackend,
+  KNOWN_AD_METADATA,
 } from "./adsApi";
-import { BUYER_ONLY_ACCOUNT_IDS, listarProdutoresAdmin } from "../admin/adminStorage";
+import { BUYER_ONLY_ACCOUNT_IDS, listarProdutoresAdmin, resolverDadosConta } from "../admin/adminStorage";
 
 const STORAGE_KEY = "safradireta_anuncios";
 
@@ -118,7 +119,7 @@ function sanitizarAnunciosParaStorage(anuncios: MarketplaceAd[]): MarketplaceAd[
   });
 }
 
-function carregarDoStorage(): MarketplaceAd[] {
+export function carregarDoStorage(): MarketplaceAd[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) {
@@ -208,13 +209,40 @@ export function hidratarAnuncioComPerfil<T extends MarketplaceAd>(anuncio: T): T
     const raw = localStorage.getItem(`safradireta_mock_profile:${anuncio.vendedorId}`);
     const parsed = raw ? JSON.parse(raw) : null;
 
-    const farmName =
+    let farmName =
       parsed?.seller?.farmName?.trim() ||
       anuncio.farmName;
 
-    const vendedorNome =
+    // Se ainda for fallback genérico "Fazenda", busca nos metadados ou na conta conhecida
+    if (!farmName || farmName === "Fazenda") {
+      const adMeta = KNOWN_AD_METADATA[anuncio.id];
+      if (adMeta?.farmName) {
+        farmName = adMeta.farmName;
+      } else {
+        const known = resolverDadosConta(anuncio.vendedorId, undefined, anuncio.vendedorNome);
+        if (known?.farmName) {
+          farmName = known.farmName;
+        } else if (isCurrentUser && session?.conta?.nome) {
+          farmName = `Fazenda ${session.conta.nome}`;
+        }
+      }
+    }
+
+    let vendedorNome =
       parsed?.account?.nome?.trim() ||
       (isCurrentUser && session?.conta.nome ? session.conta.nome : anuncio.vendedorNome);
+
+    if (!vendedorNome || vendedorNome === "Produtor Rural") {
+      const adMeta = KNOWN_AD_METADATA[anuncio.id];
+      if (adMeta?.vendedorNome) {
+        vendedorNome = adMeta.vendedorNome;
+      } else {
+        const known = resolverDadosConta(anuncio.vendedorId);
+        if (known?.nome) {
+          vendedorNome = known.nome;
+        }
+      }
+    }
 
     const vendedorAvatar =
       parsed?.account?.avatarUrl ||
@@ -356,7 +384,10 @@ export async function listarAnunciosMercado(
 
     const catalogo = await apiListarCatalogoPublico(apiFiltros);
     if (catalogo?.itens && Array.isArray(catalogo.itens)) {
-      apiItens = catalogo.itens.map((item) => adaptarAnuncioDaApiParaFrontend(item));
+      const mapaLocais = new Map(carregarDoStorage().map((a) => [a.id, a]));
+      apiItens = catalogo.itens.map((item) =>
+        adaptarAnuncioDaApiParaFrontend(item, mapaLocais.get(String(item.id)))
+      );
     }
   } catch (apiErr) {
     console.warn("Aviso: consulta ao catálogo na API falhou, usando storage local:", apiErr);
@@ -368,6 +399,7 @@ export async function listarAnunciosMercado(
 
   const todos = [...apiItens, ...locaisAtivos]
     .map((a) => hidratarAnuncioComPerfil(a))
+    .filter((a) => a.status === "ATIVO")
     .sort((a, b) => new Date(b.criadoEm).getTime() - new Date(a.criadoEm).getTime());
 
   const resultado = await Promise.all(
@@ -570,6 +602,11 @@ export async function obterAnuncioPorId(id: string): Promise<MarketplaceAd | nul
 
     if (apiAd) {
       const adaptado = adaptarAnuncioDaApiParaFrontend(apiAd, encontrado);
+      if (!adaptado.vendedorId && session?.conta?.id) {
+        if (encontrado?.vendedorId === session.conta.id) {
+          adaptado.vendedorId = session.conta.id;
+        }
+      }
       return hidratarAnuncioComPerfil(adaptado);
     }
   } catch {
@@ -1444,6 +1481,9 @@ export async function encerrarAnuncio(
       await apiEncerrarAnuncioBackend(id, payload, session.token);
     } catch (apiErr) {
       console.warn("Aviso: encerramento na API backend falhou, prosseguindo com mock local:", apiErr);
+      if (session.token && !session.token.startsWith("admin-") && !session.token.startsWith("mock-")) {
+        throw apiErr;
+      }
     }
   }
 

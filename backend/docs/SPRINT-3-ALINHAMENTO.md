@@ -141,6 +141,27 @@ A API atual usa `busca`, `precoMin`, `precoMax`, `ordem`, `tamanho`, enquanto o 
 - DTO público deve listar campos permitidos: município, UF e região. Não serializar endereço fiscal, referência de endereço, latitude ou longitude, mesmo que existam no modelo.
 - GET `/api/anuncios/{id}/clonar`: validar proprietário e devolver atributos estruturais/localização/descrição. Zerar ID novo, estado/auditoria de venda e todas as mídias/documentos; não copiar favoritos nem autorizações. GET apenas prepara o formulário; a criação posterior usa a rota de criação.
 
+### 6. Pendência de Contrato do Catálogo: Exposição de `nome_propriedade` (Fazenda)
+
+- **Diagnóstico:** O endpoint público de catálogo (`GET /api/anuncios`) e a rota de detalhes (`GET /api/anuncios/{id}`) atualmente não retornam o nome da fazenda/propriedade (`nome_propriedade` cadastrado em `safradireta.habilitacao_vendedor`). Com isso, os cards de mercado agropecuário e a ficha técnica dependem de fallback no cliente.
+- **Ação necessária para o Backend (próxima iteração/sprint):**
+  1. Em `catalogo_service.py` (`listar_catalogo`), adicionar `LEFT JOIN safradireta.habilitacao_vendedor hv ON hv.conta_id = a.vendedor_id` e selecionar `hv.nome_propriedade`, expondo o campo `farmName` (ou `nomePropriedade`) no payload de cada item do catálogo.
+  2. Em `catalogo_service.py` (`detalhe_publico`), incluir `hv.nome_propriedade` na consulta de dados públicos do vendedor e retornar `farmName` / `nomePropriedade`.
+
+### 7. Pendência de Alinhamento: `vendedorId` no detalhe do lote e persistência de solicitações de documentos
+
+- **Diagnóstico:** Em `catalogo_service.py` (`detalhe_publico`), o backend remove intencionalmente o `vendedorId` do dicionário público (`anuncio.pop("vendedorId")`). Quando o próprio vendedor abre a URL do seu lote a partir de links diretos ou histórico, a identificação de posse do anúncio no cliente (`isOwner`) ficava comprometida.
+- **Ação necessária para o Backend (próxima iteração/sprint):**
+  1. Manter a rota de detalhes autenticada (`GET /api/anuncios/{id}`) para o proprietário com o `vendedor_id` íntegro no payload.
+  2. Assegurar que `GET /api/anuncios/{id}/documentos` liste todas as solicitações registradas no PostgreSQL para aquele lote quando o token do vendedor for fornecido, permitindo que a lista do backend reflita fielmente os pedidos aprovados e pendentes.
+
+### 8. Pendência no Catálogo: Inclusão de `la.raca` e `la.raca_personalizada` no SELECT da listagem pública
+
+- **Diagnóstico:** A função `listar_catalogo` em `backend/app/services/catalogo_service.py` seleciona `la.quantidade_animais`, mas omitiu `la.raca` e `la.raca_personalizada` na query SQL de listagem (`GET /api/anuncios`). Dessa forma, a miniatura dos cards do catálogo vinha sem a informação de raça da API, dependendo de inferência no cliente, enquanto a rota de detalhes (`GET /api/anuncios/{id}`) trazia a raça normalmente.
+- **Ação necessária para o Backend (próxima iteração/sprint):**
+  1. Em `catalogo_service.py` (`listar_catalogo`), acrescentar `la.raca, la.raca_personalizada` nas colunas do `SELECT` de `linhas`.
+  2. No loop de montagem dos itens, popular `item.update({"raca": r["raca"], "racaPersonalizada": r["raca_personalizada"]})` para lotes de animais.
+
 ## Ambiguidades a alinhar
 
 - O documento chama PAUSADO de encerrado na parte de favoritos, mas define estados finais como VENDIDO/CANCELADO. Sugestão: PAUSADO = indisponível temporário; VENDIDO/CANCELADO = encerrado; todos permanecem nos favoritos. Confirmar nomes das abas.

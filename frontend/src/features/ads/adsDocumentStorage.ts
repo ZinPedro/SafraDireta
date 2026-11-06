@@ -351,12 +351,15 @@ export async function listarSolicitacoesAnuncio(
   anuncioId: string,
   token?: string
 ): Promise<AdDocumentAccessRequest[]> {
+  const todasLocais = listarTodasSolicitacoesStorage();
+  const localDoAnuncio = todasLocais.filter((s) => s.anuncioId === anuncioId);
+
   // 1. Tenta obter da API se for o dono com token
   if (token) {
     try {
       const resp = await apiListarDocumentos(anuncioId, token);
       if (resp && Array.isArray(resp.solicitacoes)) {
-        return resp.solicitacoes.map((s) => ({
+        const apiMapped: AdDocumentAccessRequest[] = resp.solicitacoes.map((s) => ({
           id: String(s.id),
           anuncioId,
           compradorId: String(s.comprador_id),
@@ -369,18 +372,29 @@ export async function listarSolicitacoesAnuncio(
           respondidoEm: s.respondida_em || s.respondido_em,
           motivoRecusa: s.motivo_recusa,
         }));
+
+        if (apiMapped.length > 0) {
+          // Mescla com eventuais solicitações do mock local garantindo integridade
+          const apiIds = new Set(apiMapped.map((r) => r.id));
+          const mescladas = [
+            ...apiMapped,
+            ...localDoAnuncio.filter((l) => !apiIds.has(l.id)),
+          ];
+          return mescladas.sort(
+            (a, b) => new Date(b.solicitadoEm).getTime() - new Date(a.solicitadoEm).getTime()
+          );
+        }
       }
     } catch {
       /* fallback para storage local */
     }
   }
 
-  // 2. Fallback local
+  // 2. Se a API retornou vazia ou houve falha/offline, utiliza as solicitações locais
   await new Promise((resolve) => setTimeout(resolve, 40));
-  const todas = listarTodasSolicitacoesStorage();
-  return todas
-    .filter((s) => s.anuncioId === anuncioId)
-    .sort((a, b) => new Date(b.solicitadoEm).getTime() - new Date(a.solicitadoEm).getTime());
+  return localDoAnuncio.sort(
+    (a, b) => new Date(b.solicitadoEm).getTime() - new Date(a.solicitadoEm).getTime()
+  );
 }
 
 export async function responderSolicitacaoAcesso(

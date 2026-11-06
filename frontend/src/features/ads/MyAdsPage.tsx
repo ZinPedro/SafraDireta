@@ -400,9 +400,6 @@ export function MyAdsPage({ onOpenDialog }: MyAdsPageProps) {
                     )}
                   </div>
                   <div className="my-ad-card__content">
-                    <div className="my-ad-card__category-tag">
-                      {tag1} · {tag2}
-                    </div>
                     {pedidosPendentes > 0 && (
                       <div
                         className="my-ad-card__doc-request-badge"

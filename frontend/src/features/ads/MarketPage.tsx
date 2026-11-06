@@ -228,7 +228,14 @@ export function MarketPage({ onOpenDialog }: MarketPageProps = {}) {
 
   useEffect(() => {
     let isMounted = true;
-    listarAnunciosMercado()
+    listarAnunciosMercado({
+      q: debouncedTerm || undefined,
+      categoria: filtroCategoria,
+      cultura: filtroCultura,
+      preco_min: filtroPrecoMin,
+      preco_max: filtroPrecoMax,
+      ordem: ordenacaoAtiva,
+    })
       .then((resultado) => {
         if (isMounted) setAnuncios(resultado);
       })
@@ -239,7 +246,14 @@ export function MarketPage({ onOpenDialog }: MarketPageProps = {}) {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [
+    debouncedTerm,
+    filtroCategoria,
+    filtroCultura,
+    filtroPrecoMin,
+    filtroPrecoMax,
+    ordenacaoAtiva,
+  ]);
 
   // Sincroniza favoritos com a sessão ativa e resolve pendência pós-login (US-025)
   useEffect(() => {
@@ -247,7 +261,7 @@ export function MarketPage({ onOpenDialog }: MarketPageProps = {}) {
     const pendingId = sessionStorage.getItem("safra_pending_favorite");
     if (pendingId) {
       sessionStorage.removeItem("safra_pending_favorite");
-      alternarFavoritoStorage(session.conta.id, pendingId);
+      alternarFavoritoStorage(session.conta.id, pendingId, session?.token);
       queueMicrotask(() => {
         setFavoritosIds(obterFavoritosIds(session.conta.id));
       });
@@ -274,7 +288,7 @@ export function MarketPage({ onOpenDialog }: MarketPageProps = {}) {
       onOpenDialog?.("login");
       return;
     }
-    alternarFavoritoStorage(session.conta.id, anuncioId);
+    alternarFavoritoStorage(session.conta.id, anuncioId, session?.token);
     setFavoritosIds(obterFavoritosIds(session.conta.id));
   };
 

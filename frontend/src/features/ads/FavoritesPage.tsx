@@ -35,7 +35,7 @@ export function FavoritesPage({ onOpenDialog }: FavoritesPageProps) {
     if (!session?.conta?.id) return;
 
     let isMounted = true;
-    listarAnunciosFavoritados(session.conta.id)
+    listarAnunciosFavoritados(session.conta.id, session?.token)
       .then((itens) => {
         if (isMounted) {
           setFavoritos(itens);
@@ -49,7 +49,7 @@ export function FavoritesPage({ onOpenDialog }: FavoritesPageProps) {
 
     const handleFavoritosAtualizados = () => {
       if (session?.conta?.id) {
-        listarAnunciosFavoritados(session.conta.id).then((itens) => {
+        listarAnunciosFavoritados(session.conta.id, session?.token).then((itens) => {
           if (isMounted) setFavoritos(itens);
         });
       }
@@ -66,7 +66,7 @@ export function FavoritesPage({ onOpenDialog }: FavoritesPageProps) {
     e.stopPropagation();
     if (!session?.conta?.id) return;
 
-    alternarFavoritoStorage(session.conta.id, anuncioId);
+    alternarFavoritoStorage(session.conta.id, anuncioId, session?.token);
     setFavoritos((atuais) => atuais.filter((a) => a.id !== anuncioId));
 
     setToastMessage(`"${titulo}" removido dos favoritos.`);

@@ -603,3 +603,143 @@ export async function apiEncerrarAnuncioBackend(
   return resp.json();
 }
 
+/* =========================================================================
+   FAVORITOS (US-025)
+   ========================================================================= */
+
+export async function apiFavoritarAnuncio(anuncioId: string, token: string): Promise<void> {
+  const resp = await fetch(`/api/anuncios/${anuncioId}/favoritar`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+  if (!resp.ok && resp.status !== 204) {
+    const errorBody = await resp.json().catch(() => null);
+    throw new Error(errorBody?.erro?.mensagem || `Erro ao favoritar anúncio (HTTP ${resp.status})`);
+  }
+}
+
+export async function apiDesfavoritarAnuncio(anuncioId: string, token: string): Promise<void> {
+  const resp = await fetch(`/api/anuncios/${anuncioId}/favoritar`, {
+    method: "DELETE",
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+  if (!resp.ok && resp.status !== 204) {
+    const errorBody = await resp.json().catch(() => null);
+    throw new Error(errorBody?.erro?.mensagem || `Erro ao desfavoritar anúncio (HTTP ${resp.status})`);
+  }
+}
+
+export async function apiListarFavoritos(
+  token: string,
+  pagina = 1,
+  itensPorPagina = 24
+): Promise<{ itens: any[]; total: number; pagina: number; tamanho: number }> {
+  const params = new URLSearchParams({
+    pagina: String(pagina),
+    itens_por_pagina: String(itensPorPagina),
+  });
+  const resp = await fetch(`/api/favoritos?${params.toString()}`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+  if (!resp.ok) {
+    throw new Error(`Erro ao listar favoritos (HTTP ${resp.status})`);
+  }
+  return resp.json();
+}
+
+/* =========================================================================
+   DOCUMENTOS E DATA ROOM (US-013)
+   ========================================================================= */
+
+export async function apiUploadDocumento(
+  anuncioId: string,
+  tipo: string,
+  arquivo: File | Blob,
+  nomeArquivo: string,
+  token: string
+): Promise<any> {
+  const formData = new FormData();
+  formData.append("tipo", tipo);
+  formData.append("arquivo", arquivo, nomeArquivo);
+
+  const resp = await fetch(`/api/anuncios/${anuncioId}/documentos`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+    body: formData,
+  });
+
+  if (!resp.ok) {
+    const errorBody = await resp.json().catch(() => null);
+    throw new Error(errorBody?.erro?.mensagem || `Erro ao enviar documento (HTTP ${resp.status})`);
+  }
+  return resp.json();
+}
+
+export async function apiListarDocumentos(
+  anuncioId: string,
+  token: string
+): Promise<{ documentos: any[]; solicitacao?: any; solicitacoes?: any[] }> {
+  const resp = await fetch(`/api/anuncios/${anuncioId}/documentos`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+  if (!resp.ok) {
+    throw new Error(`Erro ao listar documentos do anúncio (HTTP ${resp.status})`);
+  }
+  return resp.json();
+}
+
+export async function apiSolicitarAcessoDocumento(
+  anuncioId: string,
+  mensagem: string,
+  token: string
+): Promise<any> {
+  const resp = await fetch(`/api/anuncios/${anuncioId}/documentos/solicitar`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ mensagem }),
+  });
+  if (!resp.ok) {
+    const errorBody = await resp.json().catch(() => null);
+    throw new Error(errorBody?.erro?.mensagem || `Erro ao solicitar acesso a documentos (HTTP ${resp.status})`);
+  }
+  return resp.json();
+}
+
+export async function apiDecidirSolicitacaoDocumento(
+  solicitacaoId: string,
+  status: "APROVADO" | "RECUSADO" | "REVOGADO" | "CANCELADO",
+  motivoRecusa: string | null,
+  token: string
+): Promise<any> {
+  const resp = await fetch(`/api/documentos/solicitacoes/${solicitacaoId}`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({
+      status,
+      motivo_recusa: motivoRecusa,
+    }),
+  });
+  if (!resp.ok) {
+    const errorBody = await resp.json().catch(() => null);
+    throw new Error(errorBody?.erro?.mensagem || `Erro ao atualizar solicitação de documento (HTTP ${resp.status})`);
+  }
+  return resp.json();
+}
+
+

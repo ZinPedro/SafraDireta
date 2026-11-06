@@ -96,7 +96,7 @@ export function AdDetailPage({ onOpenDialog }: AdDetailPageProps) {
     const pendingId = sessionStorage.getItem("safra_pending_favorite");
     if (pendingId) {
       sessionStorage.removeItem("safra_pending_favorite");
-      alternarFavoritoStorage(session.conta.id, pendingId);
+      alternarFavoritoStorage(session.conta.id, pendingId, session?.token);
       queueMicrotask(() => {
         setIsFavorito(true);
       });
@@ -121,7 +121,7 @@ export function AdDetailPage({ onOpenDialog }: AdDetailPageProps) {
       onOpenDialog?.("login");
       return;
     }
-    const novoEstado = alternarFavoritoStorage(session.conta.id, id);
+    const novoEstado = alternarFavoritoStorage(session.conta.id, id, session?.token);
     setIsFavorito(novoEstado);
     setActiveToast(
       novoEstado
@@ -238,9 +238,9 @@ export function AdDetailPage({ onOpenDialog }: AdDetailPageProps) {
   const recarregarSolicitacoes = () => {
     if (!anuncio?.id || !session) return;
     if (session.conta.id === anuncio.vendedorId) {
-      void listarSolicitacoesAnuncio(anuncio.id).then(setSellerRequests);
+      void listarSolicitacoesAnuncio(anuncio.id, session.token).then(setSellerRequests);
     } else {
-      void obterSolicitacaoComprador(anuncio.id, session.conta.id).then(setBuyerRequest);
+      void obterSolicitacaoComprador(anuncio.id, session.conta.id, session.token).then(setBuyerRequest);
     }
   };
 
@@ -252,11 +252,11 @@ export function AdDetailPage({ onOpenDialog }: AdDetailPageProps) {
     const isOwnerUser = userId === anuncio.vendedorId;
 
     if (isOwnerUser) {
-      void listarSolicitacoesAnuncio(adId).then((reqs) => {
+      void listarSolicitacoesAnuncio(adId, session.token).then((reqs) => {
         if (isMounted) setSellerRequests(reqs);
       });
     } else {
-      void obterSolicitacaoComprador(adId, userId).then((req) => {
+      void obterSolicitacaoComprador(adId, userId, session.token).then((req) => {
         if (isMounted) setBuyerRequest(req);
       });
     }
@@ -268,11 +268,17 @@ export function AdDetailPage({ onOpenDialog }: AdDetailPageProps) {
 
   const handleResponderSolicitacao = async (
     solicitacaoId: string,
-    novoStatus: DocumentAccessStatus
+    novoStatus: DocumentAccessStatus,
+    motivoRecusa: string | null = null
   ) => {
     try {
       setIsProcessingRequest(true);
-      const atualizada = await responderSolicitacaoAcesso(solicitacaoId, novoStatus);
+      const atualizada = await responderSolicitacaoAcesso(
+        solicitacaoId,
+        novoStatus,
+        motivoRecusa,
+        session?.token
+      );
       setSellerRequests((prev) =>
         prev.map((r) => (r.id === solicitacaoId ? atualizada : r))
       );

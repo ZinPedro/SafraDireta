@@ -313,12 +313,48 @@ export function correspondeBuscaAnuncio(anuncio: MarketplaceAd, termoBusca: stri
   return tokens.every((token) => camposPesquisaveis.includes(token));
 }
 
-export async function listarAnunciosMercado(termoBusca?: string): Promise<MarketplaceAd[]> {
+export interface FiltrosCatalogoMercado {
+  q?: string;
+  categoria?: "ANIMAL" | "GRAOS" | "TODOS";
+  cultura?: string;
+  uf?: string;
+  preco_min?: number | null;
+  preco_max?: number | null;
+  peso_min?: number | null;
+  peso_max?: number | null;
+  ordem?: string;
+  pagina?: number;
+  tamanho?: number;
+}
+
+export async function listarAnunciosMercado(
+  filtrosOuTermo?: string | FiltrosCatalogoMercado
+): Promise<MarketplaceAd[]> {
   await new Promise((resolve) => setTimeout(resolve, 80));
+
+  const filtros: FiltrosCatalogoMercado =
+    typeof filtrosOuTermo === "string"
+      ? { q: filtrosOuTermo }
+      : filtrosOuTermo || {};
+
+  const termoBusca = filtros.q;
 
   let apiItens: MarketplaceAd[] = [];
   try {
-    const catalogo = await apiListarCatalogoPublico(termoBusca ? { q: termoBusca } : undefined);
+    const apiFiltros: Record<string, string | number | undefined> = {};
+    if (filtros.q && filtros.q.trim()) apiFiltros.q = filtros.q.trim();
+    if (filtros.categoria && filtros.categoria !== "TODOS") apiFiltros.categoria = filtros.categoria;
+    if (filtros.cultura && filtros.cultura !== "TODAS") apiFiltros.cultura = filtros.cultura;
+    if (filtros.uf) apiFiltros.uf = filtros.uf;
+    if (filtros.preco_min !== null && filtros.preco_min !== undefined) apiFiltros.preco_min = filtros.preco_min;
+    if (filtros.preco_max !== null && filtros.preco_max !== undefined) apiFiltros.preco_max = filtros.preco_max;
+    if (filtros.peso_min !== null && filtros.peso_min !== undefined) apiFiltros.peso_min = filtros.peso_min;
+    if (filtros.peso_max !== null && filtros.peso_max !== undefined) apiFiltros.peso_max = filtros.peso_max;
+    if (filtros.ordem) apiFiltros.ordem = filtros.ordem;
+    if (filtros.pagina) apiFiltros.pagina = filtros.pagina;
+    if (filtros.tamanho) apiFiltros.tamanho = filtros.tamanho;
+
+    const catalogo = await apiListarCatalogoPublico(apiFiltros);
     if (catalogo?.itens && Array.isArray(catalogo.itens)) {
       apiItens = catalogo.itens.map((item) => adaptarAnuncioDaApiParaFrontend(item));
     }

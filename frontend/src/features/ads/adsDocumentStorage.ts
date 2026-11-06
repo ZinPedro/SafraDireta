@@ -221,6 +221,12 @@ export function salvarTodasSolicitacoesStorage(solicitacoes: AdDocumentAccessReq
   }
 }
 
+import {
+  apiSolicitarAcessoDocumento,
+  apiDecidirSolicitacaoDocumento,
+  apiListarDocumentos,
+} from "./adsApi";
+
 export async function solicitarAcessoDocumentos(
   anuncioId: string,
   comprador: {
@@ -229,8 +235,48 @@ export async function solicitarAcessoDocumentos(
     cidadeUf?: string;
     tipo?: "PF" | "PJ";
   },
-  mensagem: string
+  mensagem: string,
+  token?: string
 ): Promise<AdDocumentAccessRequest> {
+  // 1. Se houver token, tenta cadastrar via API REST primeiro
+  if (token) {
+    try {
+      const apiResp = await apiSolicitarAcessoDocumento(anuncioId, mensagem, token);
+      if (apiResp && apiResp.id) {
+        const novaApiReq: AdDocumentAccessRequest = {
+          id: String(apiResp.id),
+          anuncioId,
+          compradorId: String(apiResp.comprador_id || comprador.id),
+          compradorNome: comprador.nome,
+          compradorCidadeUf: comprador.cidadeUf,
+          compradorTipo: comprador.tipo,
+          mensagem: apiResp.mensagem || mensagem.trim(),
+          status: apiResp.status || "PENDENTE",
+          solicitadoEm: apiResp.solicitada_em || apiResp.solicitado_em || new Date().toISOString(),
+          respondidoEm: apiResp.respondida_em || apiResp.respondido_em,
+          motivoRecusa: apiResp.motivo_recusa,
+        };
+
+        // Sincroniza localmente para fallback
+        const todas = listarTodasSolicitacoesStorage();
+        const index = todas.findIndex(
+          (s) => s.anuncioId === anuncioId && s.compradorId === comprador.id
+        );
+        if (index >= 0) {
+          todas[index] = novaApiReq;
+        } else {
+          todas.unshift(novaApiReq);
+        }
+        salvarTodasSolicitacoesStorage(todas);
+
+        return novaApiReq;
+      }
+    } catch (err) {
+      console.warn("Aviso: Falha ao solicitar acesso via API, acionando fallback local:", err);
+    }
+  }
+
+  // 2. Fallback resiliente no localStorage
   await new Promise((resolve) => setTimeout(resolve, 80));
   const todas = listarTodasSolicitacoesStorage();
 
@@ -266,8 +312,33 @@ export async function solicitarAcessoDocumentos(
 
 export async function obterSolicitacaoComprador(
   anuncioId: string,
-  compradorId: string
+  compradorId: string,
+  token?: string
 ): Promise<AdDocumentAccessRequest | null> {
+  // 1. Tenta obter da API se houver token
+  if (token) {
+    try {
+      const resp = await apiListarDocumentos(anuncioId, token);
+      if (resp && resp.solicitacao) {
+        const s = resp.solicitacao;
+        return {
+          id: String(s.id),
+          anuncioId,
+          compradorId: String(s.comprador_id || compradorId),
+          compradorNome: "Comprador",
+          mensagem: s.mensagem || "",
+          status: s.status || "PENDENTE",
+          solicitadoEm: s.solicitada_em || s.solicitado_em || new Date().toISOString(),
+          respondidoEm: s.respondida_em || s.respondido_em,
+          motivoRecusa: s.motivo_recusa,
+        };
+      }
+    } catch {
+      /* fallback para storage local */
+    }
+  }
+
+  // 2. Fallback local
   await new Promise((resolve) => setTimeout(resolve, 40));
   const todas = listarTodasSolicitacoesStorage();
   const encontrada = todas.find(
@@ -277,8 +348,34 @@ export async function obterSolicitacaoComprador(
 }
 
 export async function listarSolicitacoesAnuncio(
-  anuncioId: string
+  anuncioId: string,
+  token?: string
 ): Promise<AdDocumentAccessRequest[]> {
+  // 1. Tenta obter da API se for o dono com token
+  if (token) {
+    try {
+      const resp = await apiListarDocumentos(anuncioId, token);
+      if (resp && Array.isArray(resp.solicitacoes)) {
+        return resp.solicitacoes.map((s) => ({
+          id: String(s.id),
+          anuncioId,
+          compradorId: String(s.comprador_id),
+          compradorNome: s.comprador_nome || "Comprador",
+          compradorCidadeUf: s.comprador_cidade_uf,
+          compradorTipo: s.comprador_tipo,
+          mensagem: s.mensagem || "",
+          status: s.status,
+          solicitadoEm: s.solicitada_em || s.solicitado_em || new Date().toISOString(),
+          respondidoEm: s.respondida_em || s.respondido_em,
+          motivoRecusa: s.motivo_recusa,
+        }));
+      }
+    } catch {
+      /* fallback para storage local */
+    }
+  }
+
+  // 2. Fallback local
   await new Promise((resolve) => setTimeout(resolve, 40));
   const todas = listarTodasSolicitacoesStorage();
   return todas
@@ -288,8 +385,47 @@ export async function listarSolicitacoesAnuncio(
 
 export async function responderSolicitacaoAcesso(
   solicitacaoId: string,
-  status: DocumentAccessStatus
+  status: DocumentAccessStatus,
+  motivoRecusa: string | null = null,
+  token?: string
 ): Promise<AdDocumentAccessRequest> {
+  // 1. Tenta persistir na API se houver token e for uma decisão válida (não PENDENTE)
+  if (token && status !== "PENDENTE") {
+    try {
+      const resp = await apiDecidirSolicitacaoDocumento(
+        solicitacaoId,
+        status as "APROVADO" | "RECUSADO" | "REVOGADO" | "CANCELADO",
+        motivoRecusa,
+        token
+      );
+      if (resp && resp.id) {
+        const atualizadaApi: AdDocumentAccessRequest = {
+          id: String(resp.id),
+          anuncioId: String(resp.anuncio_id || ""),
+          compradorId: String(resp.comprador_id || ""),
+          compradorNome: "Comprador",
+          mensagem: resp.mensagem || "",
+          status: resp.status || status,
+          solicitadoEm: resp.solicitada_em || resp.solicitado_em || new Date().toISOString(),
+          respondidoEm: resp.respondida_em || resp.respondido_em || new Date().toISOString(),
+          motivoRecusa: resp.motivo_recusa,
+        };
+
+        // Sincroniza localmente
+        const todas = listarTodasSolicitacoesStorage();
+        const idx = todas.findIndex((s) => s.id === solicitacaoId);
+        if (idx !== -1) {
+          todas[idx] = { ...todas[idx], ...atualizadaApi };
+          salvarTodasSolicitacoesStorage(todas);
+        }
+        return atualizadaApi;
+      }
+    } catch (err) {
+      console.warn("Aviso: Falha ao responder solicitação via API, usando fallback local:", err);
+    }
+  }
+
+  // 2. Fallback local
   await new Promise((resolve) => setTimeout(resolve, 80));
   const todas = listarTodasSolicitacoesStorage();
   const index = todas.findIndex((s) => s.id === solicitacaoId);
@@ -300,6 +436,7 @@ export async function responderSolicitacaoAcesso(
   const atualizada: AdDocumentAccessRequest = {
     ...todas[index],
     status,
+    motivoRecusa: motivoRecusa || todas[index].motivoRecusa,
     respondidoEm: new Date().toISOString(),
   };
 
@@ -314,9 +451,10 @@ export function contarSolicitacoesPendentesAnuncio(anuncioId: string): number {
 }
 
 export async function revogarAcessoDocumentos(
-  solicitacaoId: string
+  solicitacaoId: string,
+  token?: string
 ): Promise<AdDocumentAccessRequest> {
-  return responderSolicitacaoAcesso(solicitacaoId, "REVOGADO");
+  return responderSolicitacaoAcesso(solicitacaoId, "REVOGADO", null, token);
 }
 
 export async function revogarAcessosAoEncerrarAnuncio(anuncioId: string): Promise<void> {

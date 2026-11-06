@@ -54,7 +54,8 @@ export function RequestAdAccessModal({
               : undefined,
           tipo: session.conta.tipo === "PJ" ? "PJ" : "PF",
         },
-        msgTrim
+        msgTrim,
+        session.token
       );
 
       setIsSubmitting(false);

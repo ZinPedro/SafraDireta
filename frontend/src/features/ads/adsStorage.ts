@@ -1,13 +1,23 @@
 import { getSession } from "../../context/session";
 import type { Session } from "../../context/session";
-import { GRAIN_CROP_LABELS, GRAIN_SUBTYPES } from "./ads.types";
+import {
+  GRAIN_CROP_LABELS,
+  GRAIN_PACKAGING_LABELS,
+  GRAIN_SUBTYPES,
+  SPECIES_LABELS,
+  obterTagsAnuncio,
+} from "./ads.types";
 import type {
+  AdModelTemplate,
   AdStatus,
   AnimalLotAd,
   CreateAnimalAdInput,
   CreateGrainAdInput,
+  EncerramentoAnuncioPayload,
   GrainLotAd,
+  GrainPricingMode,
   MarketplaceAd,
+  PricingMode,
   UpdateAdInput,
 } from "./ads.types";
 import defaultFarmImage from "../../assets/images/farm-landscape.jpeg";
@@ -17,9 +27,14 @@ import {
   salvarMidiasNoIndexedDB,
 } from "./adsMediaStorage";
 import {
+  removerDocumentosDoAnuncioNoIndexedDB,
+  revogarAcessosAoEncerrarAnuncio,
+} from "./adsDocumentStorage";
+import {
   adaptarAnuncioDaApiParaFrontend,
   apiCriarAnuncioBackend,
   apiEditarAnuncioBackend,
+  apiEncerrarAnuncioBackend,
   apiListarCatalogoPublico,
   apiObterAnuncioDono,
   apiObterAnuncioPublico,
@@ -29,7 +44,9 @@ import {
   converterDataUrlParaBlob,
   payloadAnimalParaBackend,
   payloadGraosParaBackend,
+  KNOWN_AD_METADATA,
 } from "./adsApi";
+import { BUYER_ONLY_ACCOUNT_IDS, listarProdutoresAdmin, resolverDadosConta } from "../admin/adminStorage";
 
 const STORAGE_KEY = "safradireta_anuncios";
 
@@ -82,17 +99,27 @@ function sanitizarAnunciosParaStorage(anuncios: MarketplaceAd[]): MarketplaceAd[
       videoLimpo = { ...videoLimpo, url: "" };
     }
 
+    // 5. Documentos: no localStorage mantemos metadados estruturados e limpamos URLs base64/blob
+    let documentosLimpos = anuncio.documentos;
+    if (documentosLimpos && documentosLimpos.length > 0) {
+      documentosLimpos = documentosLimpos.map((d) => ({
+        ...d,
+        url: isDataOrLargeUrl(d.url) ? undefined : d.url,
+      }));
+    }
+
     return {
       ...anuncio,
       vendedorAvatar,
       fotos: fotosLimpas && fotosLimpas.length > 0 ? fotosLimpas : undefined,
       imagemUrl: imagemUrlLimpa,
       video: videoLimpo,
+      documentos: documentosLimpos && documentosLimpos.length > 0 ? documentosLimpos : undefined,
     };
   });
 }
 
-function carregarDoStorage(): MarketplaceAd[] {
+export function carregarDoStorage(): MarketplaceAd[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) {
@@ -182,13 +209,40 @@ export function hidratarAnuncioComPerfil<T extends MarketplaceAd>(anuncio: T): T
     const raw = localStorage.getItem(`safradireta_mock_profile:${anuncio.vendedorId}`);
     const parsed = raw ? JSON.parse(raw) : null;
 
-    const farmName =
+    let farmName =
       parsed?.seller?.farmName?.trim() ||
       anuncio.farmName;
 
-    const vendedorNome =
+    // Se ainda for fallback genérico "Fazenda", busca nos metadados ou na conta conhecida
+    if (!farmName || farmName === "Fazenda") {
+      const adMeta = KNOWN_AD_METADATA[anuncio.id];
+      if (adMeta?.farmName) {
+        farmName = adMeta.farmName;
+      } else {
+        const known = resolverDadosConta(anuncio.vendedorId, undefined, anuncio.vendedorNome);
+        if (known?.farmName) {
+          farmName = known.farmName;
+        } else if (isCurrentUser && session?.conta?.nome) {
+          farmName = `Fazenda ${session.conta.nome}`;
+        }
+      }
+    }
+
+    let vendedorNome =
       parsed?.account?.nome?.trim() ||
       (isCurrentUser && session?.conta.nome ? session.conta.nome : anuncio.vendedorNome);
+
+    if (!vendedorNome || vendedorNome === "Produtor Rural") {
+      const adMeta = KNOWN_AD_METADATA[anuncio.id];
+      if (adMeta?.vendedorNome) {
+        vendedorNome = adMeta.vendedorNome;
+      } else {
+        const known = resolverDadosConta(anuncio.vendedorId);
+        if (known?.nome) {
+          vendedorNome = known.nome;
+        }
+      }
+    }
 
     const vendedorAvatar =
       parsed?.account?.avatarUrl ||
@@ -238,14 +292,102 @@ export function sincronizarProdutorNosAnuncios(
   }
 }
 
-export async function listarAnunciosMercado(): Promise<MarketplaceAd[]> {
+/**
+ * Normaliza uma string para comparação textual insensível a maiúsculas e diacríticos/acentos.
+ */
+export function normalizarTextoBusca(texto?: string | null): string {
+  if (!texto) return "";
+  return texto
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim();
+}
+
+/**
+ * Avalia se um anúncio do catálogo corresponde ao termo de pesquisa informado (US-020).
+ * Executa divisão em múltiplos tokens (busca conjuntiva/AND) e pesquisa nos campos:
+ * título, descrição, município, UF, fazenda, produtor, raça/cultura,
+ * espécie/subtipo, finalidade/safra, embalagem e tags visuais do lote.
+ */
+export function correspondeBuscaAnuncio(anuncio: MarketplaceAd, termoBusca: string): boolean {
+  const termoNormalizado = normalizarTextoBusca(termoBusca);
+  if (!termoNormalizado) return true;
+
+  const tokens = termoNormalizado.split(/\s+/).filter(Boolean);
+  if (tokens.length === 0) return true;
+
+  const camposPesquisaveis = [
+    anuncio.titulo,
+    anuncio.descricao,
+    anuncio.cidade,
+    anuncio.uf,
+    anuncio.regiaoAproximada,
+    anuncio.farmName,
+    anuncio.vendedorNome,
+    anuncio.categoria === "ANIMAL" ? anuncio.raca : anuncio.subtipo,
+    anuncio.categoria === "ANIMAL" ? anuncio.especie : anuncio.cultura,
+    anuncio.categoria === "ANIMAL" ? SPECIES_LABELS[anuncio.especie] : GRAIN_CROP_LABELS[anuncio.cultura],
+    anuncio.categoria === "ANIMAL" ? anuncio.finalidade : anuncio.safra,
+    anuncio.categoria === "GRAOS" ? anuncio.embalagem : undefined,
+    anuncio.categoria === "GRAOS" ? GRAIN_PACKAGING_LABELS[anuncio.embalagem] : undefined,
+    anuncio.categoria === "GRAOS" ? anuncio.culturaPersonalizada : undefined,
+    ...obterTagsAnuncio(anuncio),
+  ]
+    .filter(Boolean)
+    .map((c) => normalizarTextoBusca(c))
+    .join(" ");
+
+  return tokens.every((token) => camposPesquisaveis.includes(token));
+}
+
+export interface FiltrosCatalogoMercado {
+  q?: string;
+  categoria?: "ANIMAL" | "GRAOS" | "TODOS";
+  cultura?: string;
+  uf?: string;
+  preco_min?: number | null;
+  preco_max?: number | null;
+  peso_min?: number | null;
+  peso_max?: number | null;
+  ordem?: string;
+  pagina?: number;
+  tamanho?: number;
+}
+
+export async function listarAnunciosMercado(
+  filtrosOuTermo?: string | FiltrosCatalogoMercado
+): Promise<MarketplaceAd[]> {
   await new Promise((resolve) => setTimeout(resolve, 80));
+
+  const filtros: FiltrosCatalogoMercado =
+    typeof filtrosOuTermo === "string"
+      ? { q: filtrosOuTermo }
+      : filtrosOuTermo || {};
+
+  const termoBusca = filtros.q;
 
   let apiItens: MarketplaceAd[] = [];
   try {
-    const catalogo = await apiListarCatalogoPublico();
+    const apiFiltros: Record<string, string | number | undefined> = {};
+    if (filtros.q && filtros.q.trim()) apiFiltros.q = filtros.q.trim();
+    if (filtros.categoria && filtros.categoria !== "TODOS") apiFiltros.categoria = filtros.categoria;
+    if (filtros.cultura && filtros.cultura !== "TODAS") apiFiltros.cultura = filtros.cultura;
+    if (filtros.uf) apiFiltros.uf = filtros.uf;
+    if (filtros.preco_min !== null && filtros.preco_min !== undefined) apiFiltros.preco_min = filtros.preco_min;
+    if (filtros.preco_max !== null && filtros.preco_max !== undefined) apiFiltros.preco_max = filtros.preco_max;
+    if (filtros.peso_min !== null && filtros.peso_min !== undefined) apiFiltros.peso_min = filtros.peso_min;
+    if (filtros.peso_max !== null && filtros.peso_max !== undefined) apiFiltros.peso_max = filtros.peso_max;
+    if (filtros.ordem) apiFiltros.ordem = filtros.ordem;
+    if (filtros.pagina) apiFiltros.pagina = filtros.pagina;
+    if (filtros.tamanho) apiFiltros.tamanho = filtros.tamanho;
+
+    const catalogo = await apiListarCatalogoPublico(apiFiltros);
     if (catalogo?.itens && Array.isArray(catalogo.itens)) {
-      apiItens = catalogo.itens.map((item) => adaptarAnuncioDaApiParaFrontend(item));
+      const mapaLocais = new Map(carregarDoStorage().map((a) => [a.id, a]));
+      apiItens = catalogo.itens.map((item) =>
+        adaptarAnuncioDaApiParaFrontend(item, mapaLocais.get(String(item.id)))
+      );
     }
   } catch (apiErr) {
     console.warn("Aviso: consulta ao catálogo na API falhou, usando storage local:", apiErr);
@@ -257,6 +399,7 @@ export async function listarAnunciosMercado(): Promise<MarketplaceAd[]> {
 
   const todos = [...apiItens, ...locaisAtivos]
     .map((a) => hidratarAnuncioComPerfil(a))
+    .filter((a) => a.status === "ATIVO")
     .sort((a, b) => new Date(b.criadoEm).getTime() - new Date(a.criadoEm).getTime());
 
   const resultado = await Promise.all(
@@ -279,6 +422,10 @@ export async function listarAnunciosMercado(): Promise<MarketplaceAd[]> {
       return anuncio;
     })
   );
+
+  if (termoBusca && termoBusca.trim()) {
+    return resultado.filter((a) => correspondeBuscaAnuncio(a, termoBusca));
+  }
 
   return resultado;
 }
@@ -335,11 +482,31 @@ export async function listarMeusAnuncios(vendedorId: string): Promise<Marketplac
           const apiAd = await apiObterAnuncioDono(ad.id, session.token);
           if (apiAd) {
             const statusAtualizado: AdStatus =
-              apiAd.estadoComercial === "ATIVO" || apiAd.estadoComercial === "PAUSADO"
+              apiAd.estadoComercial === "ATIVO" ||
+              apiAd.estadoComercial === "PAUSADO" ||
+              apiAd.estadoComercial === "VENDIDO" ||
+              apiAd.estadoComercial === "CANCELADO"
                 ? apiAd.estadoComercial
                 : ad.status;
-            if (ad.status !== statusAtualizado) {
+
+            const isLocalEncerrado = ad.status === "VENDIDO" || ad.status === "CANCELADO";
+            if (!isLocalEncerrado && ad.status !== statusAtualizado) {
               ad.status = statusAtualizado;
+              alterouStorage = true;
+            }
+            if (apiAd.encerradoEm && ad.encerradoEm !== apiAd.encerradoEm) {
+              ad.encerradoEm = apiAd.encerradoEm;
+              alterouStorage = true;
+            }
+            if (apiAd.motivoEncerramento && ad.motivoEncerramento !== apiAd.motivoEncerramento) {
+              ad.motivoEncerramento = apiAd.motivoEncerramento;
+              alterouStorage = true;
+            }
+            if (
+              apiAd.observacoesEncerramento &&
+              ad.observacoesEncerramento !== apiAd.observacoesEncerramento
+            ) {
+              ad.observacoesEncerramento = apiAd.observacoesEncerramento;
               alterouStorage = true;
             }
           }
@@ -355,7 +522,7 @@ export async function listarMeusAnuncios(vendedorId: string): Promise<Marketplac
   }
 
   const hidratados = anuncios
-    .filter((a) => a.vendedorId === vendedorId && a.status !== "VENDIDO")
+    .filter((a) => a.vendedorId === vendedorId)
     .map((a) => hidratarAnuncioComPerfil(a))
     .sort((a, b) => new Date(b.criadoEm).getTime() - new Date(a.criadoEm).getTime());
 
@@ -435,6 +602,11 @@ export async function obterAnuncioPorId(id: string): Promise<MarketplaceAd | nul
 
     if (apiAd) {
       const adaptado = adaptarAnuncioDaApiParaFrontend(apiAd, encontrado);
+      if (!adaptado.vendedorId && session?.conta?.id) {
+        if (encontrado?.vendedorId === session.conta.id) {
+          adaptado.vendedorId = session.conta.id;
+        }
+      }
       return hidratarAnuncioComPerfil(adaptado);
     }
   } catch {
@@ -583,6 +755,78 @@ export async function obterPerfilProdutorPublico(vendedorId: string): Promise<Pu
   return null;
 }
 
+export interface PublicProducerListItem extends PublicProducerProfile {
+  totalAnunciosAtivos: number;
+}
+
+export async function listarTodosProdutoresPublicos(): Promise<PublicProducerListItem[]> {
+  await new Promise((resolve) => setTimeout(resolve, 60));
+
+  const session = getSession();
+  const todosAnuncios = carregarDoStorage();
+  const produtoresAdmin = listarProdutoresAdmin();
+
+  // Mapeia contagem de anúncios ativos por vendedorId
+  const anunciosAtivosPorVendedor = new Map<string, number>();
+  todosAnuncios.forEach((a) => {
+    if (a.status === "ATIVO") {
+      anunciosAtivosPorVendedor.set(a.vendedorId, (anunciosAtivosPorVendedor.get(a.vendedorId) || 0) + 1);
+    }
+  });
+
+  // Reúne todos os IDs potenciais de produtores habilitados (filtrando banidos/suspensos e contas estritamente compradoras)
+  const idsProdutores = new Set<string>();
+
+  // 1. Produtores do adminStorage que estão HABILITADO
+  produtoresAdmin.forEach((p) => {
+    if (p.estado === "HABILITADO" && !BUYER_ONLY_ACCOUNT_IDS.has(p.id) && p.email?.toLowerCase() !== "pedro.h.c.zin@gmail.com") {
+      idsProdutores.add(p.id);
+    }
+  });
+
+  // 2. Vendedores que possuem anúncios (se não estiverem suspensos/banidos)
+  todosAnuncios.forEach((a) => {
+    if (a.vendedorId && !BUYER_ONLY_ACCOUNT_IDS.has(a.vendedorId)) {
+      const reg = produtoresAdmin.find((p) => p.id === a.vendedorId);
+      if (!reg || reg.estado === "HABILITADO") {
+        idsProdutores.add(a.vendedorId);
+      }
+    }
+  });
+
+  // 3. Usuário logado se for vendedor habilitado
+  if (
+    session &&
+    session.conta.tipo !== "ADMIN" &&
+    !BUYER_ONLY_ACCOUNT_IDS.has(session.conta.id) &&
+    session.vendedorEstado === "HABILITADO"
+  ) {
+    idsProdutores.add(session.conta.id);
+  }
+
+  const lista: PublicProducerListItem[] = [];
+
+  for (const id of idsProdutores) {
+    const perfil = await obterPerfilProdutorPublico(id);
+    if (perfil) {
+      lista.push({
+        ...perfil,
+        totalAnunciosAtivos: anunciosAtivosPorVendedor.get(id) || 0,
+      });
+    }
+  }
+
+  // Ordena prioritariamente por quem tem mais anúncios ativos, depois pelo nome da fazenda
+  lista.sort((a, b) => {
+    if (b.totalAnunciosAtivos !== a.totalAnunciosAtivos) {
+      return b.totalAnunciosAtivos - a.totalAnunciosAtivos;
+    }
+    return a.farmName.localeCompare(b.farmName);
+  });
+
+  return lista;
+}
+
 function resolverDadosProdutorSessao(
   session: Session,
   farmNameParam?: string
@@ -706,8 +950,10 @@ export async function criarAnuncioAnimal(
     precoPorArroba,
     cidade: input.cidade.trim(),
     uf: input.uf.trim().toUpperCase(),
+    regiaoAproximada: input.regiaoAproximada?.trim() || undefined,
     fotos,
     video: input.video,
+    documentos: input.documentos && input.documentos.length > 0 ? input.documentos : undefined,
     imagemUrl: imagemCapa,
     criadoEm: new Date().toISOString(),
     status: "ATIVO",
@@ -830,8 +1076,10 @@ export async function criarAnuncioGraos(
     precoPorTonelada,
     cidade: input.cidade.trim(),
     uf: input.uf.trim().toUpperCase(),
+    regiaoAproximada: input.regiaoAproximada?.trim() || undefined,
     fotos,
     video: input.video,
+    documentos: input.documentos && input.documentos.length > 0 ? input.documentos : undefined,
     imagemUrl: imagemCapa,
     criadoEm: new Date().toISOString(),
     status: "ATIVO",
@@ -876,6 +1124,10 @@ export async function atualizarAnuncio(
   const existente = anuncios[index];
   if (existente.vendedorId !== session.conta.id) {
     throw new Error("Acesso não autorizado para editar este anúncio.");
+  }
+
+  if (existente.status === "VENDIDO" || existente.status === "CANCELADO") {
+    throw new Error("Lotes encerrados (vendidos ou cancelados) não podem ser editados.");
   }
 
   if (session?.token) {
@@ -986,8 +1238,14 @@ export async function atualizarAnuncio(
       precoPorArroba,
       cidade: inputAnimal.cidade ? inputAnimal.cidade.trim() : existente.cidade,
       uf: inputAnimal.uf ? inputAnimal.uf.trim().toUpperCase() : existente.uf,
+      regiaoAproximada:
+        inputAnimal.regiaoAproximada !== undefined
+          ? inputAnimal.regiaoAproximada.trim() || undefined
+          : (existente as AnimalLotAd).regiaoAproximada,
       fotos,
       video,
+      documentos:
+        inputAnimal.documentos !== undefined ? inputAnimal.documentos : existente.documentos,
       imagemUrl: imagemCapa,
       status: proximoStatus,
       atualizadoEm: agora,
@@ -1062,8 +1320,14 @@ export async function atualizarAnuncio(
       precoPorTonelada,
       cidade: inputGraos.cidade ? inputGraos.cidade.trim() : existente.cidade,
       uf: inputGraos.uf ? inputGraos.uf.trim().toUpperCase() : existente.uf,
+      regiaoAproximada:
+        inputGraos.regiaoAproximada !== undefined
+          ? inputGraos.regiaoAproximada.trim() || undefined
+          : (existente as GrainLotAd).regiaoAproximada,
       fotos,
       video,
+      documentos:
+        inputGraos.documentos !== undefined ? inputGraos.documentos : existente.documentos,
       imagemUrl: imagemCapa,
       status: proximoStatus,
       atualizadoEm: agora,
@@ -1108,6 +1372,10 @@ export async function alternarStatusAnuncio(
   const existente = anuncios[index];
   if (existente.vendedorId !== session.conta.id && session.conta.tipo !== "ADMIN") {
     throw new Error("Acesso não autorizado para alterar o status deste anúncio.");
+  }
+
+  if (existente.status === "VENDIDO" || existente.status === "CANCELADO") {
+    throw new Error("Lotes encerrados são definitivos e não podem ser reativados ou pausados.");
   }
 
   if (
@@ -1165,6 +1433,115 @@ export async function alternarStatusAnuncio(
   return hidratado;
 }
 
+export async function encerrarAnuncio(
+  id: string,
+  payload: EncerramentoAnuncioPayload,
+  session: Session
+): Promise<MarketplaceAd> {
+  await new Promise((resolve) => setTimeout(resolve, 120));
+  const anuncios = carregarDoStorage();
+  let index = anuncios.findIndex((a) => a.id === id);
+  if (index === -1) {
+    if (session?.token) {
+      try {
+        const apiAd = await apiObterAnuncioDono(id, session.token);
+        if (apiAd) {
+          const adaptado = adaptarAnuncioDaApiParaFrontend(apiAd);
+          anuncios.push(adaptado);
+          index = anuncios.length - 1;
+        }
+      } catch {
+        /* fallback */
+      }
+    }
+  }
+  if (index === -1) {
+    throw new Error("Anúncio não localizado no sistema.");
+  }
+
+  const existente = anuncios[index];
+  if (existente.vendedorId !== session.conta.id && session.conta.tipo !== "ADMIN") {
+    throw new Error("Acesso não autorizado para encerrar este anúncio.");
+  }
+
+  if (existente.status === "VENDIDO" || existente.status === "CANCELADO") {
+    throw new Error("Este anúncio já foi formalmente encerrado e seu estado é definitivo.");
+  }
+
+  if (
+    existente.status !== "ATIVO" &&
+    existente.status !== "PAUSADO" &&
+    session.conta.tipo !== "ADMIN"
+  ) {
+    throw new Error("Apenas anúncios ativos ou pausados podem ser encerrados.");
+  }
+
+  if (session?.token) {
+    try {
+      await apiEncerrarAnuncioBackend(id, payload, session.token);
+    } catch (apiErr) {
+      console.warn("Aviso: encerramento na API backend falhou, prosseguindo com mock local:", apiErr);
+      if (session.token && !session.token.startsWith("admin-") && !session.token.startsWith("mock-")) {
+        throw apiErr;
+      }
+    }
+  }
+
+  const agora = new Date().toISOString();
+
+  // Se solicitado pelo produtor, desvincula os documentos do lote
+  let docsAtualizados = existente.documentos;
+  if (payload.desvincularDocumentos) {
+    docsAtualizados = undefined;
+    try {
+      await removerDocumentosDoAnuncioNoIndexedDB(id);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  // Revoga acessos concedidos e cancela solicitações pendentes (LGPD)
+  try {
+    await revogarAcessosAoEncerrarAnuncio(id);
+  } catch (err) {
+    console.warn("Aviso ao revogar acessos a documentos do lote encerrado:", err);
+  }
+
+  const anuncioAtualizado: MarketplaceAd = {
+    ...existente,
+    status: payload.tipo,
+    encerradoEm: agora,
+    motivoEncerramento: payload.motivo,
+    observacoesEncerramento: payload.observacoes?.trim() || undefined,
+    documentos: docsAtualizados,
+    atualizadoEm: agora,
+  };
+
+  anuncios[index] = anuncioAtualizado;
+  const salvou = salvarNoStorage(anuncios);
+  if (!salvou) {
+    throw new Error("Não foi possível persistir o encerramento do anúncio no armazenamento local.");
+  }
+
+  const hidratado = hidratarAnuncioComPerfil(anuncioAtualizado);
+  try {
+    const midias = await obterMidiasDoIndexedDB(id);
+    if (midias) {
+      if (midias.fotos && midias.fotos.length > 0) {
+        hidratado.fotos = midias.fotos;
+        hidratado.imagemUrl = midias.fotos[0];
+      }
+      if (midias.video) {
+        hidratado.video = midias.video;
+      }
+    }
+  } catch {
+    /* fallback seguro */
+  }
+
+  return hidratado;
+}
+
 export function obterTodosAnunciosRaw(): MarketplaceAd[] {
   return carregarDoStorage().map((a) => hidratarAnuncioComPerfil(a));
 }
@@ -1172,4 +1549,127 @@ export function obterTodosAnunciosRaw(): MarketplaceAd[] {
 export function salvarTodosAnunciosRaw(anuncios: MarketplaceAd[]): boolean {
   return salvarNoStorage(anuncios);
 }
+
+/**
+ * Higieniza um anúncio existente para servir de modelo de criação (US-017).
+ * Remove ID, datas, fotos, mídias, documentos e permissões da US-013.
+ * Valida autorização de propriedade (ownership) e restrição de moderação.
+ */
+export function extrairModeloParaNovoAnuncio(
+  anuncioOriginal: MarketplaceAd,
+  vendedorIdAtual: string
+): AdModelTemplate | null {
+  // 1. Validação de Ownership (apenas o próprio vendedor pode clonar seus anúncios)
+  if (anuncioOriginal.vendedorId !== vendedorIdAtual) {
+    return null;
+  }
+
+  // 2. Bloqueio de anúncios sob penalidade de moderação
+  if (anuncioOriginal.status === "BLOQUEADO_MODERACAO") {
+    return null;
+  }
+
+  // 3. Payload higienizado por categoria
+  if (anuncioOriginal.categoria === "ANIMAL") {
+    const isPerHead =
+      Boolean(anuncioOriginal.precoPorCabeca) &&
+      Boolean(anuncioOriginal.quantidadeCabecas) &&
+      Boolean(anuncioOriginal.precoTotal) &&
+      Math.round(anuncioOriginal.precoPorCabeca * anuncioOriginal.quantidadeCabecas) ===
+        Math.round(anuncioOriginal.precoTotal);
+
+    const pricingMode: PricingMode = isPerHead ? "PER_HEAD" : "TOTAL";
+
+    return {
+      categoria: "ANIMAL",
+      titulo: anuncioOriginal.titulo,
+      descricao: anuncioOriginal.descricao,
+      cidade: anuncioOriginal.cidade,
+      uf: anuncioOriginal.uf,
+      regiaoAproximada: anuncioOriginal.regiaoAproximada,
+      farmName: anuncioOriginal.farmName,
+
+      // Dados Zootécnicos (Pecuária) - Mantém raça, espécie e finalidade estruturais
+      especie: anuncioOriginal.especie,
+      raca: anuncioOriginal.raca,
+      finalidade: anuncioOriginal.finalidade,
+      idadeMeses: anuncioOriginal.idadeMeses,
+
+      // Reset obrigatório de pesagens físicas, contagens e precificação (US-017)
+      quantidadeCabecas: undefined,
+      pesoMedioKg: undefined,
+      pesoMedioArroba: undefined,
+      pesoTotalKg: undefined,
+      pesoTotalArroba: undefined,
+      precoTotal: undefined,
+      precoPorCabeca: undefined,
+      precoPorArroba: undefined,
+      pricingMode,
+      pesoUnitMode: "KG",
+
+      // Reset obrigatório de mídias, documentos e dados de ciclo de vida
+      fotos: [],
+      video: undefined,
+      documentos: [],
+    };
+  }
+
+  // Categoria GRAOS
+  const isPerSack =
+    Boolean(anuncioOriginal.precoPorSaca) &&
+    Boolean(anuncioOriginal.quantidadeSacas) &&
+    Boolean(anuncioOriginal.precoTotal) &&
+    Math.round(anuncioOriginal.precoPorSaca * anuncioOriginal.quantidadeSacas) ===
+      Math.round(anuncioOriginal.precoTotal);
+
+  const grainPricingMode: GrainPricingMode = isPerSack ? "PER_SACK" : "TOTAL";
+
+  return {
+    categoria: "GRAOS",
+    titulo: anuncioOriginal.titulo,
+    descricao: anuncioOriginal.descricao,
+    cidade: anuncioOriginal.cidade,
+    uf: anuncioOriginal.uf,
+    regiaoAproximada: anuncioOriginal.regiaoAproximada,
+    farmName: anuncioOriginal.farmName,
+
+    // Dados Agronômicos (Grãos e Café) - Mantém dados estruturais de lavoura
+    cultura: anuncioOriginal.cultura,
+    culturaPersonalizada: anuncioOriginal.culturaPersonalizada,
+    subtipo: anuncioOriginal.subtipo,
+    safra: anuncioOriginal.safra,
+    embalagem: anuncioOriginal.embalagem,
+
+    // Reset obrigatório de amostragem física, umidade, laudos, balança e preços (US-017)
+    umidadePercentual: undefined,
+    quantidadeSacas: undefined,
+    pesoTotalToneladas: undefined,
+    pesoTotalKg: undefined,
+    laudoTecnico: undefined,
+    precoTotal: undefined,
+    precoPorSaca: undefined,
+    precoPorTonelada: undefined,
+    grainPricingMode,
+    volumeUnitMode: "SACAS",
+
+    // Reset obrigatório de mídias, documentos e dados de ciclo de vida
+    fotos: [],
+    video: undefined,
+    documentos: [],
+  };
+}
+
+export {
+  salvarDocumentoArquivoNoIndexedDB,
+  obterDocumentoArquivoDoIndexedDB,
+  removerDocumentoArquivoDoIndexedDB,
+  removerDocumentosDoAnuncioNoIndexedDB,
+  solicitarAcessoDocumentos,
+  obterSolicitacaoComprador,
+  listarSolicitacoesAnuncio,
+  responderSolicitacaoAcesso,
+  contarSolicitacoesPendentesAnuncio,
+  revogarAcessoDocumentos,
+} from "./adsDocumentStorage";
+
 

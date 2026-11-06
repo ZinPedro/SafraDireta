@@ -3,7 +3,7 @@ from psycopg import Connection
 
 from app.database import get_connection
 from app.deps import anuncio_do_dono, vendedor_habilitado
-from app.schemas.anuncio import AnuncioEntrada
+from app.schemas.anuncio import AnuncioEntrada, EncerramentoAnuncio
 from app.services import anuncio_service, midia_service
 
 router = APIRouter(prefix="/api/vendedor/anuncios", tags=["Anúncios"])
@@ -38,7 +38,7 @@ def abrir(anuncio: dict = Depends(anuncio_do_dono), conn: Connection = Depends(g
     summary="Editar anúncio",
     description="Só o dono. Aceita o formulário completo ou só os campos alterados, com as "
                 "mesmas regras da criação. Categoria, espécie e cultura não mudam. "
-                "Anúncio vendido não pode ser editado.",
+                "Anúncio encerrado não pode ser editado.",
 )
 def editar(
     corpo: dict = Body(...),
@@ -101,3 +101,22 @@ async def adicionar_midia(
         )
     finally:
         await arquivo.close()
+
+
+# Os contratos da Sprint 3 usam /api/anuncios e mantêm as ações restritas ao dono.
+ciclo_router = APIRouter(prefix="/api/anuncios", tags=["Anúncios"])
+
+
+@ciclo_router.patch("/{anuncio_id}/status")
+def encerrar(
+    dados: EncerramentoAnuncio,
+    anuncio: dict = Depends(anuncio_do_dono),
+    atual: dict = Depends(vendedor_habilitado),
+    conn: Connection = Depends(get_connection),
+):
+    return anuncio_service.encerrar_anuncio(conn, anuncio, atual, dados)
+
+
+@ciclo_router.get("/{anuncio_id}/clonar")
+def clonar(anuncio: dict = Depends(anuncio_do_dono), conn: Connection = Depends(get_connection)):
+    return anuncio_service.modelo_para_clonar(conn, anuncio["id"])

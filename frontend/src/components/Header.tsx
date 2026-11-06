@@ -6,6 +6,21 @@ import { useAuth } from "../context/authContext";
 import { Icon } from "./Icon";
 import { UserMenu } from "./UserMenu";
 
+function getCategoryPath(category: string): string {
+  switch (category) {
+    case "Boi gordo":
+      return `${routes.market}?categoria=ANIMAL`;
+    case "Café":
+      return `${routes.market}?categoria=GRAOS&cultura=CAFE`;
+    case "Soja":
+      return `${routes.market}?categoria=GRAOS&cultura=SOJA`;
+    case "Milho":
+      return `${routes.market}?categoria=GRAOS&cultura=MILHO`;
+    default:
+      return routes.market;
+  }
+}
+
 export function Header({
   onOpenDialog,
 }: {
@@ -104,7 +119,7 @@ export function Header({
               <ul id="category-links" className="category-menu__list">
                 {navigationCategories.map((category) => (
                   <li key={category}>
-                    <Link to={routes.market} onClick={closeMenus}>
+                    <Link to={getCategoryPath(category)} onClick={closeMenus}>
                       {category}
                       <Icon name="arrow" />
                     </Link>

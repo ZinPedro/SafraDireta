@@ -27,6 +27,10 @@ O contrato completo (entradas, respostas, erros e decisões em aberto) está em
 4. Rode `sql/02_permissoes.sql` como dono da estrutura.
 5. Rode `sql/03_seed_dev.sql` como dono do banco. Ele cria o termo de uso 1.0 e um operador de teste. O `safra_app` não consegue inserir nessas tabelas, por isso este passo é do dono.
 
+6. Rode os arquivos SQL de `04` a `11` em ordem, como dono da estrutura. A migração `09` só deve ser executada em desenvolvimento.
+   - Banco já atualizado com `10_sprint3.sql`: aplique apenas `11_compatibilidade_documentos.sql`.
+   - Banco que recebeu a antiga `08_documentos_favoritos_encerramento.sql`: aplique a `08_admin_governanca.sql` se ainda for necessária, pule a `10` e aplique a `11`. A `11` mantém os dados existentes e adapta as tabelas ao contrato usado pela API.
+
 Sem o termo de uso vigente, o cadastro responde 503 `TERMO_INDISPONIVEL`.
 
 ### 2. Ambiente Python
@@ -121,3 +125,23 @@ Regras do projeto:
 * [`docs/MODELAGEM.md`](docs/MODELAGEM.md): tabelas, relações e dicionário de colunas
 * [`docs/REGRAS-DE-NEGOCIO.md`](docs/REGRAS-DE-NEGOCIO.md): regras que o backend precisa respeitar
 * [`docs/README.md`](docs/README.md): README original da base entregue pelo banco de dados
+
+
+## Sprint 3
+
+| Operação | Rota e entrada |
+| --- | --- |
+| Origem do lote | Use `cidade` (ou `municipio`), `uf` e a opção `regiaoAproximada` no cadastro e na edição do anúncio |
+| Anexar documento | `POST /api/anuncios/{id}/documentos` com multipart `tipo` e `arquivo` de até 10 MB |
+| Listar metadados e solicitações | `GET /api/anuncios/{id}/documentos` |
+| Pedir acesso | `POST /api/anuncios/{id}/documentos/solicitar` com `mensagem` |
+| Processar solicitação | `PATCH /api/documentos/solicitacoes/{id}` com `status` e, para recusa, a opção `motivoRecusa` |
+| Baixar documento | `GET /api/documentos/{id}/visualizar` com token do proprietário ou de comprador autorizado |
+| Encerrar anúncio | `PATCH /api/anuncios/{id}/status` com `status` (`VENDIDO` ou `CANCELADO`), `motivo` (código, por exemplo `VENDA_EXTERNA`) e a opção `observacoes` |
+| Obter formulário para duplicação | `GET /api/anuncios/{id}/clonar` e depois envie o formulário revisado para a rota de cadastro do vendedor |
+| Adicionar e remover favorito | `POST` e `DELETE /api/anuncios/{id}/favoritar` retornam `204` |
+| Listar favoritos | `GET /api/favoritos` aceita `pagina` e `itens_por_pagina` e inclui `estadoComercial` e `disponivel` |
+
+As rotas acima usam token Bearer. Os documentos ficam no diretório privado de uploads configurado pela API. Mantenha esse diretório fora dos arquivos públicos do servidor web. A API controla o acesso a cada download.
+
+A validação de município usa uma cópia local da lista de 5.571 municípios da API de Localidades do IBGE. [Fonte da lista](https://servicodados.ibge.gov.br/api/v1/localidades/municipios)

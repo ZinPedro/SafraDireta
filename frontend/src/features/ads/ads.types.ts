@@ -19,7 +19,8 @@ export type AdStatus =
   | "PAUSADO_MODERACAO"
   | "EM_REVISAO"
   | "BLOQUEADO_MODERACAO"
-  | "VENDIDO";
+  | "VENDIDO"
+  | "CANCELADO";
 
 export type GrainCrop = "CAFE" | "SOJA" | "MILHO" | "TRIGO" | "OUTRO";
 
@@ -30,6 +31,46 @@ export interface AdVideoItem {
   url: string; // URL do blob local ou URL do YouTube
   fileBlob?: Blob;
   fileName?: string;
+}
+
+export type AdDocumentType =
+  // Pecuária
+  | "GTA"
+  | "LAUDO_SANITARIO"
+  | "REGISTRO_GENEALOGICO"
+  | "EXAME_ANDROLOGICO"
+  // Grãos e Café
+  | "LAUDO_CLASSIFICACAO"
+  | "LAUDO_SCA_CAFE"
+  | "CERTIFICACAO_SUSTENTAVEL"
+  | "NOTA_FISCAL_SEMENTE"
+  // Geral
+  | "OUTRO";
+
+export interface AdDocumentItem {
+  id: string;
+  tipo: AdDocumentType;
+  nomeArquivo: string;
+  tamanhoBytes: number;
+  mimeType: string;
+  url?: string; // Data URL ou Blob URL transitória
+  criadoEm: string;
+}
+
+export type DocumentAccessStatus = "PENDENTE" | "APROVADO" | "RECUSADO" | "REVOGADO" | "CANCELADO";
+
+export interface AdDocumentAccessRequest {
+  id: string;
+  anuncioId: string;
+  compradorId: string;
+  compradorNome: string;
+  compradorCidadeUf?: string;
+  compradorTipo?: "PF" | "PJ";
+  mensagem: string; // Obrigatória
+  status: DocumentAccessStatus;
+  motivoRecusa?: string;
+  solicitadoEm: string;
+  respondidoEm?: string;
 }
 
 export interface AnimalLotAd {
@@ -55,8 +96,10 @@ export interface AnimalLotAd {
   precoPorArroba: number;
   cidade: string;
   uf: string;
+  regiaoAproximada?: string;
   fotos?: string[];
   video?: AdVideoItem;
+  documentos?: AdDocumentItem[];
   imagemUrl: string;
   criadoEm: string;
   atualizadoEm?: string;
@@ -64,6 +107,9 @@ export interface AnimalLotAd {
   motivoModeracao?: string;
   moderadoEm?: string;
   seloVerificado?: boolean;
+  encerradoEm?: string;
+  motivoEncerramento?: string;
+  observacoesEncerramento?: string;
 }
 
 export type CoffeeScreen =
@@ -124,8 +170,10 @@ export interface GrainLotAd {
   precoPorTonelada: number;
   cidade: string;
   uf: string;
+  regiaoAproximada?: string;
   fotos?: string[];
   video?: AdVideoItem;
+  documentos?: AdDocumentItem[];
   imagemUrl: string;
   criadoEm: string;
   atualizadoEm?: string;
@@ -133,9 +181,46 @@ export interface GrainLotAd {
   motivoModeracao?: string;
   moderadoEm?: string;
   seloVerificado?: boolean;
+  encerradoEm?: string;
+  motivoEncerramento?: string;
+  observacoesEncerramento?: string;
 }
 
 export type MarketplaceAd = AnimalLotAd | GrainLotAd;
+
+export interface EncerramentoAnuncioPayload {
+  tipo: "VENDIDO" | "CANCELADO";
+  motivo: string;
+  observacoes?: string;
+  desvincularDocumentos?: boolean;
+}
+
+export const MOTIVOS_ENCERRAMENTO_VENDIDO = [
+  "Venda externa (Frigorífico / Indústria)",
+  "Venda para outro produtor / vizinho",
+  "Negociação intermediada pelo SafraDireta",
+  "Outro destino comercial",
+] as const;
+
+export const MOTIVOS_ENCERRAMENTO_CANCELADO = [
+  "Retenção na propriedade (recria / confinamento / silo)",
+  "Perda física ou descarte sanitário",
+  "Desistência comercial (mercado desfavorável)",
+  "Erro de cadastro / Duplicidade",
+  "Outro motivo",
+] as const;
+
+export type AdModelTemplate =
+  | (Partial<AnimalLotAd> & {
+      categoria: "ANIMAL";
+      pricingMode?: PricingMode;
+      pesoUnitMode?: "KG" | "ARROBA";
+    })
+  | (Partial<GrainLotAd> & {
+      categoria: "GRAOS";
+      grainPricingMode?: GrainPricingMode;
+      volumeUnitMode?: "SACAS" | "TONELADAS";
+    });
 
 export interface CreateAnimalAdInput {
   titulo: string;
@@ -151,8 +236,10 @@ export interface CreateAnimalAdInput {
   precoPorCabeca?: number;
   cidade: string;
   uf: string;
+  regiaoAproximada?: string;
   fotos?: string[];
   video?: AdVideoItem;
+  documentos?: AdDocumentItem[];
 }
 
 export interface CreateGrainAdInput {
@@ -172,8 +259,10 @@ export interface CreateGrainAdInput {
   precoPorSaca?: number;
   cidade: string;
   uf: string;
+  regiaoAproximada?: string;
   fotos?: string[];
   video?: AdVideoItem;
+  documentos?: AdDocumentItem[];
 }
 
 export type UpdateAdInput =
@@ -446,15 +535,117 @@ export const COFFEE_SCREEN_LABELS: Record<CoffeeScreen, string> = {
   BICA_CORRIDA: "Bica Corrida",
 };
 
+export const MAPA_RACAS_BOI_GORDO: Record<string, string> = {
+  "Nelore": "Nelore",
+  "Angus (Aberdeen Angus)": "Angus",
+  "Angus": "Angus",
+  "Brangus": "Brangus",
+  "Cruzamento Industrial F1": "Cruzamento F1",
+  "Cruzamento Industrial": "Cruzamento F1",
+  "Cruzamento F1": "Cruzamento F1",
+  "Senepol": "Senepol",
+  "Brahman": "Brahman",
+  "Tabapuã": "Tabapuã",
+  "Guzerá": "Guzerá",
+  "Hereford / Braford": "Hereford/Braford",
+  "Hereford": "Hereford",
+  "Braford": "Braford",
+  "Anelorado / Mestiço": "Anelorado",
+  "Anelorado": "Anelorado",
+  "Mestiço": "Mestiço",
+};
+
+export function formatarTextoTagCurta(texto: string, maxLen = 18): string {
+  if (!texto) return "";
+  const limpo = texto.trim();
+  if (limpo.length <= maxLen) return limpo;
+  return limpo.slice(0, maxLen - 1).trim() + "…";
+}
+
 export function obterTagsAnuncio(anuncio: MarketplaceAd): [string, string] {
   if (anuncio.categoria === "GRAOS") {
+    if (anuncio.cultura === "OUTRO") {
+      const custom = anuncio.culturaPersonalizada || anuncio.subtipo || "Grão / Cereal";
+      return ["Outro", formatarTextoTagCurta(custom, 18)];
+    }
     const tag1 = anuncio.tagPrincipal || GRAIN_CROP_LABELS[anuncio.cultura] || "Grãos";
-    const tag2 = anuncio.tagSecundaria || anuncio.subtipo || anuncio.culturaPersonalizada || "Comercial";
-    return [tag1, tag2];
+    if (anuncio.subtipo === "OUTRO" || anuncio.subtipo?.startsWith("OUTRO")) {
+      const customSub = anuncio.culturaPersonalizada || "Especial";
+      return [tag1, formatarTextoTagCurta(customSub, 18)];
+    }
+    const tag2 = anuncio.tagSecundaria || anuncio.subtipo || "Comercial";
+    return [tag1, formatarTextoTagCurta(tag2, 18)];
   }
-  const tag1 = anuncio.especie === "BOVINO" ? "Boi Gordo" : SPECIES_LABELS[anuncio.especie];
-  const tag2 = anuncio.raca || "Nelore";
-  return [tag1, tag2];
+
+  // Categoria ANIMAL (Boi Gordo / Raças)
+  let racaRaw = (anuncio.raca || "").trim();
+  let racaPersonalizada = ((anuncio as any).racaPersonalizada || "").trim();
+
+  // Se for Nelore padrão ou vazio, verifica se o título/descrição indica explicitamente outra raça
+  if (!racaRaw || racaRaw === "Nelore") {
+    const textoContexto = `${anuncio.titulo || ""} ${anuncio.descricao || ""}`.toLowerCase();
+    if (
+      textoContexto.includes("cruzamento industrial") ||
+      textoContexto.includes("cruzamento f1") ||
+      textoContexto.includes("industrial f1") ||
+      textoContexto.includes("girolando") ||
+      textoContexto.includes("meio-sangue") ||
+      textoContexto.includes("1/2 sangue") ||
+      textoContexto.includes("f1")
+    ) {
+      racaRaw = "Cruzamento Industrial F1";
+    } else if (textoContexto.includes("angus") || textoContexto.includes("aberdeen")) {
+      racaRaw = "Angus (Aberdeen Angus)";
+    } else if (textoContexto.includes("brangus")) {
+      racaRaw = "Brangus";
+    } else if (textoContexto.includes("senepol")) {
+      racaRaw = "Senepol";
+    } else if (textoContexto.includes("brahman")) {
+      racaRaw = "Brahman";
+    } else if (textoContexto.includes("tabapuã") || textoContexto.includes("tabapua")) {
+      racaRaw = "Tabapuã";
+    } else if (textoContexto.includes("guzerá") || textoContexto.includes("guzera")) {
+      racaRaw = "Guzerá";
+    } else if (textoContexto.includes("hereford") || textoContexto.includes("braford")) {
+      racaRaw = "Hereford / Braford";
+    } else if (textoContexto.includes("anelorado") || textoContexto.includes("mestiço")) {
+      racaRaw = "Anelorado / Mestiço";
+    } else if (textoContexto.includes("dorper") || textoContexto.includes("ovino") || textoContexto.includes("borrega")) {
+      racaRaw = "OUTRA";
+      if (!racaPersonalizada) racaPersonalizada = "Ovinos / Dorper";
+    }
+  }
+
+  // Verifica se é uma raça padrão de boi gordo
+  let racaBoiGordo: string | undefined = MAPA_RACAS_BOI_GORDO[racaRaw];
+  if (!racaBoiGordo && racaRaw) {
+    const key = Object.keys(MAPA_RACAS_BOI_GORDO).find(
+      (k) => k.toLowerCase() === racaRaw.toLowerCase()
+    );
+    if (key) racaBoiGordo = MAPA_RACAS_BOI_GORDO[key];
+  }
+
+  if (racaBoiGordo) {
+    return ["Boi Gordo", formatarTextoTagCurta(racaBoiGordo, 18)];
+  }
+
+  // Se for "OUTRA", "OUTRO", espécie "OUTRO" ou raça personalizada não mapeada
+  const isOutro =
+    racaRaw === "OUTRA" ||
+    racaRaw === "OUTRO" ||
+    (anuncio.especie as string) === "OUTRO" ||
+    Boolean(racaPersonalizada) ||
+    Boolean(racaRaw && !racaBoiGordo);
+
+  if (isOutro) {
+    const textoCustom =
+      racaPersonalizada ||
+      (racaRaw !== "OUTRA" && racaRaw !== "OUTRO" ? racaRaw : "") ||
+      "Outra Raça";
+    return ["Outro", formatarTextoTagCurta(textoCustom, 18)];
+  }
+
+  return ["Boi Gordo", "Nelore"];
 }
 
 export function obterFotoCapa(anuncio: MarketplaceAd): string {
@@ -517,3 +708,90 @@ export function comprimirImagemParaUpload(
     reader.readAsDataURL(file);
   });
 }
+
+export const ANIMAL_DOCUMENT_TYPES: { value: AdDocumentType; label: string; descricao: string }[] = [
+  {
+    value: "GTA",
+    label: "Guia de Trânsito Animal (GTA)",
+    descricao: "Documento oficial do MAPA / Defesa Agropecuária para transporte e sanidade",
+  },
+  {
+    value: "LAUDO_SANITARIO",
+    label: "Atestado / Laudo Sanitário",
+    descricao: "Comprovações de vacinação (Brucelose, Tuberculose, Febre Aftosa)",
+  },
+  {
+    value: "REGISTRO_GENEALOGICO",
+    label: "RGD / Registro Genealógico",
+    descricao: "Certificado de associação de raça (ABCZ, ANCP, etc.)",
+  },
+  {
+    value: "EXAME_ANDROLOGICO",
+    label: "Exame Andrológico",
+    descricao: "Laudo reprodutivo e de fertilidade para touros e matrizes",
+  },
+  {
+    value: "OUTRO",
+    label: "Outro Documento Zootécnico / Fiscal",
+    descricao: "Laudos complementares, notas fiscais ou exames adicionais",
+  },
+];
+
+export const GRAIN_DOCUMENT_TYPES: { value: AdDocumentType; label: string; descricao: string }[] = [
+  {
+    value: "LAUDO_CLASSIFICACAO",
+    label: "Laudo de Classificação Vegetal",
+    descricao: "Laudo oficial emitido por classificador credenciado no MAPA (umidade, impurezas)",
+  },
+  {
+    value: "LAUDO_SCA_CAFE",
+    label: "Laudo SCA (Cafés Especiais)",
+    descricao: "Análise sensorial de xícara e pontuação SCA (Specialty Coffee Association)",
+  },
+  {
+    value: "CERTIFICACAO_SUSTENTAVEL",
+    label: "Certificação Sustentável / Selo",
+    descricao: "Certificados socioambientais (Orgânico, Rainforest Alliance, Fairtrade)",
+  },
+  {
+    value: "NOTA_FISCAL_SEMENTE",
+    label: "NF de Origem da Semente",
+    descricao: "Comprovação fiscal e genética de semente fiscalizada/certificada",
+  },
+  {
+    value: "OUTRO",
+    label: "Outro Laudo Técnico / Agronômico",
+    descricao: "Laudos de solo, defensivos, talhão ou notas fiscais complementares",
+  },
+];
+
+export const AD_DOCUMENT_LABELS: Record<AdDocumentType, string> = {
+  GTA: "Guia de Trânsito Animal (GTA)",
+  LAUDO_SANITARIO: "Atestado / Laudo Sanitário",
+  REGISTRO_GENEALOGICO: "Registro Genealógico (RGD)",
+  EXAME_ANDROLOGICO: "Exame Andrológico",
+  LAUDO_CLASSIFICACAO: "Laudo de Classificação Vegetal",
+  LAUDO_SCA_CAFE: "Laudo de Qualidade SCA",
+  CERTIFICACAO_SUSTENTAVEL: "Certificação Socioambiental",
+  NOTA_FISCAL_SEMENTE: "Nota Fiscal de Semente Certificada",
+  OUTRO: "Outro Documento",
+};
+
+export const AD_DOCUMENT_SHORT_LABELS: Record<AdDocumentType, string> = {
+  GTA: "GTA",
+  LAUDO_SANITARIO: "Sanitário",
+  REGISTRO_GENEALOGICO: "RGD",
+  EXAME_ANDROLOGICO: "Andrológico",
+  LAUDO_CLASSIFICACAO: "Classificação",
+  LAUDO_SCA_CAFE: "Laudo SCA",
+  CERTIFICACAO_SUSTENTAVEL: "Certificado",
+  NOTA_FISCAL_SEMENTE: "NF Semente",
+  OUTRO: "Outro",
+};
+
+export function formatarTamanhoArquivo(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+

@@ -6,7 +6,7 @@ campo (laudo por cultura, preco que confere com o total, etc.) ficam em anuncio_
 from decimal import Decimal
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 from pydantic.alias_generators import to_camel
 
 
@@ -19,8 +19,12 @@ class _Base(BaseModel):
 class _AnuncioBase(_Base):
     titulo: str = Field(min_length=5, max_length=150)
     descricao: str | None = Field(default=None, max_length=2000)
-    cidade: str = Field(min_length=1, max_length=100)
+    cidade: str = Field(min_length=1, max_length=100, validation_alias=AliasChoices("cidade", "municipio"))
     uf: str = Field(min_length=2, max_length=2)
+    regiao_aproximada: str | None = Field(
+        default=None,
+        max_length=120
+    )
     preco_total: Decimal = Field(gt=0, max_digits=16, decimal_places=2)
     # Fotos e video vao pelo envio de midia (US012), nao pelo cadastro. Os campos existem
     # so para a API recusar com uma mensagem clara em vez de perder o arquivo em silencio.
@@ -59,3 +63,9 @@ class AnuncioGraos(_AnuncioBase):
 
 # A API escolhe o formulario pelo campo "categoria" ("ANIMAL" ou "GRAOS").
 AnuncioEntrada = Annotated[AnuncioAnimal | AnuncioGraos, Field(discriminator="categoria")]
+
+
+class EncerramentoAnuncio(_Base):
+    status: Literal["VENDIDO", "CANCELADO"]
+    motivo: str = Field(min_length=1, max_length=80, pattern=r"^[A-Z][A-Z0-9_]*$")
+    observacoes: str | None = Field(default=None, max_length=2000)

@@ -11,7 +11,9 @@ import {
 import { guideSteps, routes } from "../data/site";
 import type { OpenDevelopmentDialog } from "../data/site";
 import { useAuth } from "../context/authContext";
-import { listarAnunciosMercado } from "../features/ads/adsStorage";
+import { Avatar } from "../components/Avatar";
+import { listarAnunciosMercado, listarTodosProdutoresPublicos } from "../features/ads/adsStorage";
+import type { PublicProducerListItem } from "../features/ads/adsStorage";
 import { obterTagsAnuncio } from "../features/ads/ads.types";
 import type { MarketplaceAd } from "../features/ads/ads.types";
 import "./HomePage.css";
@@ -24,11 +26,15 @@ export function HomePage({
   const { session } = useAuth();
   const navigate = useNavigate();
   const [anuncios, setAnuncios] = useState<MarketplaceAd[]>([]);
+  const [produtores, setProdutores] = useState<PublicProducerListItem[]>([]);
 
   useEffect(() => {
     let isMounted = true;
     listarAnunciosMercado().then((res) => {
       if (isMounted) setAnuncios(res.slice(0, 6));
+    });
+    listarTodosProdutoresPublicos().then((res) => {
+      if (isMounted) setProdutores(res.slice(0, 3));
     });
     return () => {
       isMounted = false;
@@ -150,7 +156,10 @@ export function HomePage({
                       </div>
                       <h3>{anuncio.titulo}</h3>
                       <p className="offer-card__producer">{anuncio.farmName}</p>
-                      <p className="offer-card__location">
+                      <p
+                        className="offer-card__location"
+                        title={`${anuncio.cidade} - ${anuncio.uf}${anuncio.regiaoAproximada ? ` (${anuncio.regiaoAproximada})` : ""}`}
+                      >
                         <Icon name="location" />
                         {anuncio.cidade}, {anuncio.uf}
                       </p>
@@ -232,13 +241,55 @@ export function HomePage({
               <h2 id="producers-title">Quem está vendendo</h2>
             </div>
             <span className="section-heading__aside">
-              Histórias e novas conexões, em breve.
+              Origem com procedência e negociação direta.
             </span>
           </div>
           <div className="producer-grid">
-            {[1, 2, 3].map((index) => (
-              <ProducerPlaceholder key={index} index={index} />
-            ))}
+            {produtores.length > 0
+              ? produtores.map((produtor) => (
+                  <article
+                    key={produtor.id}
+                    className="producer-card producer-card--clickable"
+                    onClick={() => navigate(routes.producerProfile(produtor.id))}
+                    tabIndex={0}
+                    style={{ cursor: "pointer" }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        navigate(routes.producerProfile(produtor.id));
+                      }
+                    }}
+                    aria-label={`Conhecer produtor ${produtor.farmName}`}
+                  >
+                    <Avatar
+                      url={produtor.avatarUrl}
+                      name={produtor.nome}
+                      size={56}
+                      className="producer-card__avatar"
+                    />
+                    <div>
+                      <span className="producer-card__label">
+                        {produtor.seloVerificado ? "Produtor Verificado" : "Produtor Rural"}
+                      </span>
+                      <h3>{produtor.farmName}</h3>
+                      <p>
+                        <Icon name="location" />
+                        {produtor.city}, {produtor.state}
+                      </p>
+                    </div>
+                    <div className="producer-card__footer">
+                      <span>{produtor.nome}</span>
+                      <span>
+                        {produtor.totalAnunciosAtivos > 0
+                          ? `${produtor.totalAnunciosAtivos} ${produtor.totalAnunciosAtivos === 1 ? "lote ativo" : "lotes ativos"}`
+                          : "Vitrine disponível"}
+                      </span>
+                    </div>
+                  </article>
+                ))
+              : [1, 2, 3].map((index) => (
+                  <ProducerPlaceholder key={index} index={index} />
+                ))}
           </div>
           <div className="section-action">
             <Link

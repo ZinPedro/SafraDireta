@@ -13,11 +13,13 @@ import { LegalDialog } from "./components/LegalDialog";
 import { HomePage } from "./pages/HomePage";
 import { DevelopmentPage } from "./pages/DevelopmentPage";
 import { MarketPage } from "./features/ads/MarketPage";
+import { FavoritesPage } from "./features/ads/FavoritesPage";
 import { AnimalAdCreatePage } from "./features/ads/AnimalAdCreatePage";
 import { MyAdsPage } from "./features/ads/MyAdsPage";
 import { AdDetailPage } from "./features/ads/AdDetailPage";
 import { AdEditPage } from "./features/ads/AdEditPage";
 import { PublicProducerProfilePage } from "./features/ads/PublicProducerProfilePage";
+import { ProducersPage } from "./features/ads/ProducersPage";
 import { AdminBar } from "./features/admin/AdminBar";
 import { AdminDashboardPage } from "./features/admin/AdminDashboardPage";
 import { ADMIN_SECRET_SLUG, routes } from "./data/site";
@@ -29,6 +31,7 @@ const pageTitles: Record<string, string> = {
   [routes.corporateRegistration]: "Cadastro Corporativo | SafraDireta",
   [routes.sellerUpgrade]: "Habilitar vendedor | SafraDireta",
   [routes.profile]: "Meu perfil | SafraDireta",
+  [routes.favorites]: "Meus Favoritos | SafraDireta",
   [routes.home]: "SafraDireta — Do campo à negociação",
   [routes.market]: "Mercado Agropecuário | SafraDireta",
   [routes.myAds]: "Meus Anúncios | SafraDireta",
@@ -60,7 +63,7 @@ function Site() {
     setDialogFeature(feature);
   }
   const mainRef = useRef<HTMLElement>(null);
-  const previousLocationKey = useRef(location.key);
+  const previousPathname = useRef(location.pathname);
 
   useEffect(() => {
     if (location.pathname.startsWith("/anuncios/") && location.pathname.endsWith("/editar")) {
@@ -73,12 +76,15 @@ function Site() {
       document.title =
         pageTitles[location.pathname] ?? "Página não encontrada | SafraDireta";
     }
-    if (previousLocationKey.current !== location.key) {
+
+    // Só reseta o scroll e move o foco para o <main> ao navegar entre páginas distintas (pathname diferente).
+    // NUNCA executar quando apenas a query string de filtros/busca (?q=..., ?categoria=...) for alterada.
+    if (previousPathname.current !== location.pathname) {
       window.scrollTo({ top: 0, behavior: "instant" });
       mainRef.current?.focus({ preventScroll: true });
-      previousLocationKey.current = location.key;
+      previousPathname.current = location.pathname;
     }
-  }, [location.pathname, location.key]);
+  }, [location.pathname]);
 
   return (
     <>
@@ -98,22 +104,14 @@ function Site() {
             path={routes.home}
             element={<HomePage onOpenDialog={openFeature} />}
           />
-          <Route path={routes.market} element={<MarketPage />} />
+          <Route path={routes.market} element={<MarketPage onOpenDialog={openFeature} />} />
+          <Route path={routes.favorites} element={<FavoritesPage onOpenDialog={openFeature} />} />
           <Route path={routes.createAd} element={<AnimalAdCreatePage onOpenDialog={openFeature} />} />
           <Route path={routes.myAds} element={<MyAdsPage onOpenDialog={openFeature} />} />
           <Route path={routes.adEdit} element={<AdEditPage onOpenDialog={openFeature} />} />
-          <Route path="/anuncios/:id" element={<AdDetailPage />} />
+          <Route path="/anuncios/:id" element={<AdDetailPage onOpenDialog={openFeature} />} />
           <Route path="/produtor/:id" element={<PublicProducerProfilePage />} />
-          <Route
-            path={routes.producers}
-            element={
-              <DevelopmentPage
-                title="Conheça quem está por trás da safra."
-                description="Os perfis de produtores ainda estão em desenvolvimento. Em breve, você poderá conhecer suas histórias, regiões e produtos."
-                onOpenDialog={openFeature}
-              />
-            }
-          />
+          <Route path={routes.producers} element={<ProducersPage onOpenDialog={openFeature} />} />
           <Route
             path={routes.guide}
             element={

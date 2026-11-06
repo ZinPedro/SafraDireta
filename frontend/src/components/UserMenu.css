@@ -91,6 +91,16 @@
 .user-menu__panel [role="menuitem"]:focus-visible {
   background: var(--color-background-subtle);
 }
+.user-menu__badge {
+  margin-left: auto;
+  background: #f59e0b;
+  color: #ffffff;
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 1px 7px;
+  border-radius: 999px;
+  line-height: 1.3;
+}
 @media (max-width: 54rem) {
   .user-menu__panel {
     position: static;

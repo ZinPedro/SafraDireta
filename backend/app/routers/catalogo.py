@@ -17,23 +17,33 @@ router = APIRouter(prefix="/api", tags=["Catálogo"])
 
 @router.get(
     "/anuncios",
-    summary="Catálogo de anúncios (US018)",
-    description="Público. Só anúncios ATIVOS. Filtros opcionais e paginação.",
+    summary="Catálogo de anúncios (Sprint 3)",
+    description="Público. Só anúncios PUBLICADOS e LIBERADOS. Filtros opcionais, ordenação e paginação.",
 )
 def catalogo(
-    categoria: Literal["ANIMAL", "GRAOS"] | None = None,
-    cultura: Literal["SOJA", "MILHO", "CAFE", "TRIGO", "OUTRO"] | None = None,
-    uf: str | None = Query(None, min_length=2, max_length=2),
+    q: str | None = Query(None, max_length=100, description="Palavra-chave (US20)"),
+    busca: str | None = Query(None, max_length=100, description="Alias para palavra-chave"),
+    categoria_id: str | None = Query(None, description="UUID da categoria (US21)"),
     precoMin: Decimal | None = Query(None, ge=0),
     precoMax: Decimal | None = Query(None, ge=0),
-    busca: str | None = Query(None, max_length=100),
-    ordem: Literal["recentes", "menor_preco", "maior_preco"] = "recentes",
+    pesoMin: Decimal | None = Query(None, ge=0),
+    pesoMax: Decimal | None = Query(None, ge=0),
+    ordem: str = Query("recentes", description="Ordenação (US24)"),
     pagina: int = Query(1, ge=1),
     tamanho: int = Query(12, ge=1, le=50),
     conn: Connection = Depends(get_connection),
 ):
-    filtros = {"categoria": categoria, "cultura": cultura, "uf": uf, "preco_min": precoMin,
-               "preco_max": precoMax, "busca": busca, "ordem": ordem, "pagina": pagina, "tamanho": tamanho}
+    filtros = {
+        "q": q or busca,
+        "categoria_id": categoria_id,
+        "preco_min": precoMin,
+        "preco_max": precoMax,
+        "peso_min": pesoMin,
+        "peso_max": pesoMax,
+        "ordem": ordem,
+        "pagina": pagina,
+        "tamanho": tamanho,
+    }
     return catalogo_service.listar_catalogo(conn, filtros)
 
 

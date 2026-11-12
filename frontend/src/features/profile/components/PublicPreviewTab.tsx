@@ -1,7 +1,9 @@
+import { Link } from "react-router-dom";
 import farmImage from "../../../assets/images/farm-landscape.jpeg";
 import { Avatar } from "../../../components/Avatar";
 import { Icon } from "../../../components/Icon";
 import { useAuth } from "../../../context/authContext";
+import { routes } from "../../../data/site";
 import { formatPhone, phoneDigits, sellerCategories } from "../profile";
 import type { UserProfileData } from "../profile";
 
@@ -15,7 +17,11 @@ export function PublicPreviewTab({ profile }: { profile: UserProfileData }) {
   return (
     <article className="profile-preview" aria-label="Prévia da vitrine pública">
       <p className="corporate__hint">É assim que os compradores veem seu cartão de produtor no mercado. As alterações aparecem aqui depois de salvas.</p>
-      <div className="profile-preview__card">
+      <Link
+        to={routes.producerProfile(profile.account.id)}
+        className="profile-preview__card"
+        aria-label="Ver meu perfil público completo"
+      >
         <img className="profile-preview__banner" src={seller.bannerUrl || farmImage} alt="" width="1200" height="320" />
         <div className="profile-preview__body">
           <div className="profile-preview__head">
@@ -42,7 +48,7 @@ export function PublicPreviewTab({ profile }: { profile: UserProfileData }) {
             {formattedPhone ? `Falar com o produtor (${formattedPhone})` : "Falar com o produtor (simulado)"}
           </button>
         </div>
-      </div>
+      </Link>
     </article>
   );
 }

@@ -44,9 +44,9 @@ export function PublicPreviewTab({ profile }: { profile: UserProfileData }) {
               {labels.map((c) => <li key={c.value}>{c.label}</li>)}
             </ul>
           )}
-          <button type="button" className="button registration__submit profile-preview__contact" disabled aria-disabled="true">
+          <span className="button registration__submit profile-preview__contact" aria-hidden="true">
             {formattedPhone ? `Falar com o produtor (${formattedPhone})` : "Falar com o produtor (simulado)"}
-          </button>
+          </span>
         </div>
       </Link>
     </article>

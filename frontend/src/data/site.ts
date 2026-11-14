@@ -16,6 +16,9 @@ export const routes = {
   adEdit: "/anuncios/:id/editar",
   editAd: (id: string) => `/anuncios/${id}/editar`,
   producerProfile: (id: string) => `/produtor/${id}`,
+  chat: "/negociacoes",
+  chatAd: (anuncioId: string) => `/negociacoes/anuncio/${anuncioId}`,
+  chatRoom: (id: string) => `/negociacoes/${id}`,
   admin: ADMIN_SECRET_SLUG,
 } as const;
 

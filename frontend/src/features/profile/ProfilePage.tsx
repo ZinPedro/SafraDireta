@@ -77,7 +77,7 @@ export function ProfilePage({ onOpenDialog, onLoad = loadUserProfile, onUpdate =
     const next = new URLSearchParams(searchParams);
     if (id === "conta") next.delete("aba"); else next.set("aba", id);
     setSearchParams(next, { replace: true });
-    if (focus) requestAnimationFrame(() => tabRefs.current[id]?.focus());
+    if (focus) requestAnimationFrame(() => tabRefs.current[id]?.focus({ preventScroll: true }));
   }
 
   function handleTabKeys(event: KeyboardEvent<HTMLDivElement>) {

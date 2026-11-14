@@ -32,7 +32,8 @@ type IconName =
   | "unlock"
   | "copy"
   | "sliders"
-  | "filter";
+  | "filter"
+  | "chat";
 
 const paths: Record<IconName, string> = {
   back: "M19 12H5m6-6-6 6 6 6",
@@ -85,6 +86,7 @@ const paths: Record<IconName, string> = {
   sliders:
     "M4 21v-7m0-4V3m8 18v-9m0-4V3m8 18v-5m0-4V3M1 14h6m2-6h6m2 8h6",
   filter: "M22 3H2l8 9.46V19l4 2v-8.54L22 3z",
+  chat: "M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z",
 };
 
 export function Icon({

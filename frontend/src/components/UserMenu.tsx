@@ -6,6 +6,7 @@ import { useAuth } from "../context/authContext";
 import { Avatar } from "./Avatar";
 import { Icon } from "./Icon";
 import { obterFavoritosIds } from "../features/ads/favoritesStorage";
+import { obterTotalNaoLidas } from "../features/chat/chatStorage";
 import "./UserMenu.css";
 
 export function UserMenu({ onNavigate }: { onNavigate?: () => void }) {
@@ -14,10 +15,14 @@ export function UserMenu({ onNavigate }: { onNavigate?: () => void }) {
   const [favCount, setFavCount] = useState(() =>
     session?.conta?.id ? obterFavoritosIds(session.conta.id).length : 0
   );
+  const [chatCount, setChatCount] = useState(() =>
+    session?.conta?.id ? obterTotalNaoLidas(session.conta.id) : 0
+  );
   const [prevUserId, setPrevUserId] = useState(session?.conta?.id);
   if (session?.conta?.id !== prevUserId) {
     setPrevUserId(session?.conta?.id);
     setFavCount(session?.conta?.id ? obterFavoritosIds(session.conta.id).length : 0);
+    setChatCount(session?.conta?.id ? obterTotalNaoLidas(session.conta.id) : 0);
   }
 
   const rootRef = useRef<HTMLDivElement>(null);
@@ -40,8 +45,17 @@ export function UserMenu({ onNavigate }: { onNavigate?: () => void }) {
         setFavCount(obterFavoritosIds(session.conta.id).length);
       }
     };
+    const handleChatUpdate = () => {
+      if (session?.conta?.id) {
+        setChatCount(obterTotalNaoLidas(session.conta.id));
+      }
+    };
     window.addEventListener("safra:favorites-updated", handleUpdate);
-    return () => window.removeEventListener("safra:favorites-updated", handleUpdate);
+    window.addEventListener("safra:chat-updated", handleChatUpdate);
+    return () => {
+      window.removeEventListener("safra:favorites-updated", handleUpdate);
+      window.removeEventListener("safra:chat-updated", handleChatUpdate);
+    };
   }, [session]);
 
   if (!session) return null;
@@ -103,6 +117,10 @@ export function UserMenu({ onNavigate }: { onNavigate?: () => void }) {
           <Link role="menuitem" to={routes.favorites} onClick={() => close()}>
             <Icon name="star" /> Meus favoritos
             {favCount > 0 && <span className="user-menu__badge">{favCount}</span>}
+          </Link>
+          <Link role="menuitem" to={routes.chat} onClick={() => close()}>
+            <Icon name="chat" /> Minhas negociações
+            {chatCount > 0 && <span className="user-menu__badge">{chatCount}</span>}
           </Link>
           {isSeller && (
             <>

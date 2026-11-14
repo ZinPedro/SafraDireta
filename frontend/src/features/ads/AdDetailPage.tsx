@@ -62,7 +62,6 @@ export function AdDetailPage({ onOpenDialog }: AdDetailPageProps) {
   const [anuncio, setAnuncio] = useState<MarketplaceAd | null>(null);
   const [producerProfile, setProducerProfile] = useState<PublicProducerProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [contactSuccess, setContactSuccess] = useState(false);
   const [selectedMedia, setSelectedMedia] = useState<number | "video">(0);
   const [isLightboxOpen, setIsLightboxOpen] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState(0);
@@ -104,6 +103,25 @@ export function AdDetailPage({ onOpenDialog }: AdDetailPageProps) {
       window.dispatchEvent(new CustomEvent("safra:favorites-updated"));
     }
   }, [session, id]);
+
+  useEffect(() => {
+    if (!session?.conta?.id || !id) return;
+    const pendingChatId = sessionStorage.getItem("safra_pending_chat");
+    if (pendingChatId && pendingChatId === id) {
+      sessionStorage.removeItem("safra_pending_chat");
+      navigate(routes.chatAd(id));
+    }
+  }, [session, id, navigate]);
+
+  function handleConversarComVendedor() {
+    if (!anuncio) return;
+    if (!session) {
+      sessionStorage.setItem("safra_pending_chat", anuncio.id);
+      onOpenDialog?.("login");
+      return;
+    }
+    navigate(routes.chatAd(anuncio.id));
+  }
 
   useEffect(() => {
     const handleUpdate = () => {
@@ -1587,6 +1605,15 @@ export function AdDetailPage({ onOpenDialog }: AdDetailPageProps) {
                   </p>
                   <button
                     type="button"
+                    className="button button--secondary button--large button--full ad-chat-cta-btn--disabled"
+                    disabled
+                    title="Este lote não está mais disponível para negociação"
+                    style={{ marginBottom: "0.75rem", opacity: 0.65, cursor: "not-allowed" }}
+                  >
+                    <Icon name="chat" /> Conversar com o Vendedor (Encerrado)
+                  </button>
+                  <button
+                    type="button"
                     className={`ad-detail-fav-btn ${isFavorito ? "ad-detail-fav-btn--active" : ""}`}
                     onClick={handleToggleFavorito}
                     title={isFavorito ? "Remover dos favoritos" : "Salvar nos favoritos"}
@@ -1607,25 +1634,30 @@ export function AdDetailPage({ onOpenDialog }: AdDetailPageProps) {
                   </div>
                   <h3>Lote Temporariamente Indisponível</h3>
                   <p>Este lote está temporariamente indisponível ou em fase de negociação/revisão.</p>
+                  <button
+                    type="button"
+                    className="button button--secondary button--large button--full ad-chat-cta-btn--disabled"
+                    disabled
+                    title="Este lote está temporariamente indisponível para negociação"
+                    style={{ marginBottom: "0.75rem", opacity: 0.65, cursor: "not-allowed" }}
+                  >
+                    <Icon name="chat" /> Conversar com o Vendedor (Indisponível)
+                  </button>
                   <Link to={routes.market} className="button button--primary button--full">
                     Explorar outros lotes no Mercado
                   </Link>
                 </div>
               ) : (
                 <div className="ad-buyer-actions">
-                  {contactSuccess ? (
-                    <div className="ad-alert ad-alert--success">
-                      Interesse registrado com sucesso! Em breve o vendedor entrará em contato.
-                    </div>
-                  ) : (
-                    <button
-                      type="button"
-                      className="button button--primary button--large button--full"
-                      onClick={() => setContactSuccess(true)}
-                    >
-                      Tenho Interesse neste Lote
-                    </button>
-                  )}
+                  {/* Botão Primário: Conversar com o Vendedor (US-028) */}
+                  <button
+                    type="button"
+                    className="button button--primary button--large button--full ad-chat-cta-btn"
+                    onClick={handleConversarComVendedor}
+                  >
+                    <Icon name="chat" />
+                    <span>Conversar com o Vendedor</span>
+                  </button>
                   {/* Botão de Favoritar Lote (US-025) */}
                   <button
                     type="button"

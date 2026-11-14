@@ -20,6 +20,7 @@ import { AdDetailPage } from "./features/ads/AdDetailPage";
 import { AdEditPage } from "./features/ads/AdEditPage";
 import { PublicProducerProfilePage } from "./features/ads/PublicProducerProfilePage";
 import { ProducersPage } from "./features/ads/ProducersPage";
+import { NegotiationsPage } from "./features/chat/NegotiationsPage";
 import { AdminBar } from "./features/admin/AdminBar";
 import { AdminDashboardPage } from "./features/admin/AdminDashboardPage";
 import { ADMIN_SECRET_SLUG, routes } from "./data/site";
@@ -37,6 +38,7 @@ const pageTitles: Record<string, string> = {
   [routes.myAds]: "Meus Anúncios | SafraDireta",
   [routes.createAd]: "Cadastrar Lote de Animais | SafraDireta",
   [routes.producers]: "Produtores | SafraDireta",
+  [routes.chat]: "Minhas Negociações | SafraDireta",
   [routes.guide]: "Guia do usuário | SafraDireta",
   [ADMIN_SECRET_SLUG]: "Portal de Governança e Moderação | SafraDireta",
 };
@@ -72,6 +74,8 @@ function Site() {
       document.title = "Ficha Técnica do Lote | SafraDireta";
     } else if (location.pathname.startsWith("/produtor/")) {
       document.title = "Vitrine do Produtor | SafraDireta";
+    } else if (location.pathname.startsWith("/negociacoes")) {
+      document.title = "Minhas Negociações | SafraDireta";
     } else {
       document.title =
         pageTitles[location.pathname] ?? "Página não encontrada | SafraDireta";
@@ -112,6 +116,9 @@ function Site() {
           <Route path="/anuncios/:id" element={<AdDetailPage onOpenDialog={openFeature} />} />
           <Route path="/produtor/:id" element={<PublicProducerProfilePage />} />
           <Route path={routes.producers} element={<ProducersPage onOpenDialog={openFeature} />} />
+          <Route path={routes.chat} element={<NegotiationsPage onOpenDialog={openFeature} />} />
+          <Route path="/negociacoes/:chatId" element={<NegotiationsPage onOpenDialog={openFeature} />} />
+          <Route path="/negociacoes/anuncio/:anuncioId" element={<NegotiationsPage onOpenDialog={openFeature} />} />
           <Route
             path={routes.guide}
             element={

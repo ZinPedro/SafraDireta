@@ -248,7 +248,11 @@
   font-size: var(--font-size-xs);
 }
 .profile-preview__contact {
+  display: block;
+  width: 100%;
+  text-align: center;
   margin-top: var(--space-6);
+  opacity: 0.85;
 }
 @media (max-width: 47rem) {
   .profile {

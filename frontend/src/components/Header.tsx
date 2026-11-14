@@ -5,6 +5,7 @@ import type { OpenDevelopmentDialog } from "../data/site";
 import { useAuth } from "../context/authContext";
 import { Icon } from "./Icon";
 import { UserMenu } from "./UserMenu";
+import { obterTotalNaoLidas } from "../features/chat/chatStorage";
 
 function getCategoryPath(category: string): string {
   switch (category) {
@@ -33,6 +34,15 @@ export function Header({
   const mobileButtonRef = useRef<HTMLButtonElement>(null);
   const location = useLocation();
   const { session } = useAuth();
+
+  const [unreadChatCount, setUnreadChatCount] = useState(() =>
+    session?.conta?.id ? obterTotalNaoLidas(session.conta.id) : 0
+  );
+  const [prevUserId, setPrevUserId] = useState(session?.conta?.id);
+  if (session?.conta?.id !== prevUserId) {
+    setPrevUserId(session?.conta?.id);
+    setUnreadChatCount(session?.conta?.id ? obterTotalNaoLidas(session.conta.id) : 0);
+  }
 
   function closeMenus() {
     setMobileOpen(false);
@@ -63,6 +73,18 @@ export function Header({
       document.removeEventListener("keydown", handleEscape);
     };
   }, [categoriesOpen, mobileOpen]);
+
+  useEffect(() => {
+    const handleChatUpdate = () => {
+      if (session?.conta?.id) {
+        setUnreadChatCount(obterTotalNaoLidas(session.conta.id));
+      } else {
+        setUnreadChatCount(0);
+      }
+    };
+    window.addEventListener("safra:chat-updated", handleChatUpdate);
+    return () => window.removeEventListener("safra:chat-updated", handleChatUpdate);
+  }, [session?.conta?.id]);
 
   function openDialog(feature: Parameters<OpenDevelopmentDialog>[0]) {
     // Preserve the trigger until the native dialog takes focus.
@@ -152,6 +174,29 @@ export function Header({
             </button>
           </>)}
           </div>
+          {/* Ícone de Negociações e Mensagens (US-028) */}
+          <Link
+            to={routes.chat}
+            className={`site-header__chat-btn ${location.pathname.startsWith(routes.chat) ? "site-header__chat-btn--active" : ""}`}
+            aria-label={
+              unreadChatCount > 0
+                ? `Minhas Negociações e Mensagens (${unreadChatCount} não lidas)`
+                : "Minhas Negociações e Mensagens"
+            }
+            title={
+              unreadChatCount > 0
+                ? `Minhas Negociações e Mensagens (${unreadChatCount} não lidas)`
+                : "Minhas Negociações e Mensagens"
+            }
+            onClick={closeMenus}
+          >
+            <Icon name="chat" />
+            {unreadChatCount > 0 && (
+              <span className="site-header__chat-badge" aria-hidden="true">
+                {unreadChatCount > 99 ? "99+" : unreadChatCount}
+              </span>
+            )}
+          </Link>
         </nav>
       </div>
       <span className="sr-only">

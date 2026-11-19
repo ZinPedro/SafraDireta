@@ -1,5 +1,13 @@
 import type { MarketplaceAd } from "../ads/ads.types";
 
+export interface ChatAttachment {
+  nome: string;
+  tipoMime: string;
+  tamanhoBytes: number;
+  url: string;
+  tipo: "IMAGEM" | "DOCUMENTO_PDF";
+}
+
 export interface ChatMessage {
   id: string;
   chatId: string;
@@ -7,6 +15,9 @@ export interface ChatMessage {
   remetenteNome: string;
   remetenteAvatar?: string;
   texto: string;
+  /** Campo legado mantido para retrocompatibilidade com mensagens já salvas */
+  anexo?: ChatAttachment;
+  anexos?: ChatAttachment[];
   criadoEm: string;
   lida: boolean;
 }

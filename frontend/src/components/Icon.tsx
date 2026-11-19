@@ -26,6 +26,7 @@ type IconName =
   | "search"
   | "shield"
   | "check"
+  | "checkCheck"
   | "alert"
   | "ban"
   | "file"
@@ -33,7 +34,9 @@ type IconName =
   | "copy"
   | "sliders"
   | "filter"
-  | "chat";
+  | "chat"
+  | "paperclip"
+  | "download";
 
 const paths: Record<IconName, string> = {
   back: "M19 12H5m6-6-6 6 6 6",
@@ -73,6 +76,8 @@ const paths: Record<IconName, string> = {
     "M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z",
   check:
     "M20 6 9 17l-5-5",
+  checkCheck:
+    "M18 6 7 17l-5-5 M22 10l-7.5 7.5L13 16",
   alert:
     "M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0zM12 9v4M12 17h.01",
   ban:
@@ -87,6 +92,9 @@ const paths: Record<IconName, string> = {
     "M4 21v-7m0-4V3m8 18v-9m0-4V3m8 18v-5m0-4V3M1 14h6m2-6h6m2 8h6",
   filter: "M22 3H2l8 9.46V19l4 2v-8.54L22 3z",
   chat: "M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z",
+  paperclip:
+    "m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48",
+  download: "M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3",
 };
 
 export function Icon({

@@ -5,7 +5,7 @@ import type { OpenDevelopmentDialog } from "../data/site";
 import { useAuth } from "../context/authContext";
 import { Icon } from "./Icon";
 import { UserMenu } from "./UserMenu";
-import { obterTotalNaoLidas } from "../features/chat/chatStorage";
+import { CHATS_STORAGE_KEY, obterTotalNaoLidas } from "../features/chat/chatStorage";
 
 function getCategoryPath(category: string): string {
   switch (category) {
@@ -82,8 +82,19 @@ export function Header({
         setUnreadChatCount(0);
       }
     };
+
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key === null || event.key === CHATS_STORAGE_KEY) {
+        handleChatUpdate();
+      }
+    };
+
     window.addEventListener("safra:chat-updated", handleChatUpdate);
-    return () => window.removeEventListener("safra:chat-updated", handleChatUpdate);
+    window.addEventListener("storage", handleStorage);
+    return () => {
+      window.removeEventListener("safra:chat-updated", handleChatUpdate);
+      window.removeEventListener("storage", handleStorage);
+    };
   }, [session?.conta?.id]);
 
   function openDialog(feature: Parameters<OpenDevelopmentDialog>[0]) {

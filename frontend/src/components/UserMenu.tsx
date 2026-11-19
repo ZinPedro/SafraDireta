@@ -6,7 +6,7 @@ import { useAuth } from "../context/authContext";
 import { Avatar } from "./Avatar";
 import { Icon } from "./Icon";
 import { obterFavoritosIds } from "../features/ads/favoritesStorage";
-import { obterTotalNaoLidas } from "../features/chat/chatStorage";
+import { CHATS_STORAGE_KEY, obterTotalNaoLidas } from "../features/chat/chatStorage";
 import "./UserMenu.css";
 
 export function UserMenu({ onNavigate }: { onNavigate?: () => void }) {
@@ -50,11 +50,18 @@ export function UserMenu({ onNavigate }: { onNavigate?: () => void }) {
         setChatCount(obterTotalNaoLidas(session.conta.id));
       }
     };
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key === null || event.key === CHATS_STORAGE_KEY) {
+        handleChatUpdate();
+      }
+    };
     window.addEventListener("safra:favorites-updated", handleUpdate);
     window.addEventListener("safra:chat-updated", handleChatUpdate);
+    window.addEventListener("storage", handleStorage);
     return () => {
       window.removeEventListener("safra:favorites-updated", handleUpdate);
       window.removeEventListener("safra:chat-updated", handleChatUpdate);
+      window.removeEventListener("storage", handleStorage);
     };
   }, [session]);
 

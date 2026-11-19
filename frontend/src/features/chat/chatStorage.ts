@@ -1,5 +1,6 @@
 import type { MarketplaceAd } from "../ads/ads.types";
 import type { ChatAttachment, ChatMessage, ChatRoom } from "./chat.types";
+import { criarNotificacao } from "../notifications/notificationsStorage";
 
 export const CHATS_STORAGE_KEY = "safradireta_chats";
 
@@ -414,6 +415,15 @@ export function criarOuEnviarPrimeiraMensagem(params: {
 
     chats[chatExistenteIndex] = chatAtualizado;
     salvarChats(chats, true);
+    if (anuncio.vendedorId && anuncio.vendedorId !== compradorId) {
+      criarNotificacao({
+        usuarioId: anuncio.vendedorId,
+        tipo: "CHAT_MESSAGE",
+        titulo: `Nova mensagem de ${compradorNome}`,
+        mensagem: `${anuncio.titulo}: "${resumo}"`,
+        linkDestino: `/negociacoes/${chatExistente.id}`,
+      });
+    }
     return { chat: chatAtualizado, mensagem: novaMensagem };
   }
 
@@ -459,6 +469,15 @@ export function criarOuEnviarPrimeiraMensagem(params: {
 
   chats.unshift(novoChat);
   salvarChats(chats, true);
+  if (anuncio.vendedorId && anuncio.vendedorId !== compradorId) {
+    criarNotificacao({
+      usuarioId: anuncio.vendedorId,
+      tipo: "CHAT_MESSAGE",
+      titulo: `Nova mensagem de ${compradorNome}`,
+      mensagem: `${anuncio.titulo}: "${resumo}"`,
+      linkDestino: `/negociacoes/${novoChat.id}`,
+    });
+  }
   return { chat: novoChat, mensagem: primeiraMensagem };
 }
 
@@ -504,18 +523,32 @@ export function enviarMensagem(
     lida: false,
   };
 
+  const resumo = resumirMensagemChat(textoLimpo, listaAnexos);
   const chatAtualizado: ChatRoom = {
     ...chat,
     compradorAvatar: chat.compradorId === remetenteId && avatar ? avatar : chat.compradorAvatar,
     vendedorAvatar: chat.vendedorId === remetenteId && avatar ? avatar : chat.vendedorAvatar,
     mensagens: [...chat.mensagens, novaMensagem],
-    ultimaMensagem: resumirMensagemChat(textoLimpo, listaAnexos),
+    ultimaMensagem: resumo,
     ultimaMensagemEm: agora,
     atualizadoEm: agora,
   };
 
   chats[chatIndex] = chatAtualizado;
   salvarChats(chats, true);
+
+  const destinatarioId =
+    chat.compradorId === remetenteId ? chat.vendedorId : chat.compradorId;
+  if (destinatarioId && destinatarioId !== remetenteId) {
+    criarNotificacao({
+      usuarioId: destinatarioId,
+      tipo: "CHAT_MESSAGE",
+      titulo: `Nova mensagem de ${remetenteNome}`,
+      mensagem: `${chat.anuncioTitulo}: "${resumo}"`,
+      linkDestino: `/negociacoes/${chat.id}`,
+    });
+  }
+
   return novaMensagem;
 }
 

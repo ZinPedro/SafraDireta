@@ -96,3 +96,25 @@ export async function listarAnunciosFavoritados(
   return resultados.filter((a): a is MarketplaceAd => a !== null);
 }
 
+export function listarUsuariosQueFavoritaramAnuncio(anuncioId: string): string[] {
+  if (typeof localStorage === "undefined" || !anuncioId) return [];
+  const usuarios: string[] = [];
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith(PREFIXO_FAVORITOS)) {
+        const usuarioId = key.slice(PREFIXO_FAVORITOS.length);
+        const raw = localStorage.getItem(key);
+        if (!raw) continue;
+        const ids = JSON.parse(raw);
+        if (Array.isArray(ids) && ids.includes(anuncioId) && usuarioId) {
+          usuarios.push(usuarioId);
+        }
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+  return usuarios;
+}
+

@@ -21,6 +21,7 @@ import { AdEditPage } from "./features/ads/AdEditPage";
 import { PublicProducerProfilePage } from "./features/ads/PublicProducerProfilePage";
 import { ProducersPage } from "./features/ads/ProducersPage";
 import { NegotiationsPage } from "./features/chat/NegotiationsPage";
+import { NotificationsPage } from "./features/notifications/NotificationsPage";
 import { AdminBar } from "./features/admin/AdminBar";
 import { AdminDashboardPage } from "./features/admin/AdminDashboardPage";
 import { ADMIN_SECRET_SLUG, routes } from "./data/site";
@@ -39,6 +40,7 @@ const pageTitles: Record<string, string> = {
   [routes.createAd]: "Cadastrar Lote de Animais | SafraDireta",
   [routes.producers]: "Produtores | SafraDireta",
   [routes.chat]: "Minhas Negociações | SafraDireta",
+  [routes.notifications]: "Notificações | SafraDireta",
   [routes.guide]: "Guia do usuário | SafraDireta",
   [ADMIN_SECRET_SLUG]: "Portal de Governança e Moderação | SafraDireta",
 };
@@ -119,6 +121,7 @@ function Site() {
           <Route path={routes.chat} element={<NegotiationsPage onOpenDialog={openFeature} />} />
           <Route path="/negociacoes/:chatId" element={<NegotiationsPage onOpenDialog={openFeature} />} />
           <Route path="/negociacoes/anuncio/:anuncioId" element={<NegotiationsPage onOpenDialog={openFeature} />} />
+          <Route path={routes.notifications} element={<NotificationsPage onOpenDialog={openFeature} />} />
           <Route
             path={routes.guide}
             element={

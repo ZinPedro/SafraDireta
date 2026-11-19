@@ -1,5 +1,49 @@
 import { getSession } from "../../context/session";
 import type { Session } from "../../context/session";
+import { criarNotificacao } from "../notifications/notificationsStorage";
+
+function notificarFavoritadoresPorMudancaStatus(
+  anuncioId: string,
+  tituloAnuncio: string,
+  vendedorId: string,
+  novoStatus: "PAUSADO" | "VENDIDO" | "CANCELADO"
+): void {
+  if (typeof localStorage === "undefined" || !anuncioId) return;
+  const prefixo = "safra_favoritos_";
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (!key || !key.startsWith(prefixo)) continue;
+      const usuarioId = key.slice(prefixo.length);
+      if (!usuarioId || usuarioId === vendedorId) continue;
+      const raw = localStorage.getItem(key);
+      if (!raw) continue;
+      const ids = JSON.parse(raw);
+      if (!Array.isArray(ids) || !ids.includes(anuncioId)) continue;
+
+      if (novoStatus === "PAUSADO") {
+        criarNotificacao({
+          usuarioId,
+          tipo: "FAVORITE_PAUSED",
+          titulo: "Lote favoritado foi pausado",
+          mensagem: `O lote "${tituloAnuncio}" que você favoritou foi pausado pelo vendedor.`,
+          linkDestino: "/favoritos",
+        });
+      } else {
+        const acao = novoStatus === "VENDIDO" ? "vendido" : "cancelado";
+        criarNotificacao({
+          usuarioId,
+          tipo: "FAVORITE_CLOSED",
+          titulo: `Lote favoritado foi ${acao}`,
+          mensagem: `O lote "${tituloAnuncio}" que você favoritou foi ${acao} pelo vendedor.`,
+          linkDestino: "/favoritos",
+        });
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+}
 import {
   GRAIN_CROP_LABELS,
   GRAIN_PACKAGING_LABELS,
@@ -1414,6 +1458,15 @@ export async function alternarStatusAnuncio(
     throw new Error("Não foi possível atualizar o status do anúncio no armazenamento local.");
   }
 
+  if (novoStatus === "PAUSADO") {
+    notificarFavoritadoresPorMudancaStatus(
+      id,
+      anuncioAtualizado.titulo,
+      anuncioAtualizado.vendedorId,
+      "PAUSADO"
+    );
+  }
+
   const hidratado = hidratarAnuncioComPerfil(anuncioAtualizado);
   try {
     const midias = await obterMidiasDoIndexedDB(id);
@@ -1522,6 +1575,13 @@ export async function encerrarAnuncio(
   if (!salvou) {
     throw new Error("Não foi possível persistir o encerramento do anúncio no armazenamento local.");
   }
+
+  notificarFavoritadoresPorMudancaStatus(
+    id,
+    anuncioAtualizado.titulo,
+    anuncioAtualizado.vendedorId,
+    payload.tipo
+  );
 
   const hidratado = hidratarAnuncioComPerfil(anuncioAtualizado);
   try {

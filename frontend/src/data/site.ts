@@ -19,6 +19,7 @@ export const routes = {
   chat: "/negociacoes",
   chatAd: (anuncioId: string) => `/negociacoes/anuncio/${anuncioId}`,
   chatRoom: (id: string) => `/negociacoes/${id}`,
+  notifications: "/notificacoes",
   admin: ADMIN_SECRET_SLUG,
 } as const;
 

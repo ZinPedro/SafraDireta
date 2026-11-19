@@ -2,12 +2,36 @@ import type {
   AdDocumentAccessRequest,
   DocumentAccessStatus,
 } from "./ads.types";
+import { criarNotificacao } from "../notifications/notificationsStorage";
 
 const DB_NAME = "safradireta_ad_docs_db";
 const STORE_NAME = "anuncio_documentos";
 const DB_VERSION = 1;
 
 const REQUESTS_STORAGE_KEY = "safradireta_ad_doc_requests";
+const ADS_STORAGE_KEY = "safradireta_anuncios";
+
+function obterResumoAnuncioLocal(
+  anuncioId: string
+): { vendedorId?: string; titulo?: string } | null {
+  if (typeof localStorage === "undefined" || !anuncioId) return null;
+  try {
+    const raw = localStorage.getItem(ADS_STORAGE_KEY);
+    if (!raw) return null;
+    const lista = JSON.parse(raw) as Array<{
+      id?: string;
+      vendedorId?: string;
+      titulo?: string;
+    }>;
+    if (!Array.isArray(lista)) return null;
+    const encontrado = lista.find((a) => a.id === anuncioId);
+    return encontrado
+      ? { vendedorId: encontrado.vendedorId, titulo: encontrado.titulo }
+      : null;
+  } catch {
+    return null;
+  }
+}
 
 export interface StoredAdDocumentFile {
   docId: string;
@@ -268,6 +292,16 @@ export async function solicitarAcessoDocumentos(
           todas.unshift(novaApiReq);
         }
         salvarTodasSolicitacoesStorage(todas);
+        const resumo = obterResumoAnuncioLocal(anuncioId);
+        if (resumo?.vendedorId && resumo.vendedorId !== comprador.id) {
+          criarNotificacao({
+            usuarioId: resumo.vendedorId,
+            tipo: "DOCUMENT_REQUEST",
+            titulo: "Nova solicitação de documentos",
+            mensagem: `${comprador.nome} solicitou acesso aos documentos de "${resumo.titulo || "seu lote"}".`,
+            linkDestino: `/anuncios/${anuncioId}#heading-documentacao`,
+          });
+        }
 
         return novaApiReq;
       }
@@ -307,6 +341,18 @@ export async function solicitarAcessoDocumentos(
   }
 
   salvarTodasSolicitacoesStorage(todas);
+
+  const resumo = obterResumoAnuncioLocal(anuncioId);
+  if (resumo?.vendedorId && resumo.vendedorId !== comprador.id) {
+    criarNotificacao({
+      usuarioId: resumo.vendedorId,
+      tipo: "DOCUMENT_REQUEST",
+      titulo: "Nova solicitação de documentos",
+      mensagem: `${comprador.nome} solicitou acesso aos documentos de "${resumo.titulo || "seu lote"}".`,
+      linkDestino: `/anuncios/${anuncioId}#heading-documentacao`,
+    });
+  }
+
   return nova;
 }
 
@@ -432,6 +478,24 @@ export async function responderSolicitacaoAcesso(
           todas[idx] = { ...todas[idx], ...atualizadaApi };
           salvarTodasSolicitacoesStorage(todas);
         }
+
+        if (atualizadaApi.compradorId && (status === "APROVADO" || status === "RECUSADO")) {
+          const resumo = obterResumoAnuncioLocal(atualizadaApi.anuncioId);
+          const tituloAnuncio = resumo?.titulo || "lote no SafraDireta";
+          criarNotificacao({
+            usuarioId: atualizadaApi.compradorId,
+            tipo: status === "APROVADO" ? "DOCUMENT_APPROVED" : "DOCUMENT_REJECTED",
+            titulo:
+              status === "APROVADO"
+                ? "Acesso a documentos aprovado"
+                : "Solicitação de documentos recusada",
+            mensagem:
+              status === "APROVADO"
+                ? `O produtor liberou os documentos de "${tituloAnuncio}".`
+                : `Sua solicitação para "${tituloAnuncio}" foi recusada.${atualizadaApi.motivoRecusa ? ` Motivo: ${atualizadaApi.motivoRecusa}` : ""}`,
+            linkDestino: `/anuncios/${atualizadaApi.anuncioId}#heading-documentacao`,
+          });
+        }
         return atualizadaApi;
       }
     } catch (err) {
@@ -456,6 +520,25 @@ export async function responderSolicitacaoAcesso(
 
   todas[index] = atualizada;
   salvarTodasSolicitacoesStorage(todas);
+
+  if (atualizada.compradorId && (status === "APROVADO" || status === "RECUSADO")) {
+    const resumo = obterResumoAnuncioLocal(atualizada.anuncioId);
+    const tituloAnuncio = resumo?.titulo || "lote no SafraDireta";
+    criarNotificacao({
+      usuarioId: atualizada.compradorId,
+      tipo: status === "APROVADO" ? "DOCUMENT_APPROVED" : "DOCUMENT_REJECTED",
+      titulo:
+        status === "APROVADO"
+          ? "Acesso a documentos aprovado"
+          : "Solicitação de documentos recusada",
+      mensagem:
+        status === "APROVADO"
+          ? `O produtor liberou os documentos de "${tituloAnuncio}".`
+          : `Sua solicitação para "${tituloAnuncio}" foi recusada.${atualizada.motivoRecusa ? ` Motivo: ${atualizada.motivoRecusa}` : ""}`,
+      linkDestino: `/anuncios/${atualizada.anuncioId}#heading-documentacao`,
+    });
+  }
+
   return atualizada;
 }
 

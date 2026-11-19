@@ -6,6 +6,7 @@ import { useAuth } from "../context/authContext";
 import { Icon } from "./Icon";
 import { UserMenu } from "./UserMenu";
 import { CHATS_STORAGE_KEY, obterTotalNaoLidas } from "../features/chat/chatStorage";
+import { NotificationsPopover } from "../features/notifications/NotificationsPopover";
 
 function getCategoryPath(category: string): string {
   switch (category) {
@@ -208,6 +209,8 @@ export function Header({
               </span>
             )}
           </Link>
+          {/* Ícone de Notificações e Pendências (US-031) */}
+          <NotificationsPopover onOpenDialog={openDialog} onNavigate={closeMenus} />
         </nav>
       </div>
       <span className="sr-only">

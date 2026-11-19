@@ -36,7 +36,8 @@ type IconName =
   | "filter"
   | "chat"
   | "paperclip"
-  | "download";
+  | "download"
+  | "bell";
 
 const paths: Record<IconName, string> = {
   back: "M19 12H5m6-6-6 6 6 6",
@@ -95,6 +96,7 @@ const paths: Record<IconName, string> = {
   paperclip:
     "m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48",
   download: "M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3",
+  bell: "M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 0 1-3.46 0",
 };
 
 export function Icon({
